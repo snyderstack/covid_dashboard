@@ -15,8 +15,10 @@ covid_dashboard/
 ├── lag_analysis.py             # Case-to-death peak lag analysis
 ├── ahrf_loader.py              # AHRF loading, column selection, derived rates
 ├── vaccination_loader.py       # CDC vaccination data loading and lookups
-├── county_features.py          # Master county feature table and correlation helpers
-├── modeling.py                 # Correlations, RF importance, OLS, resilience scores
+├── county_features.py          # Master county feature table, correlations, similarity
+├── modeling.py                 # Correlations, RF importance, OLS (HC3), VIF, clustering
+├── spatial_analysis.py         # County adjacency and Getis-Ord Gi* hotspots
+├── tests/                      # Deterministic pytest suite (synthetic fixtures)
 ├── assets/                     # Logos
 ├── README.md                   # User-facing documentation
 ├── TECHNICAL_DOCUMENTATION.md  # Technical source of truth and change log
@@ -242,6 +244,50 @@ Full-repository code review before first release. No functional behavior changed
 **TECHNICAL_DOCUMENTATION.md** — Section 1 module tree updated to include `lag_analysis.py`, `ahrf_loader.py`, `vaccination_loader.py`, and `modeling.py`. Section 8 rewritten to describe the current region-based (v3) wave detector with the legacy prominence path as fallback. Section 9 updated: the former analytics "scaffolding" is implemented. Section 10 updated: national per-capita is computed from raw counts. Section 11 pruned of items already implemented.
 
 **Repository hygiene** — Removed tracked `__pycache__/*.pyc` and `.DS_Store` files from version control (already covered by `.gitignore`).
+
+### 2026-07-06 — Exploration and research-methods feature release
+
+Eleven additive features; no existing calculation or interface changed except
+where explicitly noted. New logic lives in the pure data modules and is
+covered by a new deterministic test suite (`tests/`, 21 tests, synthetic
+fixtures, no data files required).
+
+**Exploration** — County Overview gains a "Counties Like This One" section
+(`county_features.find_similar_counties`: z-scored Euclidean distance over
+structural features, population log-transformed), a Surprise Me random-county
+button, shareable `?county=` URLs (`st.query_params`), and a downloadable
+one-page HTML county report. The Geographic Map gains animated monthly
+playback (`tools.monthly_snapshot_long` → `animation_frame`, one frame per
+month) and Getis-Ord Gi* hotspot analysis.
+
+**Spatial statistics** — new `spatial_analysis.py`: county adjacency derived
+from shared GeoJSON boundary vertices (rook contiguity, ≥2 shared vertices)
+and the Gi* statistic with binary weights; hot/cold classification at
+|z| > 1.96. The county GeoJSON is now bundled: `tools.load_county_geojson()`
+loads `data/geojson-counties-fips.json`, auto-downloading it once from the
+Plotly CDN if absent — the maps previously fetched the CDN URL on every
+session and failed silently offline.
+
+**Research methods** — `tools.compute_window_outcomes()` restricts outcome
+columns to a date window; County Factors and Statistical Modeling expose
+pre-vaccine / post-rollout / custom windows (addresses the reverse-causality
+caveat documented in Section 16.6). `modeling._ols_fit()` now also returns
+HC3 heteroscedasticity-robust standard errors and p-values (MacKinnon &
+White 1985), shown alongside classical ones in the regression table.
+`modeling.compute_vif()` adds multicollinearity diagnostics.
+`modeling.run_rf_partial_dependence()` adds one-way partial-dependence curves
+for the top Random Forest features. `modeling.compute_county_clusters()` adds
+K-means county archetypes over structural features (sklearn with a numpy
+Lloyd's-algorithm fallback), rendered as a new Statistical Modeling section.
+`wave_analysis.NATIONAL_WAVE_WINDOWS` and `match_waves_to_national_windows()`
+back a new validation panel comparing detected waves to national surge
+windows.
+
+**Bug fix** — the Statistical Modeling cache wrappers (`_cached_correlations`
+and friends) previously excluded the dataframe from their cache keys
+(underscore-prefixed parameter) while receiving *filtered* data, so changing
+the state/region/metro filter could return stale results computed for a
+previous filter. The dataframe is now part of the cache key.
 
 ### Change Log Policy
 

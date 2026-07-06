@@ -11,6 +11,7 @@ The dashboard reads all datasets from this directory. Files small enough for Git
 | `covid_county_population_usafacts.csv` | USAFacts | Core — required |
 | `ahrf2023.csv` | HRSA AHRF 2022–2023 (CSV release) | County Factors, Statistical Modeling, RUCC Metro/Nonmetro classification |
 | `AHRF_2019-2020/DOC/` | HRSA | SAS layout used to parse `AHRF2020.asc` (if downloaded) |
+| `geojson-counties-fips.json` | Plotly datasets (auto-downloaded on first launch if missing) | County map rendering, hotspot analysis, archetype maps |
 
 ## Optional downloads (excluded — GitHub size limits)
 

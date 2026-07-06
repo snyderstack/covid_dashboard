@@ -8,12 +8,57 @@ duplicate-FIPS collisions from statewide-unallocated rows (FIPS == '00000').
 See validation.py for diagnostic functions that audit data quality.
 """
 
+import json
+import warnings
+from pathlib import Path
+
 import pandas as pd
 import numpy as np
-from pathlib import Path
 
 DATA_DIR = Path(__file__).parent / "data"
 METADATA_COLUMNS = ["countyFIPS", "County Name", "State", "StateFIPS", "Location"]
+
+GEOJSON_FILENAME = "geojson-counties-fips.json"
+GEOJSON_CDN_URL = (
+    "https://raw.githubusercontent.com/plotly/datasets/master/geojson-counties-fips.json"
+)
+
+
+def load_county_geojson(data_dir=None):
+    """
+    Return the US county GeoJSON as a dict, or None if unavailable.
+
+    Loads the bundled copy from data/ when present. If missing, downloads it
+    once from the Plotly datasets CDN and saves it locally so subsequent runs
+    (and the spatial-analysis features that need geometry) work offline.
+
+    Callers should fall back to passing GEOJSON_CDN_URL directly to Plotly
+    when this returns None.
+    """
+    path = (data_dir or DATA_DIR) / GEOJSON_FILENAME
+    if path.exists():
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except (OSError, json.JSONDecodeError) as exc:
+            warnings.warn(f"Could not read bundled county GeoJSON: {exc}")
+            return None
+
+    try:
+        from urllib.request import urlopen
+
+        with urlopen(GEOJSON_CDN_URL, timeout=30) as resp:
+            raw = resp.read()
+        geo = json.loads(raw)
+        try:
+            with open(path, "wb") as f:
+                f.write(raw)
+        except OSError:
+            pass  # read-only data dir — still return the in-memory copy
+        return geo
+    except Exception as exc:
+        warnings.warn(f"County GeoJSON unavailable ({exc}); falling back to CDN URL")
+        return None
 
 
 def get_identifier_columns(df):
@@ -737,6 +782,97 @@ def filter_choropleth_by_county_type(choro_data, county_type):
         return choro_data.copy()
 
     return choro_data[choro_data["County_Type"] == target].copy()
+
+
+def monthly_snapshot_long(metric_df):
+    """
+    Melt a wide metric table to long format with one date per calendar month.
+
+    Keeps the first available date column of each month (~40 snapshots instead
+    of ~1,300 daily columns), which is what makes choropleth animation frames
+    tractable for Plotly. Statewide unallocated rows are excluded.
+
+    Returns:
+        DataFrame with columns: countyFIPS [, Location, State], Month, value
+        ('Month' is 'YYYY-MM'; rows with non-numeric values dropped).
+    """
+    date_cols = get_date_columns(metric_df)
+    monthly, seen = [], set()
+    for d in sorted(date_cols):
+        month = d[:7]
+        if month not in seen:
+            seen.add(month)
+            monthly.append(d)
+
+    base = metric_df[metric_df["countyFIPS"] != "00000"]
+    id_cols = [c for c in ["countyFIPS", "Location", "State"] if c in base.columns]
+    long_df = base[id_cols + monthly].melt(
+        id_vars=id_cols, var_name="Month", value_name="value",
+    )
+    long_df["value"] = pd.to_numeric(long_df["value"], errors="coerce")
+    long_df["Month"] = long_df["Month"].str[:7]
+    return long_df.dropna(subset=["value"])
+
+
+def compute_window_outcomes(cases_df, deaths_df, population_df, start_date, end_date):
+    """
+    Compute per-100k COVID outcomes restricted to a date window.
+
+    Window counts are cumulative[end_date] − cumulative[start_date], i.e. events
+    occurring after start_date through end_date. Restricting the outcome window
+    matters for factor analyses: correlating vaccination rates against
+    full-pandemic cumulative outcomes mixes pre- and post-rollout periods and
+    invites reverse-causality artifacts.
+
+    Args:
+        cases_df, deaths_df: Wide-format cumulative dataframes.
+        population_df: Population dataframe.
+        start_date, end_date: Date strings (YYYY-MM-DD) present in the columns.
+
+    Returns:
+        DataFrame with columns:
+            countyFIPS, State, cases_per_100k, deaths_per_100k, case_fatality_rate
+        (window-restricted values; NaN where population is invalid).
+    """
+    for d in (start_date, end_date):
+        if d not in cases_df.columns:
+            raise ValueError(f"Date column '{d}' not found in cases dataframe")
+    if start_date >= end_date:
+        raise ValueError("start_date must be earlier than end_date")
+
+    pop_col = get_population_column(population_df)
+    if pop_col is None:
+        raise ValueError("Population dataframe does not contain a population column")
+
+    result = cases_df[["countyFIPS", "State"]].copy()
+    result = result[result["countyFIPS"] != "00000"].reset_index(drop=True)
+
+    def _window_counts(df):
+        sub = df[df["countyFIPS"] != "00000"].reset_index(drop=True)
+        start = pd.to_numeric(sub[start_date], errors="coerce")
+        end = pd.to_numeric(sub[end_date], errors="coerce")
+        return (end - start).clip(lower=0)
+
+    result["window_cases"] = _window_counts(cases_df)
+    result["window_deaths"] = _window_counts(deaths_df)
+
+    pop_valid = population_df[
+        (population_df["countyFIPS"] != "00000") &
+        (pd.to_numeric(population_df[pop_col], errors="coerce") > 0)
+    ][["countyFIPS", "State", pop_col]].rename(columns={pop_col: "_pop"})
+    result = result.merge(pop_valid, on=["countyFIPS", "State"], how="left")
+
+    pop = pd.to_numeric(result["_pop"], errors="coerce")
+    result["cases_per_100k"] = np.where(pop > 0, result["window_cases"] / pop * 100_000, np.nan)
+    result["deaths_per_100k"] = np.where(pop > 0, result["window_deaths"] / pop * 100_000, np.nan)
+    result["case_fatality_rate"] = np.where(
+        result["window_cases"] > 0,
+        result["window_deaths"] / result["window_cases"] * 100,
+        np.nan,
+    )
+
+    return result[["countyFIPS", "State", "cases_per_100k",
+                   "deaths_per_100k", "case_fatality_rate"]]
 
 
 def compute_national_per_capita(raw_df, population_df):

@@ -6,19 +6,19 @@ Developed at Gettysburg College for public-health analysis, coursework, and expl
 
 ## Dashboard Tabs
 
-**County Overview** — a public health fact sheet for any county: COVID outcomes, detected waves, case-to-death lag summary, healthcare capacity, socioeconomic context, vaccination status, and a comparison against national medians.
+**County Overview** — the landing page: a public health fact sheet for any county covering COVID outcomes, detected waves, case-to-death lag, healthcare capacity, socioeconomic context, vaccination status, and national-median comparisons. Includes a "Counties Like This One" structural-peer finder, a random-county button, a downloadable one-page HTML report, and shareable `?county=` URLs.
 
-**Geographic Map** — county choropleth with a date slider, cumulative/daily/moving-average/per-capita COVID metrics, vaccination metrics, state zoom, Metro/Nonmetro filtering (USDA RUCC), and configurable color scaling (percentile clip, absolute, log).
+**Geographic Map** — county choropleth with a date slider, cumulative/daily/moving-average/per-capita COVID metrics, vaccination metrics, state zoom, Metro/Nonmetro filtering (USDA RUCC), and configurable color scaling (percentile clip, absolute, log). Optional animated monthly playback and Getis-Ord Gi* hotspot analysis over county contiguity.
 
 **County Comparison** — overlay two counties, a county against the national aggregate, or all three. Supports cumulative and daily views, smoothing, per-100k normalization, index rebasing, dual axes, log scale, and vaccination rollout comparison.
 
-**Wave Analysis** — region-based epidemiological wave detection with three sensitivity presets. Reports each wave's onset, peak, duration, burden, significance score (0–100), and vaccination coverage at the peak. Advanced controls expose the legacy prominence-based detector.
+**Wave Analysis** — region-based epidemiological wave detection with three sensitivity presets. Reports each wave's onset, peak, duration, burden, significance score (0–100), and vaccination coverage at the peak, with a validation panel comparing detected waves against national surge windows. Advanced controls expose the legacy prominence-based detector.
 
 **Time Lag Analysis** — detects peaks in smoothed daily cases and deaths per 100k, matches each case peak to the nearest subsequent death peak, and reports the lag in days plus a severity ratio for each matched pair. Supports county vs county comparison.
 
-**County Factors** — scatter-plot explorer relating COVID outcomes to healthcare access, income, education, demographics, rural-urban classification, and vaccination rates, with Pearson/Spearman statistics, OLS trend lines, and factor correlation rankings.
+**County Factors** — scatter-plot explorer relating COVID outcomes to healthcare access, income, education, demographics, rural-urban classification, and vaccination rates, with Pearson/Spearman statistics, OLS trend lines, and factor correlation rankings. Outcomes can be restricted to a date window (pre-vaccine, post-rollout, or custom) — essential when relating vaccination factors to outcomes.
 
-**Statistical Modeling** — correlation matrices, Random Forest feature importance, multivariable OLS regression, cross-validated county resilience scores, and vaccination efficacy scatter analysis.
+**Statistical Modeling** — correlation matrices, Random Forest feature importance with partial-dependence curves, multivariable OLS regression with HC3 heteroscedasticity-robust standard errors and VIF multicollinearity diagnostics, cross-validated county resilience scores, vaccination efficacy analysis, and K-means county archetype clustering. Shares the outcome-window control with County Factors.
 
 ## Data Sources
 
@@ -31,6 +31,8 @@ Developed at Gettysburg College for public-health analysis, coursework, and expl
 All datasets are read from the local `data/` directory; nothing is downloaded at runtime. All joins use five-character zero-padded county FIPS codes (with `(countyFIPS, State)` compound keys where duplicate FIPS rows exist).
 
 The USAFacts CSVs and `ahrf2023.csv` are included in the repository, so the dashboard runs immediately after cloning. Larger files (the CDC vaccination CSV and supplementary AHRF releases) exceed GitHub size limits and must be downloaded separately — see `data/README.md` for sources and exact paths. The dashboard degrades gracefully when they are absent: vaccination features are hidden and AHRF falls back to the primary 2023 CSV.
+
+The US county boundary file (`data/geojson-counties-fips.json`, ~2 MB) is downloaded automatically on first launch if missing and reused offline afterwards; it powers the maps, hotspot analysis, and archetype maps.
 
 ## Installation
 
@@ -60,9 +62,11 @@ covid_dashboard/
 ├── lag_analysis.py         # Case-to-death peak lag analysis
 ├── ahrf_loader.py          # AHRF loading, column selection, derived rates
 ├── vaccination_loader.py   # CDC vaccination data loading and lookups
-├── county_features.py      # Master county feature table and correlation helpers
-├── modeling.py             # Correlations, Random Forest, OLS, resilience scores
+├── county_features.py      # Master county feature table, correlations, similarity
+├── modeling.py             # Correlations, RF, OLS (HC3), VIF, clustering, resilience
+├── spatial_analysis.py     # County adjacency and Getis-Ord Gi* hotspots
 ├── validation.py           # Standalone data-quality audits (python validation.py)
+├── tests/                  # Deterministic pytest suite (synthetic fixtures)
 ├── assets/                 # Logos
 ├── data/                   # Local source datasets (see Data Sources)
 ├── README.md
@@ -71,6 +75,15 @@ covid_dashboard/
 ```
 
 `app.py` holds all Streamlit layout and visualization logic; the other modules are pure data functions with no Streamlit dependency (aside from caching wrappers defined in `app.py`).
+
+## Testing
+
+```bash
+pip install pytest
+pytest tests/ -q
+```
+
+The suite uses small synthetic datasets, so it runs in seconds and requires none of the files in `data/`. It covers the daily-diff and per-capita pipeline, national aggregation, window outcomes, wave detection and significance scoring, lag matching, similarity search, VIF/HC3, clustering, and the spatial statistics.
 
 ## Interpretation Notes
 

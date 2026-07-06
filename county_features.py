@@ -455,6 +455,82 @@ def prepare_for_regression(
     return X, y
 
 
+# Default structural profile used for county similarity. Chosen to describe
+# what a county *is* (size, wealth, age, access, rurality) rather than what
+# happened to it, so outcome comparisons between similar counties stay honest.
+SIMILARITY_FEATURES = [
+    "population",
+    "pop_density_per_sqmi",
+    "median_family_income",
+    "pct_pop_65plus",
+    "pcp_per_100k",
+    "pct_college_4yr",
+    "unemployment_rate",
+    "rucc_code",
+]
+
+
+def find_similar_counties(
+    master_df: pd.DataFrame,
+    county_fips: str,
+    feature_cols: Optional[List[str]] = None,
+    n: int = 10,
+) -> pd.DataFrame:
+    """
+    Find the counties most structurally similar to a reference county.
+
+    Method: z-score each feature across complete-case counties, then rank by
+    Euclidean distance to the reference county in that standardized space.
+    Population is log-transformed first so metro size differences don't
+    dominate the distance.
+
+    Args:
+        master_df:    Master county table (COVID + AHRF columns).
+        county_fips:  5-char FIPS of the reference county.
+        feature_cols: Structural columns to compare on (default:
+                      SIMILARITY_FEATURES, filtered to available columns).
+        n:            Number of neighbours to return.
+
+    Returns:
+        DataFrame of the n nearest counties sorted by similarity_distance,
+        including identifier columns, the features used, and COVID outcome
+        columns for comparison. Empty DataFrame if the reference county has
+        missing feature data or too few comparable counties exist.
+    """
+    county_fips = str(county_fips).zfill(5)
+    if feature_cols is None:
+        feature_cols = [c for c in SIMILARITY_FEATURES if c in master_df.columns]
+    if len(feature_cols) < 3 or "countyFIPS" not in master_df.columns:
+        return pd.DataFrame()
+
+    id_cols = [c for c in ["countyFIPS", "County Name", "State"] if c in master_df.columns]
+    outcome_cols = [c for c in ["cases_per_100k", "deaths_per_100k",
+                                "case_fatality_rate", "vax_complete_pct"]
+                    if c in master_df.columns]
+
+    sub = master_df[id_cols + feature_cols + outcome_cols].copy()
+    sub["countyFIPS"] = sub["countyFIPS"].astype(str).str.zfill(5)
+    sub = sub.dropna(subset=feature_cols).reset_index(drop=True)
+
+    if len(sub) < n + 1 or county_fips not in set(sub["countyFIPS"]):
+        return pd.DataFrame()
+
+    X = sub[feature_cols].astype(float).copy()
+    if "population" in X.columns:
+        X["population"] = np.log10(X["population"].clip(lower=1))
+
+    for col in X.columns:
+        X[col] = standardize_feature(X[col])
+
+    ref = X[sub["countyFIPS"] == county_fips].iloc[0].values
+    dist = np.sqrt(((X.values - ref) ** 2).sum(axis=1))
+
+    result = sub.copy()
+    result["similarity_distance"] = dist
+    result = result[result["countyFIPS"] != county_fips]
+    return result.nsmallest(n, "similarity_distance").reset_index(drop=True)
+
+
 def prepare_for_clustering(
     df:             pd.DataFrame,
     feature_cols:   Optional[List[str]] = None,

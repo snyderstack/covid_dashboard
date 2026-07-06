@@ -1,5 +1,6 @@
 import base64
 import os
+import random
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -26,13 +27,19 @@ from tools import (
     compute_national_timeseries,
     compute_national_daily,
     compute_national_per_capita,
+    compute_window_outcomes,
+    monthly_snapshot_long,
+    load_county_geojson,
+    GEOJSON_CDN_URL,
 )
 from wave_analysis import (
     calculate_waves_for_county,
     calculate_waves_from_values,
     estimate_optimal_smoothing,
     calculate_waves_for_all_counties,
+    match_waves_to_national_windows,
     SENSITIVITY_PRESETS,
+    NATIONAL_WAVE_WINDOWS,
 )
 from lag_analysis import analyze_county_lag, summarize_lag_results
 from ahrf_loader import build_ahrf_feature_table, get_variable_catalog
@@ -45,6 +52,7 @@ from county_features import (
     create_master_county_table,
     compute_bivariate_correlation,
     compute_ols_trend,
+    find_similar_counties,
 )
 from modeling import (
     FACTOR_COLS as _MOD_FACTOR_COLS,
@@ -54,6 +62,13 @@ from modeling import (
     run_ols_regression,
     compute_resilience_scores,
     generate_ols_interpretation,
+    compute_vif,
+    run_rf_partial_dependence,
+    compute_county_clusters,
+)
+from spatial_analysis import (
+    build_adjacency_from_geojson,
+    compute_getis_ord_gi_star,
 )
 
 # Page config and global CSS
@@ -890,6 +905,54 @@ def get_choropleth_data(metric_df, date_str, cases_df, deaths_df, population_df)
     """
     return prepare_choropleth_for_date(metric_df, date_str, cases_df, deaths_df, population_df)
 
+@st.cache_resource
+def get_county_geojson():
+    """
+    Bundled county GeoJSON as a dict (auto-downloaded once if absent), or
+    None when unavailable — callers then fall back to the CDN URL.
+    """
+    return load_county_geojson()
+
+@st.cache_resource
+def get_county_adjacency():
+    """County adjacency derived from the GeoJSON geometry (None if no file)."""
+    geo = get_county_geojson()
+    if geo is None:
+        return None
+    return build_adjacency_from_geojson(geo)
+
+@st.cache_data
+def get_window_outcomes(_cases_df, _deaths_df, _population_df, start_date, end_date):
+    """
+    Window-restricted per-100k outcomes, cached by (start, end).
+
+    The dataframes never change within a session, so they are excluded from
+    the cache key (underscore prefix); the date pair fully identifies a result.
+    """
+    return compute_window_outcomes(_cases_df, _deaths_df, _population_df,
+                                   start_date, end_date)
+
+@st.cache_data
+def get_monthly_animation_frames(_metric_df, metric_key):
+    """
+    Cached monthly long-format snapshots for map animation (~40 frames).
+
+    Cached by metric_key; the underlying wide table is stable per session so
+    it is excluded from the hash.
+    """
+    return monthly_snapshot_long(_metric_df)
+
+@st.cache_data
+def get_hotspot_analysis(_choro_data, metric_key, date_str):
+    """Getis-Ord Gi* over the national choropleth slice, cached per metric/date."""
+    adjacency = get_county_adjacency()
+    if adjacency is None:
+        return None
+    return compute_getis_ord_gi_star(
+        _choro_data[["countyFIPS", "Location", "State", "value"]],
+        adjacency,
+    )
+
 @st.cache_data
 def get_ahrf_features(covid_fips_frozenset):
     """
@@ -1053,6 +1116,17 @@ dates = transforms["dates"]
 
 locations     = sorted(cases_df["Location"].unique())
 unique_states = sorted(cases_df["State"].unique())
+
+# County boundaries: bundled GeoJSON dict when available (offline-capable,
+# also powers spatial analysis); CDN URL string as the Plotly fallback.
+county_geojson = get_county_geojson()
+GEO_SOURCE = county_geojson if county_geojson is not None else GEOJSON_CDN_URL
+
+# Shareable views: ?county=<Location> pre-selects the County Overview county.
+# Only seeds session state once, so it never fights the user's own selection.
+_shared_county = st.query_params.get("county")
+if _shared_county in set(locations) and "overview_county" not in st.session_state:
+    st.session_state["overview_county"] = _shared_county
 
 national = compute_national_aggregates(
     cases_df, deaths_df, population_df,
@@ -1426,7 +1500,7 @@ def render_map_tab(transforms, cases_df, deaths_df, population_df, dates, unique
         locations="countyFIPS",
         color=color_col,
         scope="usa",
-        geojson="https://raw.githubusercontent.com/plotly/datasets/master/geojson-counties-fips.json",
+        geojson=GEO_SOURCE,
         featureidkey="id",
         color_continuous_scale=color_scale,
         range_color=[_zmin, _zmax],
@@ -1478,6 +1552,95 @@ def render_map_tab(transforms, cases_df, deaths_df, population_df, dates, unique
                 "(through May 2023). The date slider above does not apply to this metric."
             )
         st.plotly_chart(fig_map, use_container_width=True)
+
+        # Animated monthly playback (COVID metrics only — vaccination is a
+        # single snapshot). Frames are built lazily and cached per metric.
+        if not _is_vax_metric:
+            with st.expander("Animated playback — watch the pandemic move month by month", expanded=False):
+                if st.checkbox("Build animation", key="map_animate",
+                               help="One frame per month (~40 frames). First build takes a few seconds."):
+                    _metric_key, _metric_src = metric_options[metric_name]
+                    _anim_df = get_monthly_animation_frames(_metric_src, _metric_key)
+                    _anim_vals = _anim_df["value"]
+                    _anim_max = float(np.percentile(_anim_vals, 99)) if len(_anim_vals) else 1.0
+                    fig_anim = px.choropleth(
+                        _anim_df,
+                        locations="countyFIPS",
+                        color="value",
+                        animation_frame="Month",
+                        scope="usa",
+                        geojson=GEO_SOURCE,
+                        featureidkey="id",
+                        color_continuous_scale=color_scale,
+                        range_color=[0, max(_anim_max, 1.0)],
+                        hover_name="Location" if "Location" in _anim_df.columns else None,
+                        labels={"value": metric_name},
+                    )
+                    fig_anim.update_layout(
+                        height=620,
+                        margin={"r": 0, "t": 30, "l": 0, "b": 0},
+                        font=dict(family="Inter, Helvetica Neue, Arial, sans-serif", size=11),
+                        paper_bgcolor="white",
+                    )
+                    st.plotly_chart(fig_anim, use_container_width=True)
+                    st.caption(
+                        f"**{metric_name}**, one frame per month. Color scale fixed at the "
+                        "99th-percentile value across the whole period so frames are comparable. "
+                        "Use the play button or drag the month slider."
+                    )
+
+        # Spatial clustering: Getis-Ord Gi* hotspots for the current metric/date
+        with st.expander("Hotspot analysis — where is this metric spatially clustered?", expanded=False):
+            if st.checkbox("Run hotspot analysis", key="map_hotspots",
+                           help="Getis-Ord Gi* over county contiguity, national scope"):
+                if get_county_adjacency() is None:
+                    st.info(
+                        "County boundary file unavailable — hotspot analysis needs "
+                        "data/geojson-counties-fips.json (downloaded automatically "
+                        "when the app has network access)."
+                    )
+                else:
+                    _hs = get_hotspot_analysis(
+                        choro_data, metric_name,
+                        map_selected_date if not _is_vax_metric else "latest",
+                    )
+                    if _hs is None or _hs["gi_z"].isna().all():
+                        st.info("Not enough data to compute hotspot statistics.")
+                    else:
+                        fig_hs = px.choropleth(
+                            _hs,
+                            locations="countyFIPS",
+                            color="gi_category",
+                            scope="usa",
+                            geojson=GEO_SOURCE,
+                            featureidkey="id",
+                            category_orders={"gi_category": ["Hotspot", "Not significant", "Coldspot"]},
+                            color_discrete_map={
+                                "Hotspot": "#c41e3a",
+                                "Coldspot": "#1E4D87",
+                                "Not significant": "#E3E8F0",
+                            },
+                            hover_name="Location",
+                            hover_data={"countyFIPS": False, "gi_z": ":.2f", "value": ":.1f"},
+                            labels={"gi_category": "Spatial cluster", "gi_z": "Gi* z-score",
+                                    "value": metric_name},
+                        )
+                        fig_hs.update_layout(
+                            height=560,
+                            margin={"r": 0, "t": 30, "l": 0, "b": 0},
+                            font=dict(family="Inter, Helvetica Neue, Arial, sans-serif", size=11),
+                            paper_bgcolor="white",
+                            legend=dict(orientation="h", y=-0.05),
+                        )
+                        st.plotly_chart(fig_hs, use_container_width=True)
+                        _n_hot = int((_hs["gi_category"] == "Hotspot").sum())
+                        _n_cold = int((_hs["gi_category"] == "Coldspot").sum())
+                        st.caption(
+                            f"Getis-Ord Gi* with rook contiguity (national scope, ignores the state filter): "
+                            f"**{_n_hot} hotspot** and **{_n_cold} coldspot** counties at p < 0.05. "
+                            "A hotspot is a county whose neighbourhood shows unusually high values "
+                            "of the selected metric — spatial clustering, not just a high county."
+                        )
 
     # Export controls render back into the control-panel column; they depend on
     # filtered_choro_data, which only exists after the pipeline above has run.
@@ -2025,20 +2188,35 @@ def render_county_overview_tab(
         unsafe_allow_html=True,
     )
 
-    # County selector. When the user clicks "Open County Overview" on the map
-    # tab, the county is written into session_state["overview_county"] so the
-    # selectbox pre-populates on the next render pass.
-    _ov_sel_col, _ov_desc_col = st.columns([2, 3])
+    # County selector. Session state key "overview_county" is shared with the
+    # map tab's "Open County Overview" button, the ?county= URL parameter, and
+    # the Surprise Me button (whose on_click callback runs before widgets
+    # re-instantiate, which is the only safe way to set a widget's state).
+    def _pick_random_county():
+        st.session_state["overview_county"] = random.choice(locations)
+
+    _ov_sel_col, _ov_btn_col, _ov_desc_col = st.columns([2, 1, 3], vertical_alignment="bottom")
     with _ov_sel_col:
         location = st.selectbox("Select County", locations, key="overview_county")
+    with _ov_btn_col:
+        st.button(
+            "Surprise me",
+            on_click=_pick_random_county,
+            use_container_width=True,
+            help="Jump to a randomly chosen county",
+        )
     with _ov_desc_col:
         st.markdown(
-            '<p style="margin:1.85rem 0 0 0;font-size:0.86rem;color:#4B5563;line-height:1.6;">'
+            '<p style="margin:0 0 0.4rem 0;font-size:0.86rem;color:#4B5563;line-height:1.6;">'
             'A complete public health fact sheet for any U.S. county — outcomes, '
             'wave history, vaccination coverage, healthcare access, and economic context.'
             '</p>',
             unsafe_allow_html=True,
         )
+
+    # Keep the URL shareable: reflect the current county into ?county=
+    if st.query_params.get("county") != location:
+        st.query_params["county"] = location
 
     county_name, state = extract_county_state(location)
 
@@ -2654,6 +2832,159 @@ def render_county_overview_tab(
             st.markdown(f"- {finding}")
     else:
         st.info("Insufficient data to generate research snapshots for this county.")
+
+    # SECTION 9 — SIMILAR COUNTIES
+
+    st.markdown(
+        '<div class="sub-section-header"><h3>9 — Counties Like This One</h3>'
+        '<p>The ten most structurally similar counties — matched on population, density, '
+        'income, age, education, healthcare access, and rurality — and how their COVID '
+        'outcomes compare. Similar inputs, different outcomes: a natural starting point '
+        'for research questions.</p></div>',
+        unsafe_allow_html=True,
+    )
+
+    _fips_str5 = str(fips).zfill(5) if fips != "—" else None
+    _peers = (
+        find_similar_counties(master_county_df, _fips_str5, n=10)
+        if (_fips_str5 and master_county_df is not None and not master_county_df.empty)
+        else pd.DataFrame()
+    )
+
+    if not _peers.empty:
+        _peer_cols = {
+            "County Name":         "County",
+            "State":               "State",
+            "similarity_distance": "Distance",
+            "cases_per_100k":      "Cases /100k",
+            "deaths_per_100k":     "Deaths /100k",
+            "case_fatality_rate":  "CFR (%)",
+            "vax_complete_pct":    "Fully Vacc. (%)",
+        }
+        _peer_disp = _peers[[c for c in _peer_cols if c in _peers.columns]].rename(columns=_peer_cols)
+        st.dataframe(
+            _peer_disp.style.format({
+                "Distance":       "{:.2f}",
+                "Cases /100k":    "{:,.0f}",
+                "Deaths /100k":   "{:.1f}",
+                "CFR (%)":        "{:.2f}",
+                "Fully Vacc. (%)": "{:.1f}",
+            }),
+            use_container_width=True, hide_index=True,
+        )
+
+        _peer_deaths = pd.to_numeric(_peers.get("deaths_per_100k"), errors="coerce").dropna()
+        if len(_peer_deaths) >= 5 and pd.notna(deaths_100k):
+            _peer_med = float(_peer_deaths.median())
+            _cmp_word = "higher than" if deaths_100k > _peer_med else "lower than"
+            st.caption(
+                f"COVID mortality here ({_fmt(deaths_100k, '.1f')} deaths/100k) was "
+                f"**{_cmp_word}** the median of its ten structural peers "
+                f"({_peer_med:.1f}/100k). Distance is Euclidean in standardized "
+                "feature space — smaller means more similar."
+            )
+    else:
+        st.info("Not enough complete structural data to find similar counties.")
+
+    # Downloadable one-page report + shareable link
+    st.markdown("---")
+    _dl_col, _share_col = st.columns([1, 2], vertical_alignment="center")
+    with _dl_col:
+        _report_html = _build_county_report_html(
+            county_name=county_name, state=state, fips=fips,
+            population=population, rucc_group=rucc_group,
+            total_cases=total_cases, total_deaths=total_deaths,
+            cases_100k=cases_100k, deaths_100k=deaths_100k, cfr=cfr,
+            wave_results=_wave_results, lag_summary=_lag_summary,
+            values=_v, nat_med=nat_med,
+            data_through=dates[-1] if dates else "—",
+        )
+        st.download_button(
+            "Download county report (HTML)",
+            data=_report_html.encode("utf-8"),
+            file_name=f"county_report_{str(fips)}_{county_name.replace(' ', '_')}.html",
+            mime="text/html",
+            key="overview_report_download",
+            use_container_width=True,
+        )
+    with _share_col:
+        st.caption(
+            "Share this exact view: copy the browser URL — it now includes "
+            f"`?county={location}` and will open directly to this county."
+        )
+
+def _build_county_report_html(county_name, state, fips, population, rucc_group,
+                              total_cases, total_deaths, cases_100k, deaths_100k,
+                              cfr, wave_results, lag_summary, values, nat_med,
+                              data_through):
+    """Assemble a self-contained one-page HTML fact sheet for download."""
+    def fmt(v, spec=",.1f", fallback="N/A"):
+        try:
+            return f"{float(v):{spec}}" if pd.notna(v) else fallback
+        except (TypeError, ValueError):
+            return fallback
+
+    def row(label, county_val, nat_key=None, spec=",.1f"):
+        nat = fmt(nat_med.get(nat_key), spec) if nat_key else "—"
+        return (f"<tr><td>{label}</td><td>{fmt(county_val, spec)}</td>"
+                f"<td>{nat}</td></tr>")
+
+    n_waves = "N/A"
+    peak_wave = "N/A"
+    if isinstance(wave_results, dict) and "error" not in wave_results:
+        n_waves = wave_results["cases"]["number_of_waves"]
+        pd_date = wave_results["cases"]["date_of_peak_wave"]
+        peak_wave = str(pd_date)[:10] if pd_date else "N/A"
+
+    avg_lag = fmt(lag_summary.get("avg_lag"), ".1f") if lag_summary else "N/A"
+
+    rows = "".join([
+        row("Total cases", total_cases, spec=",.0f"),
+        row("Total deaths", total_deaths, spec=",.0f"),
+        row("Cases per 100k", cases_100k, "cases_per_100k"),
+        row("Deaths per 100k", deaths_100k, "deaths_per_100k", ".2f"),
+        row("Case fatality rate (%)", cfr, "case_fatality_rate", ".2f"),
+        row("Fully vaccinated (%)", values("vax_complete_pct"), "vax_complete_pct"),
+        row("Primary care physicians /100k", values("pcp_per_100k"), "pcp_per_100k"),
+        row("Hospital beds /100k", values("hospital_beds_per_100k"), "hospital_beds_per_100k"),
+        row("ICU beds /100k", values("icu_beds_per_100k"), "icu_beds_per_100k"),
+        row("Median family income ($)", values("median_family_income"), "median_family_income", ",.0f"),
+        row("Unemployment rate (%)", values("unemployment_rate"), "unemployment_rate"),
+        row("Child poverty rate (%)", values("child_poverty_pct"), "child_poverty_pct"),
+        row("% without HS diploma", values("pct_no_hs_diploma"), "pct_no_hs_diploma"),
+        row("% population 65+", values("pct_pop_65plus"), "pct_pop_65plus"),
+        row("Population density /sq mi", values("pop_density_per_sqmi"), "pop_density_per_sqmi"),
+    ])
+
+    return f"""<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>{county_name}, {state} — COVID-19 County Report</title>
+<style>
+body {{ font-family: 'Helvetica Neue', Arial, sans-serif; color: #0B2341; margin: 2.5rem auto; max-width: 780px; padding: 0 1.5rem; }}
+h1 {{ font-size: 1.6rem; margin: 0 0 0.2rem 0; }}
+.meta {{ color: #64707F; font-size: 0.85rem; margin-bottom: 1.5rem; }}
+.badges span {{ display: inline-block; background: #F26A21; color: white; border-radius: 12px; padding: 2px 12px; font-size: 0.75rem; font-weight: 700; margin-right: 6px; }}
+table {{ width: 100%; border-collapse: collapse; margin: 1.25rem 0; font-size: 0.9rem; }}
+th, td {{ text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #ECF0F5; }}
+th {{ background: #0B2341; color: white; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em; }}
+.summary {{ background: #F3F6FA; border-left: 3px solid #F26A21; padding: 0.9rem 1.2rem; font-size: 0.88rem; line-height: 1.6; }}
+.foot {{ color: #97A1AF; font-size: 0.72rem; margin-top: 2rem; border-top: 1px solid #ECF0F5; padding-top: 0.75rem; }}
+</style></head><body>
+<h1>{county_name}, {state}</h1>
+<div class="meta">FIPS {fips} &middot; Population {fmt(population, ',.0f')} &middot; Data through {data_through}</div>
+<div class="badges"><span>{rucc_group}</span></div>
+<div class="summary">
+Detected case waves (Standard sensitivity): <strong>{n_waves}</strong> &middot;
+Peak wave date: <strong>{peak_wave}</strong> &middot;
+Average case-to-death lag: <strong>{avg_lag} days</strong>
+</div>
+<table>
+<tr><th>Metric</th><th>This county</th><th>National median</th></tr>
+{rows}
+</table>
+<p class="foot">Generated by the COVID-19 County Outcomes Analysis Platform, Gettysburg College.
+Sources: USAFacts, HRSA Area Health Resources Files, CDC county vaccination data.
+County-level (ecological) statistics — not individual-level or causal estimates.</p>
+</body></html>"""
 
 def _render_lag_chart(location_label, results, summary, lag_ma_window):
     """Render the dual-axis cases/deaths chart with annotated matched peaks."""
@@ -3625,6 +3956,36 @@ def render_wave_tab(cases_df, deaths_df, transforms, locations, population_df, v
         else:
             st.caption("Diagnostic log unavailable (no candidates found).")
 
+    with st.expander("Validation — detected waves vs national surge windows", expanded=False):
+        if wave_list:
+            _val_df = match_waves_to_national_windows(wave_list)
+            st.dataframe(_val_df, use_container_width=True, hide_index=True)
+
+            _hit_windows = set(_val_df["National Window"]) - {"Outside national windows"}
+            _missed = [name for name, _s, _e in NATIONAL_WAVE_WINDOWS
+                       if name not in _hit_windows]
+            _n_outside = int((_val_df["National Window"] == "Outside national windows").sum())
+
+            _summary_bits = [
+                f"Detected waves align with **{len(_hit_windows)} of "
+                f"{len(NATIONAL_WAVE_WINDOWS)}** national surge windows."
+            ]
+            if _missed:
+                _summary_bits.append("No wave detected during: " + ", ".join(_missed) + ".")
+            if _n_outside:
+                _summary_bits.append(
+                    f"{_n_outside} wave(s) peaked outside every national window — "
+                    "often a genuine local surge rather than a detection error."
+                )
+            st.caption(
+                " ".join(_summary_bits) + " Missing the Winter 2020-21 or Omicron "
+                "window usually means detection is set too conservatively for this "
+                "county — try the Sensitive preset. National windows are deliberately "
+                "generous; county waves lead or trail the national picture by weeks."
+            )
+        else:
+            st.caption("No waves detected — nothing to validate against national windows.")
+
     with st.expander("How wave detection works", expanded=False):
         _preset_info = SENSITIVITY_PRESETS.get(wave_sensitivity, {})
         _elev_rel  = int(_preset_info.get("elevation_threshold_rel", 0.30) * 100)
@@ -3786,6 +4147,42 @@ def render_county_factors_tab(
                 help="Metro = RUCC 1–3 · Nonmetro = RUCC 4–9",
             )
 
+    # Outcome time window. Restricting outcomes to a sub-period matters most
+    # for vaccination factors: correlating final vaccination rates against
+    # full-pandemic cumulative outcomes mixes pre- and post-rollout deaths.
+    _dates_all = transforms["dates"]
+    _win_c1, _win_c2 = st.columns([2, 3], vertical_alignment="bottom")
+    with _win_c1:
+        window_choice = st.selectbox(
+            "Outcome window",
+            ["Full pandemic",
+             "Pre-vaccine era (through 2020-12-13)",
+             "Post-rollout era (2021-07-01 onward)",
+             "Custom range"],
+            key="cf_window",
+            help=(
+                "Restrict COVID outcome columns (cases/deaths per 100k, CFR) to events "
+                "within a date window. Use Post-rollout when relating vaccination "
+                "factors to outcomes."
+            ),
+        )
+    _window_range = None
+    if window_choice == "Pre-vaccine era (through 2020-12-13)":
+        _window_range = (_dates_all[0], "2020-12-13")
+    elif window_choice == "Post-rollout era (2021-07-01 onward)":
+        _window_range = ("2021-07-01", _dates_all[-1])
+    elif window_choice == "Custom range":
+        with _win_c2:
+            _window_range = st.select_slider(
+                "Window",
+                options=_dates_all,
+                value=(_dates_all[0], _dates_all[-1]),
+                key="cf_window_custom",
+            )
+        if _window_range[0] >= _window_range[1]:
+            st.warning("Window start must be before window end — using full pandemic.")
+            _window_range = None
+
     plot_df = master_df.copy()
     if state_filter:
         plot_df = plot_df[plot_df["State"].isin(state_filter)]
@@ -3795,6 +4192,20 @@ def render_county_factors_tab(
         plot_df = plot_df[plot_df["is_metro"] == True]
     elif metro_filter == "Nonmetro Counties" and "is_metro" in plot_df.columns:
         plot_df = plot_df[plot_df["is_metro"] == False]
+
+    if _window_range is not None:
+        _win_outcomes = get_window_outcomes(
+            cases_df, deaths_df, population_df, _window_range[0], _window_range[1]
+        )
+        _outcome_override = ["cases_per_100k", "deaths_per_100k", "case_fatality_rate"]
+        plot_df = plot_df.drop(
+            columns=[c for c in _outcome_override if c in plot_df.columns]
+        ).merge(_win_outcomes, on=["countyFIPS", "State"], how="left")
+        st.caption(
+            f"Outcome window active: **{_window_range[0]} → {_window_range[1]}** — "
+            "cases/deaths per 100k and CFR reflect only events in this window. "
+            "Factor columns (income, healthcare, vaccination) are unchanged."
+        )
 
     # Wave metrics are computed lazily on demand (all ~3,100 counties, ~60–90 s).
     if outcome_col in WAVE_OUTCOMES:
@@ -4114,39 +4525,50 @@ def render_county_factors_tab(
         )
         st.caption(f"{len(_export_master):,} counties · {len(_export_master.columns):,} variables")
 
-# Statistical modeling tab — cached wrappers
+# Statistical modeling tab — cached wrappers.
+# The dataframe parameter is deliberately hashed (no underscore prefix): the
+# tab passes a *filtered* dataframe, so the cache key must include its content
+# or filter changes would silently return stale results.
 
 @st.cache_data
-def _cached_correlations(_df, outcome_col, factor_cols_tuple):
+def _cached_correlations(df, outcome_col, factor_cols_tuple):
     """Cache correlation matrix for a given outcome and factor set."""
     return compute_all_correlations(
-        _df,
+        df,
         outcome_cols=[outcome_col],
         factor_cols=list(factor_cols_tuple),
         min_n=10,
     )
 
 @st.cache_data
-def _cached_corr_heatmap(_df, outcome_cols_tuple, factor_cols_tuple):
+def _cached_corr_heatmap(df, outcome_cols_tuple, factor_cols_tuple):
     """Cache full outcome × factor correlation matrix for the heatmap."""
     return compute_all_correlations(
-        _df,
+        df,
         outcome_cols=list(outcome_cols_tuple),
         factor_cols=list(factor_cols_tuple),
         min_n=10,
     )
 
 @st.cache_data
-def _cached_rf_importance(_df, outcome_col, feature_cols_tuple):
-    return run_rf_feature_importance(_df, outcome_col, list(feature_cols_tuple))
+def _cached_rf_importance(df, outcome_col, feature_cols_tuple):
+    return run_rf_feature_importance(df, outcome_col, list(feature_cols_tuple))
 
 @st.cache_data
-def _cached_ols(_df, outcome_col, predictor_cols_tuple):
-    return run_ols_regression(_df, outcome_col, list(predictor_cols_tuple))
+def _cached_partial_dependence(df, outcome_col, feature_cols_tuple, top_k=3):
+    return run_rf_partial_dependence(df, outcome_col, list(feature_cols_tuple), top_k=top_k)
 
 @st.cache_data
-def _cached_resilience(_df, outcome_col, feature_cols_tuple, cv_folds=5):
-    return compute_resilience_scores(_df, outcome_col, list(feature_cols_tuple), cv_folds=cv_folds)
+def _cached_ols(df, outcome_col, predictor_cols_tuple):
+    return run_ols_regression(df, outcome_col, list(predictor_cols_tuple))
+
+@st.cache_data
+def _cached_resilience(df, outcome_col, feature_cols_tuple, cv_folds=5):
+    return compute_resilience_scores(df, outcome_col, list(feature_cols_tuple), cv_folds=cv_folds)
+
+@st.cache_data
+def _cached_clusters(df, feature_cols_tuple, k):
+    return compute_county_clusters(df, list(feature_cols_tuple), k=k)
 
 def render_modeling_tab(master_county_df, locations) -> None:
     """Statistical Modeling & Outcome Drivers tab."""
@@ -4202,7 +4624,7 @@ def render_modeling_tab(master_county_df, locations) -> None:
 
     # Global dataset filter (collapsed — models work on all counties by default)
     with st.expander("Filter dataset", expanded=False):
-        gf1, gf2, gf3 = st.columns(3)
+        gf1, gf2, gf3, gf4 = st.columns(4)
         with gf1:
             all_states = sorted(master_county_df["State"].dropna().unique())
             mod_states = st.multiselect("State", all_states, default=[],
@@ -4218,6 +4640,18 @@ def render_modeling_tab(master_county_df, locations) -> None:
                 ["All Counties", "Metro Counties", "Nonmetro Counties"],
                 key="mod_metro_filter",
             )
+        with gf4:
+            mod_window = st.selectbox(
+                "Outcome window",
+                ["Full pandemic",
+                 "Pre-vaccine era (through 2020-12-13)",
+                 "Post-rollout era (2021-07-01 onward)"],
+                key="mod_window",
+                help=(
+                    "Restrict COVID outcomes to a sub-period. Post-rollout is the "
+                    "defensible choice when modeling vaccination effects."
+                ),
+            )
 
     plot_df = master_county_df.copy()
     if mod_states:
@@ -4229,7 +4663,28 @@ def render_modeling_tab(master_county_df, locations) -> None:
     elif mod_metro == "Nonmetro Counties" and "is_metro" in plot_df.columns:
         plot_df = plot_df[plot_df["is_metro"] == False]
 
-    st.caption(f"**{len(plot_df):,}** counties in model dataset.")
+    # Window-restricted outcomes (cases_df etc. are module-level; the master
+    # table's factor columns are untouched)
+    _mod_window_range = None
+    if mod_window == "Pre-vaccine era (through 2020-12-13)":
+        _mod_window_range = (dates[0], "2020-12-13")
+    elif mod_window == "Post-rollout era (2021-07-01 onward)":
+        _mod_window_range = ("2021-07-01", dates[-1])
+    if _mod_window_range is not None:
+        _mod_win = get_window_outcomes(
+            cases_df, deaths_df, population_df,
+            _mod_window_range[0], _mod_window_range[1],
+        )
+        _mod_override = ["cases_per_100k", "deaths_per_100k", "case_fatality_rate"]
+        plot_df = plot_df.drop(
+            columns=[c for c in _mod_override if c in plot_df.columns]
+        ).merge(_mod_win, on=["countyFIPS", "State"], how="left")
+
+    _window_note = (
+        f" · outcome window **{_mod_window_range[0]} → {_mod_window_range[1]}**"
+        if _mod_window_range else ""
+    )
+    st.caption(f"**{len(plot_df):,}** counties in model dataset{_window_note}.")
 
     # SECTION 1 — CORRELATION MATRIX
 
@@ -4365,6 +4820,43 @@ def render_modeling_tab(master_county_df, locations) -> None:
                 fi_df[show_cols].style.format({"Importance": "{:.4f}"}),
                 use_container_width=True, hide_index=True,
             )
+
+            # Partial dependence: how does the predicted outcome move as each
+            # top feature sweeps its observed range, all else held fixed?
+            pd_curves, pd_err = _cached_partial_dependence(
+                plot_df, fi_out_col, tuple(_factor_cols_all), top_k=3,
+            )
+            if pd_curves:
+                st.markdown("##### Partial Dependence — Top 3 Features")
+                pd_cols = st.columns(len(pd_curves))
+                for _pi, (feat_label, curve) in enumerate(pd_curves.items()):
+                    with pd_cols[_pi]:
+                        fig_pd = go.Figure(go.Scatter(
+                            x=curve["grid_value"], y=curve["avg_prediction"],
+                            mode="lines", line=dict(color=NATIONAL_COLOR, width=2.5),
+                            hovertemplate=f"{feat_label}: %{{x:,.1f}}<br>Predicted: %{{y:,.2f}}<extra></extra>",
+                        ))
+                        fig_pd.update_layout(
+                            title=dict(text=feat_label, font=dict(size=12)),
+                            height=260, margin=dict(t=40, b=35, l=45, r=15),
+                            template="plotly_white",
+                            xaxis=dict(title=None, tickfont=dict(size=9)),
+                            yaxis=dict(title=f"Predicted {fi_out_label}"
+                                       if _pi == 0 else None,
+                                       tickfont=dict(size=9)),
+                            font=dict(family="sans-serif", size=10),
+                            showlegend=False,
+                        )
+                        st.plotly_chart(fig_pd, use_container_width=True)
+                st.caption(
+                    "Each curve sweeps one feature across its 5th–95th percentile range "
+                    "while all other features keep their observed values; the y-axis is the "
+                    "average model prediction. Flat curve = little marginal effect. "
+                    "Interpret jointly with the importance ranking — correlated features "
+                    "share credit."
+                )
+            elif pd_err:
+                st.caption(f"Partial dependence unavailable: {pd_err}")
     else:
         st.info("Click **Run Feature Importance** to fit the model.")
 
@@ -4416,19 +4908,45 @@ def render_modeling_tab(master_county_df, locations) -> None:
             sdf = ols_res["summary_df"].copy()
             st.dataframe(
                 sdf.style.format({
-                    "Coefficient": "{:.4f}",
-                    "Std Error":   "{:.4f}",
-                    "t-stat":      "{:.3f}",
-                    "p-value":     lambda v: _fmt_p(v),
-                    "CI Lower":    "{:.4f}",
-                    "CI Upper":    "{:.4f}",
+                    "Coefficient":     "{:.4f}",
+                    "Std Error":       "{:.4f}",
+                    "t-stat":          "{:.3f}",
+                    "p-value":         lambda v: _fmt_p(v),
+                    "Robust SE (HC3)": "{:.4f}",
+                    "Robust p":        lambda v: _fmt_p(v),
+                    "CI Lower":        "{:.4f}",
+                    "CI Upper":        "{:.4f}",
                 }).map(
                     lambda v: "background-color: #fef3c7" if isinstance(v, float) and v < 0.05 else "",
-                    subset=["p-value"],
+                    subset=["p-value", "Robust p"],
                 ),
                 use_container_width=True, hide_index=True,
             )
-            st.caption("Highlighted rows: p < 0.05 (statistically significant at 5% level).")
+            st.caption(
+                "Highlighted cells: p < 0.05. **Robust SE (HC3)** are "
+                "heteroscedasticity-robust standard errors — prefer the Robust p "
+                "column when residual variance is non-constant (typical for skewed "
+                "county outcomes). Classical and robust p-values agreeing is a good "
+                "sign of a stable result."
+            )
+
+            # Multicollinearity diagnostics for the selected predictor set
+            vif_df = compute_vif(plot_df, list(ols_pred_cols))
+            if not vif_df.empty:
+                with st.expander("Multicollinearity check (VIF)", expanded=False):
+                    st.dataframe(
+                        vif_df.style.format({"VIF": "{:.2f}"}).map(
+                            lambda v: ("color: #c41e3a; font-weight: 600"
+                                       if isinstance(v, float) and v > 5 else ""),
+                            subset=["VIF"],
+                        ),
+                        use_container_width=True, hide_index=True,
+                    )
+                    st.caption(
+                        "Variance Inflation Factor: VIF > 5 (red) means the predictor is "
+                        "strongly explained by the others, making its coefficient unstable; "
+                        "VIF > 10 is a strong signal to drop or combine predictors."
+                    )
 
             st.markdown("**Interpretation**")
             bullets = generate_ols_interpretation(
@@ -4527,7 +5045,7 @@ def render_modeling_tab(master_county_df, locations) -> None:
                     locations="countyFIPS",
                     color="resilience_score",
                     scope="usa",
-                    geojson="https://raw.githubusercontent.com/plotly/datasets/master/geojson-counties-fips.json",
+                    geojson=GEO_SOURCE,
                     featureidkey="id",
                     color_continuous_scale="RdBu",
                     range_color=[-_abs_max, _abs_max],
@@ -4881,6 +5399,109 @@ def render_modeling_tab(master_county_df, locations) -> None:
             "For outcomes (cases, deaths) higher is worse; "
             "for healthcare resources higher is generally better."
         )
+
+    st.markdown("---")
+
+    # SECTION 7 — COUNTY ARCHETYPES (K-MEANS)
+
+    st.markdown(
+        '<div class="sub-section-header"><h3>7 — County Archetypes</h3>'
+        '<p>K-means clustering groups counties into structural archetypes using '
+        'demographics, economy, healthcare access, and rurality — outcomes are '
+        'deliberately excluded, so comparing COVID outcomes across archetypes '
+        'stays meaningful.</p></div>',
+        unsafe_allow_html=True,
+    )
+
+    _arch_features = [c for c in (
+        "population", "pop_density_per_sqmi", "median_family_income",
+        "pct_pop_65plus", "median_age", "pcp_per_100k",
+        "hospital_beds_per_100k", "pct_college_4yr", "unemployment_rate",
+        "pct_urban_pop", "rucc_code",
+    ) if c in plot_df.columns]
+
+    _ac1, _ac2 = st.columns([1, 4], vertical_alignment="bottom")
+    with _ac1:
+        arch_k = st.selectbox("Number of archetypes (k)", [3, 4, 5, 6], index=1, key="mod_arch_k")
+    with _ac2:
+        run_arch = st.button("Identify archetypes", key="mod_arch_run")
+
+    if run_arch:
+        with st.spinner("Clustering counties…"):
+            arch_assign, arch_profile, arch_err = _cached_clusters(
+                plot_df, tuple(_arch_features), arch_k,
+            )
+        if arch_err:
+            st.error(arch_err)
+        elif arch_assign is not None:
+            _ARCH_COLORS = ["#153A66", "#F26A21", "#059669", "#8B5CF6", "#DC2626", "#0891B2"]
+            arch_map_df = arch_assign.copy()
+            arch_map_df["countyFIPS"] = arch_map_df["countyFIPS"].astype(str).str.zfill(5)
+            arch_map_df["Archetype"] = "Archetype " + (arch_map_df["cluster"] + 1).astype(str)
+
+            fig_arch = px.choropleth(
+                arch_map_df,
+                locations="countyFIPS",
+                color="Archetype",
+                scope="usa",
+                geojson=GEO_SOURCE,
+                featureidkey="id",
+                category_orders={"Archetype": [f"Archetype {i+1}" for i in range(arch_k)]},
+                color_discrete_sequence=_ARCH_COLORS[:arch_k],
+                hover_name="County Name" if "County Name" in arch_map_df.columns else None,
+                hover_data={"State": True, "countyFIPS": False},
+                title="<b>County Structural Archetypes</b>",
+            )
+            fig_arch.update_layout(
+                height=560,
+                margin=dict(t=60, b=10, l=0, r=0),
+                font=dict(family="Inter, Helvetica Neue, Arial, sans-serif", size=11),
+                paper_bgcolor="white",
+                legend=dict(orientation="h", y=-0.05),
+            )
+            st.plotly_chart(fig_arch, use_container_width=True)
+
+            if arch_profile is not None:
+                _profile_disp = arch_profile.copy()
+                _profile_disp.insert(0, "Archetype",
+                                     "Archetype " + (_profile_disp["cluster"] + 1).astype(str))
+                _profile_disp = _profile_disp.drop(columns=["cluster"])
+                _prof_labels = {
+                    "counties":               "Counties",
+                    "population":             "Mean Population",
+                    "pop_density_per_sqmi":   "Density /sq mi",
+                    "median_family_income":   "Median Income ($)",
+                    "pct_pop_65plus":         "% 65+",
+                    "median_age":             "Median Age",
+                    "pcp_per_100k":           "PCP /100k",
+                    "hospital_beds_per_100k": "Hosp. Beds /100k",
+                    "pct_college_4yr":        "% College",
+                    "unemployment_rate":      "Unemp. (%)",
+                    "pct_urban_pop":          "% Urban",
+                    "rucc_code":              "RUCC",
+                    "cases_per_100k":         "Cases /100k",
+                    "deaths_per_100k":        "Deaths /100k",
+                    "case_fatality_rate":     "CFR (%)",
+                    "vax_complete_pct":       "Fully Vacc. (%)",
+                }
+                _profile_disp = _profile_disp.rename(columns=_prof_labels)
+                st.markdown("##### Archetype Profiles (means)")
+                st.dataframe(
+                    _profile_disp.style.format({
+                        c: "{:,.1f}" for c in _profile_disp.columns
+                        if c not in ("Archetype", "Counties")
+                    } | {"Counties": "{:,.0f}", "Mean Population": "{:,.0f}",
+                         "Median Income ($)": "{:,.0f}"}),
+                    use_container_width=True, hide_index=True,
+                )
+                st.caption(
+                    "Clustering features are z-score standardized (population "
+                    "log-transformed). The outcome columns on the right are NOT used "
+                    "for clustering — differences in them across archetypes are the "
+                    "finding, not the input. Cluster numbering is arbitrary."
+                )
+    else:
+        st.info("Choose k and click **Identify archetypes** to run the clustering.")
 
 # Tab layout
 

@@ -118,6 +118,54 @@ SENSITIVITY_PRESETS: Dict[str, Dict] = {
 
 _DEFAULT_SENSITIVITY = "standard"
 
+# Widely-acknowledged US national surge windows, used only as a validation
+# reference for detected waves. Boundaries are deliberately generous — county
+# waves lead or trail the national picture by weeks depending on geography.
+NATIONAL_WAVE_WINDOWS = [
+    ("Initial surge",     "2020-03-01", "2020-06-15"),
+    ("Summer 2020",       "2020-06-15", "2020-09-30"),
+    ("Winter 2020-21",    "2020-10-01", "2021-03-15"),
+    ("Delta",             "2021-06-15", "2021-11-15"),
+    ("Omicron BA.1",      "2021-11-15", "2022-03-15"),
+    ("BA.2 / BA.5 2022",  "2022-03-15", "2022-10-01"),
+]
+
+
+def match_waves_to_national_windows(waves: List[Dict]) -> pd.DataFrame:
+    """
+    Map detected waves onto the national surge reference windows.
+
+    A wave is assigned to the window containing its peak date; waves peaking
+    outside every window are labelled "Outside national windows" (which is not
+    an error — local surges exist). Intended as a sanity check on detection
+    settings: with Standard sensitivity, most counties should show waves in
+    the Winter 2020-21 and Omicron windows.
+
+    Args:
+        waves: Wave detail dicts from calculate_wave_metrics() (need
+               wave_number and peak_date keys).
+
+    Returns:
+        DataFrame with columns: Wave #, Peak Date, National Window.
+    """
+    windows = [
+        (name, pd.Timestamp(start), pd.Timestamp(end))
+        for name, start, end in NATIONAL_WAVE_WINDOWS
+    ]
+    rows = []
+    for w in waves:
+        peak = pd.Timestamp(w["peak_date"])
+        assigned = next(
+            (name for name, start, end in windows if start <= peak <= end),
+            "Outside national windows",
+        )
+        rows.append({
+            "Wave #": w.get("wave_number"),
+            "Peak Date": peak.strftime("%Y-%m-%d"),
+            "National Window": assigned,
+        })
+    return pd.DataFrame(rows)
+
 
 def estimate_optimal_smoothing(
     daily_values: np.ndarray,

@@ -103,9 +103,8 @@ def _ols_fit(X_with_const: np.ndarray, y: np.ndarray) -> dict:
         y:            Response vector (length n, no NaN).
 
     Returns dict with keys:
-        beta, se, t_vals, p_vals, ci_lower, ci_upper,
-        r_sq, adj_r_sq, n, p, residuals, y_hat,
-        f_stat, f_pval
+        beta, se, se_hc3, t_vals, p_vals, p_vals_hc3, ci_lower, ci_upper,
+        r_sq, adj_r_sq, n, p, residuals, y_hat, f_stat, f_pval
     """
     n, p = X_with_const.shape
 
@@ -123,7 +122,22 @@ def _ols_fit(X_with_const: np.ndarray, y: np.ndarray) -> dict:
         XtX_inv = np.linalg.pinv(X_with_const.T @ X_with_const)
         se = np.sqrt(np.maximum(s2 * np.diag(XtX_inv), 0.0))
     except np.linalg.LinAlgError:
+        XtX_inv = None
         se = np.full(p, np.nan)
+
+    # HC3 heteroscedasticity-robust standard errors (MacKinnon & White 1985):
+    # Var(β) = (X'X)⁻¹ X' diag(e²/(1−h)²) X (X'X)⁻¹, with h the hat-matrix
+    # diagonal. HC3 inflates each residual by its leverage, giving reliable
+    # inference when residual variance is non-constant — common for skewed
+    # county outcome data.
+    if XtX_inv is not None:
+        h = np.einsum("ij,jk,ik->i", X_with_const, XtX_inv, X_with_const)
+        h = np.clip(h, 0.0, 1.0 - 1e-8)
+        omega = (residuals / (1.0 - h)) ** 2
+        cov_hc3 = XtX_inv @ (X_with_const.T * omega) @ X_with_const @ XtX_inv
+        se_hc3 = np.sqrt(np.maximum(np.diag(cov_hc3), 0.0))
+    else:
+        se_hc3 = np.full(p, np.nan)
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
@@ -131,6 +145,12 @@ def _ols_fit(X_with_const: np.ndarray, y: np.ndarray) -> dict:
         p_vals = np.where(
             np.isfinite(t_vals),
             2.0 * _ss.t.sf(np.abs(t_vals), df=max(n - p, 1)),
+            np.nan,
+        )
+        t_hc3 = beta / np.where(se_hc3 > 0, se_hc3, np.nan)
+        p_vals_hc3 = np.where(
+            np.isfinite(t_hc3),
+            2.0 * _ss.t.sf(np.abs(t_hc3), df=max(n - p, 1)),
             np.nan,
         )
 
@@ -149,7 +169,8 @@ def _ols_fit(X_with_const: np.ndarray, y: np.ndarray) -> dict:
         f_stat = f_pval = np.nan
 
     return dict(
-        beta=beta, se=se, t_vals=t_vals, p_vals=p_vals,
+        beta=beta, se=se, se_hc3=se_hc3,
+        t_vals=t_vals, p_vals=p_vals, p_vals_hc3=p_vals_hc3,
         ci_lower=ci_lower, ci_upper=ci_upper,
         r_sq=r_sq, adj_r_sq=adj_r_sq,
         n=n, p=p,
@@ -337,7 +358,8 @@ def run_ols_regression(
 
         results_dict keys:
             summary_df  — DataFrame: Variable, Coefficient, Std Error,
-                          t-stat, p-value, CI Lower, CI Upper
+                          t-stat, p-value, Robust SE (HC3), Robust p,
+                          CI Lower, CI Upper
             r_sq, adj_r_sq, n, f_stat, f_pval
             outcome_col, predictor_cols
     """
@@ -365,13 +387,15 @@ def run_ols_regression(
 
     param_names = ["(Intercept)"] + [_FACTOR_LABEL.get(c, c) for c in available]
     summary_df = pd.DataFrame({
-        "Variable":    param_names,
-        "Coefficient": ols["beta"],
-        "Std Error":   ols["se"],
-        "t-stat":      ols["t_vals"],
-        "p-value":     ols["p_vals"],
-        "CI Lower":    ols["ci_lower"],
-        "CI Upper":    ols["ci_upper"],
+        "Variable":        param_names,
+        "Coefficient":     ols["beta"],
+        "Std Error":       ols["se"],
+        "t-stat":          ols["t_vals"],
+        "p-value":         ols["p_vals"],
+        "Robust SE (HC3)": ols["se_hc3"],
+        "Robust p":        ols["p_vals_hc3"],
+        "CI Lower":        ols["ci_lower"],
+        "CI Upper":        ols["ci_upper"],
     })
 
     return {
@@ -384,6 +408,177 @@ def run_ols_regression(
         "outcome_col":   outcome_col,
         "predictor_cols": available,
     }, None
+
+
+def compute_vif(df: pd.DataFrame, predictor_cols: List[str]) -> pd.DataFrame:
+    """
+    Variance Inflation Factors for a predictor set.
+
+    VIF_j = 1 / (1 − R²_j), where R²_j comes from regressing predictor j on
+    all other predictors (complete cases, intercept included). VIF > 5
+    indicates problematic multicollinearity; VIF > 10 means the coefficient
+    for that predictor is unreliable in a joint model.
+
+    Returns DataFrame with columns: Variable, VIF (sorted descending).
+    Empty DataFrame if fewer than 2 predictors have usable data.
+    """
+    available = [c for c in predictor_cols if c in df.columns]
+    sub = df[available].dropna()
+    if len(available) < 2 or len(sub) < len(available) + 5:
+        return pd.DataFrame()
+
+    X = sub.values.astype(float)
+    rows = []
+    for j, col in enumerate(available):
+        others = np.delete(X, j, axis=1)
+        design = np.column_stack([np.ones(len(X)), others])
+        target = X[:, j]
+        beta, _, _, _ = np.linalg.lstsq(design, target, rcond=None)
+        resid = target - design @ beta
+        ss_res = float(np.sum(resid ** 2))
+        ss_tot = float(np.sum((target - target.mean()) ** 2))
+        r_sq = 1.0 - ss_res / ss_tot if ss_tot > 0 else 0.0
+        vif = 1.0 / max(1.0 - r_sq, 1e-10)
+        rows.append({"Variable": _FACTOR_LABEL.get(col, col), "VIF": vif})
+
+    return (
+        pd.DataFrame(rows)
+        .sort_values("VIF", ascending=False)
+        .reset_index(drop=True)
+    )
+
+
+def run_rf_partial_dependence(
+    df: pd.DataFrame,
+    outcome_col: str,
+    feature_cols: List[str],
+    top_k: int = 3,
+    grid_points: int = 20,
+    n_estimators: int = 200,
+    random_state: int = 42,
+) -> Tuple[Optional[dict], Optional[str]]:
+    """
+    One-way partial dependence curves for the top RF features.
+
+    Fits a Random Forest, ranks features by importance, then for each of the
+    top_k features sweeps a percentile grid (5th–95th) while holding all other
+    features at their observed values, averaging predictions at each grid
+    point. Requires scikit-learn (no fallback — PD is meaningless for the
+    |Pearson r| proxy).
+
+    Returns:
+        ({feature_label: DataFrame[grid_value, avg_prediction]}, error_str)
+    """
+    try:
+        from sklearn.ensemble import RandomForestRegressor
+    except ImportError:
+        return None, "Partial dependence requires scikit-learn."
+
+    available = [c for c in feature_cols if c in df.columns]
+    sub = df[[outcome_col] + available].dropna(subset=[outcome_col])
+    if len(sub) < 50:
+        return None, f"Only {len(sub)} counties with outcome data — need ≥ 50."
+
+    X = _impute_median(sub[available].values.astype(float))
+    y = sub[outcome_col].values.astype(float)
+
+    rf = RandomForestRegressor(n_estimators=n_estimators,
+                               random_state=random_state, n_jobs=-1)
+    rf.fit(X, y)
+
+    order = np.argsort(rf.feature_importances_)[::-1][:top_k]
+    curves = {}
+    for j in order:
+        grid = np.percentile(X[:, j], np.linspace(5, 95, grid_points))
+        avg_pred = []
+        X_mod = X.copy()
+        for g in grid:
+            X_mod[:, j] = g
+            avg_pred.append(float(rf.predict(X_mod).mean()))
+        label = _FACTOR_LABEL.get(available[j], available[j])
+        curves[label] = pd.DataFrame({"grid_value": grid, "avg_prediction": avg_pred})
+
+    return curves, None
+
+
+def _kmeans_numpy(X: np.ndarray, k: int, n_iter: int = 100,
+                  random_state: int = 42) -> np.ndarray:
+    """Lloyd's algorithm fallback when scikit-learn is unavailable."""
+    rng = np.random.default_rng(random_state)
+    centers = X[rng.choice(len(X), size=k, replace=False)]
+    labels = np.zeros(len(X), dtype=int)
+    for it in range(n_iter):
+        dists = ((X[:, None, :] - centers[None, :, :]) ** 2).sum(axis=2)
+        new_labels = dists.argmin(axis=1)
+        if it > 0 and np.array_equal(new_labels, labels):
+            break
+        labels = new_labels
+        for j in range(k):
+            mask = labels == j
+            if mask.any():
+                centers[j] = X[mask].mean(axis=0)
+    return labels
+
+
+def compute_county_clusters(
+    df: pd.DataFrame,
+    feature_cols: List[str],
+    k: int = 4,
+    random_state: int = 42,
+) -> Tuple[Optional[pd.DataFrame], Optional[pd.DataFrame], Optional[str]]:
+    """
+    Cluster counties into structural archetypes with K-means.
+
+    Features are z-score standardized (population log-transformed if present)
+    before clustering, so no single scale dominates. Clustering uses
+    *structural* county characteristics — outcomes are deliberately excluded
+    so that comparing COVID outcomes across archetypes remains meaningful.
+
+    Uses scikit-learn KMeans when available; a numpy Lloyd's-algorithm
+    fallback otherwise (same random_state for reproducibility).
+
+    Returns:
+        (assignments_df, profile_df, error_str)
+        assignments_df: countyFIPS, County Name, State, cluster (int)
+        profile_df:     one row per cluster — county count plus the mean of
+                        each feature and of available outcome columns.
+    """
+    available = [c for c in feature_cols if c in df.columns]
+    if len(available) < 3:
+        return None, None, "Fewer than 3 clustering features available."
+
+    id_cols = [c for c in ["countyFIPS", "County Name", "State"] if c in df.columns]
+    outcome_cols = [c for c in ["cases_per_100k", "deaths_per_100k",
+                                "case_fatality_rate", "vax_complete_pct"]
+                    if c in df.columns]
+
+    sub = df[id_cols + available + outcome_cols].dropna(subset=available).copy()
+    if len(sub) < k * 10:
+        return None, None, f"Only {len(sub)} complete-case counties — need ≥ {k * 10}."
+
+    X = sub[available].astype(float).copy()
+    if "population" in X.columns:
+        X["population"] = np.log10(X["population"].clip(lower=1))
+    X = (X - X.mean()) / X.std().replace(0, 1)
+    X_arr = X.values
+
+    try:
+        from sklearn.cluster import KMeans
+        labels = KMeans(n_clusters=k, random_state=random_state,
+                        n_init=10).fit_predict(X_arr)
+    except ImportError:
+        labels = _kmeans_numpy(X_arr, k, random_state=random_state)
+
+    sub["cluster"] = labels.astype(int)
+
+    profile = (
+        sub.groupby("cluster")
+        .agg(counties=("cluster", "size"),
+             **{c: (c, "mean") for c in available + outcome_cols})
+        .reset_index()
+    )
+
+    return sub[id_cols + ["cluster"]].reset_index(drop=True), profile, None
 
 
 def compute_resilience_scores(
