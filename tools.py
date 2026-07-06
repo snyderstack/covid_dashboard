@@ -1,19 +1,91 @@
+"""
+COVID-19 County Analysis Dashboard — data processing and choropleth utilities.
+
+All DataFrames stay in wide format (counties × date columns) to keep memory
+overhead low.  Per-capita joins use (countyFIPS, State) tuple keys to avoid
+duplicate-FIPS collisions from statewide-unallocated rows (FIPS == '00000').
+
+See validation.py for diagnostic functions that audit data quality.
+"""
+
 import pandas as pd
 import numpy as np
 from pathlib import Path
 
-"""
-COVID-19 County Analysis Dashboard - Data Processing Tools
-
-FIXES IMPLEMENTED:
-- Per-capita calculations now use proper (FIPS, State) tuple joins to handle duplicate FIPS
-- Statewide unallocated entries (FIPS='00000', pop=0) are filtered before calculations
-- Invalid populations (pop <= 0) are excluded from per-capita computation
-- Results with invalid populations return NaN instead of incorrect values
-- See validation.py for diagnostic functions to audit data quality
-"""
-
 DATA_DIR = Path(__file__).parent / "data"
+METADATA_COLUMNS = ["countyFIPS", "County Name", "State", "StateFIPS", "Location"]
+
+
+def get_identifier_columns(df):
+    """Return metadata columns present in a dataframe."""
+    return [col for col in METADATA_COLUMNS if col in df.columns]
+
+
+def get_date_columns(df):
+    """Return date columns from a wide-format USAFacts dataframe."""
+    return [col for col in df.columns if col not in METADATA_COLUMNS]
+
+
+def get_population_column(population_df):
+    """Return the population value column from the population dataframe."""
+    metadata_cols = set(METADATA_COLUMNS)
+    pop_cols = [col for col in population_df.columns if col not in metadata_cols]
+    return pop_cols[0] if pop_cols else None
+
+
+def extract_county_state(location: str) -> tuple:
+    """
+    Split a "County Name, ST" location string into (county_name, state_abbr).
+
+    Returns (location, None) if no comma separator is found.
+    Used consistently across all UI tabs to avoid duplicated inline parsing.
+
+    Args:
+        location: Location string in "County Name, State" format.
+
+    Returns:
+        Tuple of (county_name, state_abbr). state_abbr is None if unparseable.
+    """
+    if ", " in location:
+        county, state = location.rsplit(", ", 1)
+        return county, state
+    return location, None
+
+
+def normalize_dataset_metadata(df):
+    """Normalize county metadata while preserving the dataframe's wide date columns."""
+    df = df.copy()
+
+    if "County Name" in df.columns:
+        df["County Name"] = df["County Name"].astype(str).str.strip()
+
+    if "countyFIPS" in df.columns:
+        df["countyFIPS"] = (
+            pd.to_numeric(df["countyFIPS"], errors="coerce")
+            .fillna(0)
+            .astype(int)
+            .astype(str)
+            .str.zfill(5)
+        )
+
+    if "StateFIPS" in df.columns:
+        df["StateFIPS"] = (
+            pd.to_numeric(df["StateFIPS"], errors="coerce")
+            .fillna(0)
+            .astype(int)
+            .astype(str)
+            .str.zfill(2)
+        )
+
+    if "County Name" in df.columns and "State" in df.columns:
+        location_series = (
+            df["County Name"].astype(str).str.strip()
+            + ", "
+            + df["State"].astype(str).str.strip()
+        )
+        df = df.assign(Location=location_series)
+
+    return df
 
 
 def load_data():
@@ -29,39 +101,13 @@ def load_data():
     deaths_path = DATA_DIR / "covid_deaths_usafacts.csv"
     pop_path = DATA_DIR / "covid_county_population_usafacts.csv"
 
-    # Load with minimal preprocessing
     cases_df = pd.read_csv(cases_path, low_memory=False)
     deaths_df = pd.read_csv(deaths_path, low_memory=False)
     population_df = pd.read_csv(pop_path, low_memory=False)
 
-    # Normalize metadata across all dataframes
-    for df in [cases_df, deaths_df, population_df]:
-        if "County Name" in df.columns:
-            df["County Name"] = df["County Name"].str.strip()
-
-        # Standardize countyFIPS: ensure exactly 5 characters with leading zeros
-        if "countyFIPS" in df.columns:
-            df["countyFIPS"] = (
-                pd.to_numeric(df["countyFIPS"], errors="coerce")
-                .fillna(0)
-                .astype(int)
-                .astype(str)
-                .str.zfill(5)
-            )
-
-        # Ensure StateFIPS is 2-char string with leading zeros if present
-        if "StateFIPS" in df.columns:
-            df["StateFIPS"] = df["StateFIPS"].astype(str).str.zfill(2)
-
-        # Create Location field explicitly for ALL datasets
-        # Using concat to avoid DataFrame fragmentation warning
-        if "County Name" in df.columns and "State" in df.columns:
-            location_series = (
-                df["County Name"].astype(str).str.strip()
-                + ", "
-                + df["State"].astype(str).str.strip()
-            )
-            df["Location"] = location_series
+    cases_df = normalize_dataset_metadata(cases_df)
+    deaths_df = normalize_dataset_metadata(deaths_df)
+    population_df = normalize_dataset_metadata(population_df)
 
     return cases_df, deaths_df, population_df
 
@@ -72,28 +118,19 @@ def _wide_to_long(df_wide, county_row):
 
     Args:
         df_wide: Wide-format dataframe
-        county_row: Row index or Series for a specific county
+        county_row: Row index for a specific county
 
     Returns:
         DataFrame with columns: Date, Value
     """
-    # Dynamically determine identifier columns that actually exist
-    possible_identifiers = ["countyFIPS", "County Name", "State", "StateFIPS", "Location"]
-    identifier_cols = [col for col in possible_identifiers if col in df_wide.columns]
-    date_cols = [col for col in df_wide.columns if col not in identifier_cols]
-
-    # Extract the row and melt it
+    date_cols = get_date_columns(df_wide)
     row_data = df_wide.loc[county_row, date_cols]
     values = pd.Series(row_data.values, index=pd.to_datetime(date_cols))
 
     result = pd.DataFrame({
         "Date": values.index,
-        "Value": values.values
+        "Value": pd.to_numeric(values.values, errors="coerce"),
     })
-
-    # Convert Value to numeric
-    result["Value"] = pd.to_numeric(result["Value"], errors="coerce")
-
     return result.sort_values("Date").reset_index(drop=True)
 
 
@@ -110,23 +147,25 @@ def prepare_county_timeseries(df_wide, county_name, state, metric_name="Cases"):
     Returns:
         DataFrame with columns: Date, {metric_name}
     """
-    # Find the county row
-    county_row = df_wide[(df_wide["County Name"] == county_name) &
-                         (df_wide["State"] == state)]
+    county_row = df_wide[
+        (df_wide["County Name"] == county_name) & (df_wide["State"] == state)
+    ]
 
     if county_row.empty:
         return pd.DataFrame()
 
-    # Convert to long format (get first matching row)
     timeseries = _wide_to_long(df_wide, county_row.index[0])
     timeseries.columns = ["Date", metric_name]
-
     return timeseries
 
 
 def calculate_daily_changes(timeseries_df, metric_column):
     """
     Convert cumulative counts to daily new counts.
+
+    Negative diffs (from data corrections / backfills) are clipped to zero,
+    consistent with precompute_daily_diffs(). The result is kept as float
+    to preserve NaN semantics from the source data.
 
     Args:
         timeseries_df: DataFrame with Date column and cumulative value column
@@ -136,13 +175,19 @@ def calculate_daily_changes(timeseries_df, metric_column):
         DataFrame with additional 'Daily {metric_column}' column
     """
     df = timeseries_df.copy()
-    df[f"Daily {metric_column}"] = df[metric_column].diff().fillna(0).astype(int)
+    df[f"Daily {metric_column}"] = (
+        df[metric_column].diff().clip(lower=0).fillna(0)
+    )
     return df
 
 
 def apply_moving_average(timeseries_df, metric_column, window=7):
     """
     Apply moving average smoothing to a metric.
+
+    Note: min_periods=1 means the first (window-1) values are averaged over
+    fewer than window observations. These early-period values should be
+    interpreted with caution in research contexts.
 
     Args:
         timeseries_df: DataFrame with Date and metric columns
@@ -154,9 +199,7 @@ def apply_moving_average(timeseries_df, metric_column, window=7):
     """
     df = timeseries_df.copy()
     df[f"{metric_column} MA"] = (
-        df[metric_column]
-        .rolling(window=window, min_periods=1)
-        .mean()
+        df[metric_column].rolling(window=window, min_periods=1).mean()
     )
     return df
 
@@ -174,110 +217,38 @@ def calculate_per_capita(timeseries, population_df, county_name, state):
     Returns:
         DataFrame with additional 'Per Capita' column
     """
-    # Find population for this county
-    pop_row = population_df[(population_df["County Name"] == county_name) &
-                            (population_df["State"] == state)]
+    pop_row = population_df[
+        (population_df["County Name"] == county_name) &
+        (population_df["State"] == state)
+    ]
 
     if pop_row.empty:
         return timeseries.copy()
 
-    # Get population value (from the first non-identifier column)
-    identifier_cols = ["countyFIPS", "County Name", "State", "StateFIPS"]
-    pop_cols = [col for col in population_df.columns if col not in identifier_cols and col != "Location"]
-
-    if not pop_cols:
+    pop_col = get_population_column(population_df)
+    if pop_col is None:
         return timeseries.copy()
 
-    population = pd.to_numeric(pop_row.iloc[0][pop_cols[0]], errors="coerce")
+    population = pd.to_numeric(pop_row.iloc[0][pop_col], errors="coerce")
 
-    # Calculate per-capita
     df = timeseries.copy()
     metric_col = df.columns[1] if len(df.columns) > 1 else "Value"
 
-    if population > 0:
-        df["Per Capita"] = (df[metric_col] / population) * 100000
+    if pd.notna(population) and population > 0:
+        df["Per Capita"] = (df[metric_col] / population) * 100_000
     else:
         df["Per Capita"] = np.nan
 
     return df
 
 
-def prepare_lag_analysis(cases_df_wide, deaths_df_wide, county_name, state, lag_days=0):
-    """
-    Prepare case and death data for lag analysis for a single county.
-
-    Args:
-        cases_df_wide: Wide-format cases dataframe
-        deaths_df_wide: Wide-format deaths dataframe
-        county_name: County name
-        state: State abbreviation
-        lag_days: Number of days to shift deaths data (positive = deaths lag behind cases)
-
-    Returns:
-        DataFrame with columns: Date, Cases, Deaths (shifted by lag_days)
-    """
-    # Convert both to timeseries
-    cases_ts = prepare_county_timeseries(cases_df_wide, county_name, state, "Cases")
-    deaths_ts = prepare_county_timeseries(deaths_df_wide, county_name, state, "Deaths")
-
-    if cases_ts.empty or deaths_ts.empty:
-        return pd.DataFrame()
-
-    # Merge on date
-    merged = cases_ts.merge(deaths_ts, on="Date", how="inner")
-
-    # Apply lag to deaths
-    if lag_days != 0:
-        merged["Deaths"] = merged["Deaths"].shift(lag_days)
-
-    return merged.dropna(subset=["Cases", "Deaths"])
-
-
-def get_county_lag_comparison(cases_df_wide, deaths_df_wide, county_name, state, max_lag=14):
-    """
-    Find optimal lag between cases and deaths for a single county.
-    Uses correlation to identify best lag.
-
-    Args:
-        cases_df_wide: Cases dataframe (wide format)
-        deaths_df_wide: Deaths dataframe (wide format)
-        county_name: County name
-        state: State abbreviation
-        max_lag: Maximum lag to test (days)
-
-    Returns:
-        Dictionary with lag results: {lag_days: correlation}
-    """
-    cases_ts = prepare_county_timeseries(cases_df_wide, county_name, state, "Cases")
-    deaths_ts = prepare_county_timeseries(deaths_df_wide, county_name, state, "Deaths")
-
-    if cases_ts.empty or deaths_ts.empty:
-        return {}
-
-    merged = cases_ts.merge(deaths_ts, on="Date", how="inner")
-
-    # Calculate daily values first (cumulative data makes poor correlations)
-    merged = calculate_daily_changes(merged, "Cases")
-    merged = calculate_daily_changes(merged, "Deaths")
-
-    results = {}
-    for lag in range(0, max_lag + 1):
-        deaths_shifted = merged["Daily Deaths"].shift(lag)
-        # Only correlate where both have data
-        valid_mask = ~(merged["Daily Cases"].isna() | deaths_shifted.isna())
-        if valid_mask.sum() > 30:  # Need minimum data points
-            corr = merged.loc[valid_mask, "Daily Cases"].corr(deaths_shifted[valid_mask])
-            results[lag] = corr if not np.isnan(corr) else 0
-
-    return results
-
-
-# ===== CHOROPLETH PRECOMPUTATION =====
-
 def precompute_daily_diffs(cases_df, deaths_df):
     """
     Precompute daily cases and deaths from cumulative values.
     Stores results in wide format (counties × date columns).
+
+    Negative diffs are clipped to zero to protect downstream analysis from
+    source-data backfills or reporting corrections.
 
     Args:
         cases_df: Cases dataframe (wide format)
@@ -286,21 +257,25 @@ def precompute_daily_diffs(cases_df, deaths_df):
     Returns:
         Tuple of (daily_cases_df, daily_deaths_df) in wide format
     """
-    # Dynamically determine identifier columns that actually exist
-    possible_identifiers = ["countyFIPS", "County Name", "State", "StateFIPS", "Location"]
-    identifier_cols = [col for col in possible_identifiers if col in cases_df.columns]
-    date_cols = [col for col in cases_df.columns if col not in identifier_cols]
+    identifier_cols = get_identifier_columns(cases_df)
+    date_cols = get_date_columns(cases_df)
 
-    # Convert to numeric for all date columns at once
     cases_numeric = cases_df[date_cols].apply(lambda x: pd.to_numeric(x, errors="coerce"))
     deaths_numeric = deaths_df[date_cols].apply(lambda x: pd.to_numeric(x, errors="coerce"))
 
-    # Calculate daily as diff, then concat with identifiers
     daily_cases_vals = cases_numeric.diff(axis=1).clip(lower=0).fillna(0)
     daily_deaths_vals = deaths_numeric.diff(axis=1).clip(lower=0).fillna(0)
 
-    daily_cases = pd.concat([cases_df[identifier_cols].reset_index(drop=True), daily_cases_vals.reset_index(drop=True)], axis=1)
-    daily_deaths = pd.concat([deaths_df[identifier_cols].reset_index(drop=True), daily_deaths_vals.reset_index(drop=True)], axis=1)
+    daily_cases = pd.concat(
+        [cases_df[identifier_cols].reset_index(drop=True),
+         daily_cases_vals.reset_index(drop=True)],
+        axis=1
+    )
+    daily_deaths = pd.concat(
+        [deaths_df[identifier_cols].reset_index(drop=True),
+         daily_deaths_vals.reset_index(drop=True)],
+        axis=1
+    )
 
     return daily_cases, daily_deaths
 
@@ -308,6 +283,13 @@ def precompute_daily_diffs(cases_df, deaths_df):
 def precompute_moving_averages(daily_cases, daily_deaths, window=7):
     """
     Apply moving average to daily metrics for a specified window.
+
+    Rolling is applied across dates (axis=1 in the transposed form) for all
+    counties at once. Each transpose creates a full copy; acceptable at startup
+    but should be reconsidered if date columns grow significantly.
+
+    Note: min_periods=1 means early dates (first window-1 values) are averaged
+    over fewer observations.
 
     Args:
         daily_cases: Daily cases dataframe (wide format)
@@ -317,26 +299,26 @@ def precompute_moving_averages(daily_cases, daily_deaths, window=7):
     Returns:
         Tuple of (ma_cases_df, ma_deaths_df) in wide format
     """
-    # Dynamically determine identifier columns that actually exist
-    possible_identifiers = ["countyFIPS", "County Name", "State", "StateFIPS", "Location"]
-    identifier_cols = [col for col in possible_identifiers if col in daily_cases.columns]
-    date_cols = [col for col in daily_cases.columns if col not in identifier_cols]
+    identifier_cols = get_identifier_columns(daily_cases)
+    date_cols = get_date_columns(daily_cases)
 
-    # Convert to numeric
     cases_numeric = daily_cases[date_cols].apply(lambda x: pd.to_numeric(x, errors="coerce"))
     deaths_numeric = daily_deaths[date_cols].apply(lambda x: pd.to_numeric(x, errors="coerce"))
 
-    # Apply rolling average across dates (axis=1 for rolling across columns)
     ma_cases_vals = cases_numeric.T.rolling(window=window, min_periods=1).mean().T.reset_index(drop=True)
     ma_deaths_vals = deaths_numeric.T.rolling(window=window, min_periods=1).mean().T.reset_index(drop=True)
 
-    ma_cases = pd.concat([daily_cases[identifier_cols].reset_index(drop=True), ma_cases_vals], axis=1)
-    ma_deaths = pd.concat([daily_deaths[identifier_cols].reset_index(drop=True), ma_deaths_vals], axis=1)
+    ma_cases = pd.concat(
+        [daily_cases[identifier_cols].reset_index(drop=True), ma_cases_vals], axis=1
+    )
+    ma_deaths = pd.concat(
+        [daily_deaths[identifier_cols].reset_index(drop=True), ma_deaths_vals], axis=1
+    )
 
     return ma_cases, ma_deaths
 
 
-def precompute_all_moving_averages(daily_cases, daily_deaths, windows=[3, 5, 7]):
+def precompute_all_moving_averages(daily_cases, daily_deaths, windows=None):
     """
     Precompute moving averages for multiple window sizes.
 
@@ -348,6 +330,9 @@ def precompute_all_moving_averages(daily_cases, daily_deaths, windows=[3, 5, 7])
     Returns:
         Dictionary with keys: ma3_cases, ma3_deaths, ma5_cases, ma5_deaths, ma7_cases, ma7_deaths
     """
+    if windows is None:
+        windows = [3, 5, 7]
+
     result = {}
     for window in windows:
         ma_cases, ma_deaths = precompute_moving_averages(daily_cases, daily_deaths, window=window)
@@ -359,9 +344,11 @@ def precompute_all_moving_averages(daily_cases, daily_deaths, windows=[3, 5, 7])
 def precompute_per_capita(cases_df, deaths_df, population_df):
     """
     Normalize cases and deaths to per-100k population.
-    
-    FIXED: Properly handles duplicate FIPS by using (FIPS, State) tuple key
-    and filters out statewide unallocated entries (FIPS='00000', population=0).
+
+    Uses a vectorized merge on (countyFIPS, State) rather than row-wise apply,
+    which is faster and idiomatic. Statewide unallocated entries (FIPS='00000')
+    and counties with non-positive populations are excluded from the lookup;
+    those rows receive NaN per-capita values.
 
     Args:
         cases_df: Cases dataframe (wide format)
@@ -371,41 +358,41 @@ def precompute_per_capita(cases_df, deaths_df, population_df):
     Returns:
         Tuple of (pc_cases_df, pc_deaths_df) in wide format
     """
-    # Dynamically determine identifier columns that actually exist
-    possible_identifiers = ["countyFIPS", "County Name", "State", "StateFIPS", "Location"]
-    identifier_cols = [col for col in possible_identifiers if col in cases_df.columns]
-    date_cols = [col for col in cases_df.columns if col not in identifier_cols]
+    identifier_cols = get_identifier_columns(cases_df)
+    date_cols = get_date_columns(cases_df)
 
-    # Build population dict using (FIPS, State) tuple to handle duplicates correctly
-    # Filter out invalid entries: FIPS='00000' (statewide) and population <= 0
-    pop_col = [col for col in population_df.columns if col not in identifier_cols and col != "Location"][0]
+    pop_col = get_population_column(population_df)
+    if pop_col is None:
+        raise ValueError("Population dataframe does not contain a population column")
+
+    # Exclude statewide rows and zero-pop entries from the population lookup
     pop_valid = population_df[
         (population_df["countyFIPS"] != "00000") &
-        (population_df["population"] > 0)
-    ].copy()
+        (population_df[pop_col] > 0)
+    ][["countyFIPS", "State", pop_col]].rename(columns={pop_col: "_pop"})
 
-    pop_dict = {}
-    for idx, row in pop_valid.iterrows():
-        key = (row["countyFIPS"], row["State"])
-        pop_dict[key] = row[pop_col]
+    merged_pop = (
+        cases_df[["countyFIPS", "State"]]
+        .merge(pop_valid, on=["countyFIPS", "State"], how="left")
+    )
+    pops = merged_pop["_pop"].values  # NaN where no valid population exists
 
-    # Convert to numeric for all date columns
     cases_numeric = cases_df[date_cols].apply(lambda x: pd.to_numeric(x, errors="coerce"))
     deaths_numeric = deaths_df[date_cols].apply(lambda x: pd.to_numeric(x, errors="coerce"))
 
-    # Get population array for all counties using (FIPS, State) lookup
-    pops = cases_df.apply(
-        lambda row: pop_dict.get((row["countyFIPS"], row["State"]), np.nan),
+    pc_cases_vals = cases_numeric.div(pops, axis=0) * 100_000
+    pc_deaths_vals = deaths_numeric.div(pops, axis=0) * 100_000
+
+    pc_cases = pd.concat(
+        [cases_df[identifier_cols].reset_index(drop=True),
+         pc_cases_vals.reset_index(drop=True)],
         axis=1
-    ).values
-
-    # Vectorized per-capita calculation with proper division handling
-    # Where population is NaN or <= 0, result will be NaN
-    pc_cases_vals = cases_numeric.div(pops, axis=0) * 100000
-    pc_deaths_vals = deaths_numeric.div(pops, axis=0) * 100000
-
-    pc_cases = pd.concat([cases_df[identifier_cols].reset_index(drop=True), pc_cases_vals.reset_index(drop=True)], axis=1)
-    pc_deaths = pd.concat([deaths_df[identifier_cols].reset_index(drop=True), pc_deaths_vals.reset_index(drop=True)], axis=1)
+    )
+    pc_deaths = pd.concat(
+        [deaths_df[identifier_cols].reset_index(drop=True),
+         pc_deaths_vals.reset_index(drop=True)],
+        axis=1
+    )
 
     return pc_cases, pc_deaths
 
@@ -420,11 +407,7 @@ def get_available_dates(df_wide):
     Returns:
         List of date strings (YYYY-MM-DD) in chronological order
     """
-    # Dynamically determine identifier columns that actually exist
-    possible_identifiers = ["countyFIPS", "County Name", "State", "StateFIPS", "Location"]
-    identifier_cols = [col for col in possible_identifiers if col in df_wide.columns]
-    date_cols = [col for col in df_wide.columns if col not in identifier_cols]
-    return sorted(date_cols)
+    return sorted(get_date_columns(df_wide))
 
 
 def prepare_choropleth_for_date(metric_df, date_str, cases_df, deaths_df, population_df):
@@ -442,14 +425,8 @@ def prepare_choropleth_for_date(metric_df, date_str, cases_df, deaths_df, popula
 
     Returns:
         DataFrame ready for Plotly with columns:
-        countyFIPS, Location, population, value, cases, deaths, cases_pc, deaths_pc
+        countyFIPS, Location, State, population, value, cases, deaths, cases_pc, deaths_pc
     """
-    # Dynamically determine identifier columns that actually exist
-    possible_identifiers = ["countyFIPS", "County Name", "State", "StateFIPS", "Location"]
-    identifier_cols = [col for col in possible_identifiers if col in population_df.columns]
-
-    # Start with valid FIPS and Location from metric_df
-    # If Location column doesn't exist, construct it from County Name and State
     if "Location" in metric_df.columns:
         result = metric_df[["countyFIPS", "Location", "State"]].copy()
     elif "County Name" in metric_df.columns and "State" in metric_df.columns:
@@ -460,26 +437,31 @@ def prepare_choropleth_for_date(metric_df, date_str, cases_df, deaths_df, popula
         result["Location"] = result["countyFIPS"]
         result["State"] = "Unknown"
 
-    # Remove rows with invalid FIPS before any joins
     result = result[result["countyFIPS"].notna()].copy()
     result = result[result["countyFIPS"] != "00000"].copy()
     result = result[result["countyFIPS"].str.strip() != ""].copy()
     result = result.reset_index(drop=True)
 
-    # Add population using (FIPS, State) join to handle duplicates correctly
-    pop_col = [col for col in population_df.columns if col not in identifier_cols and col != "Location"][0]
-    pop_data = population_df[["countyFIPS", "State", pop_col]].rename(columns={pop_col: "population"})
-    pop_data = pop_data[(pop_data["population"] > 0)].copy()  # Filter invalid populations
+    pop_col = get_population_column(population_df)
+    if pop_col is None:
+        raise ValueError("Population dataframe does not contain a population column")
+    pop_data = (
+        population_df[["countyFIPS", "State", pop_col]]
+        .rename(columns={pop_col: "population"})
+    )
+    pop_data = pop_data[pop_data["population"] > 0].copy()
     result = result.merge(pop_data, on=["countyFIPS", "State"], how="left")
 
-    # Add metric value for this date by merging from metric_df
     if date_str in metric_df.columns:
-        metric_vals = metric_df[["countyFIPS", "State", date_str]].rename(columns={date_str: "value"})
+        metric_vals = (
+            metric_df[["countyFIPS", "State", date_str]]
+            .rename(columns={date_str: "value"})
+        )
         result = result.merge(metric_vals, on=["countyFIPS", "State"], how="left")
     else:
         result["value"] = np.nan
 
-    # Add cumulative cases/deaths for context (allow NaN in hover columns)
+    # Cumulative totals for hover tooltip (independent of the plotted metric)
     if date_str in cases_df.columns:
         cases_vals = cases_df[["countyFIPS", "State", date_str]].rename(columns={date_str: "cases"})
         result = result.merge(cases_vals, on=["countyFIPS", "State"], how="left")
@@ -492,212 +474,305 @@ def prepare_choropleth_for_date(metric_df, date_str, cases_df, deaths_df, popula
     else:
         result["deaths"] = np.nan
 
-    # Calculate per-capita values
     result["cases_pc"] = np.where(
         (result["population"] > 0) & result["population"].notna(),
-        (result["cases"] / result["population"]) * 100000,
-        np.nan
+        (result["cases"] / result["population"]) * 100_000,
+        np.nan,
     )
     result["deaths_pc"] = np.where(
         (result["population"] > 0) & result["population"].notna(),
-        (result["deaths"] / result["population"]) * 100000,
-        np.nan
+        (result["deaths"] / result["population"]) * 100_000,
+        np.nan,
     )
 
-    # Drop rows only if the metric value itself is NaN (can't display map without it)
+    # Drop only rows where the plotted metric itself is missing; hover fields may be NaN.
     result = result.dropna(subset=["value"]).copy()
-
     return result
 
 
 def filter_choropleth_by_state(choro_data, state):
     """
     Filter choropleth data to only include counties in the specified state.
-    
+
     Args:
         choro_data: Choropleth dataframe from prepare_choropleth_for_date()
-        state: State abbreviation (e.g., "PA", "TX") or "United States" for all states
-    
+        state: State abbreviation (e.g., "PA") or "United States" for all
+
     Returns:
-        Filtered choropleth dataframe (or original if state is "United States")
+        Filtered choropleth dataframe (or copy of original for "United States")
     """
     if state == "United States":
         return choro_data.copy()
-    
-    filtered = choro_data[choro_data["State"] == state].copy()
-    return filtered
+    return choro_data[choro_data["State"] == state].copy()
 
 
-def get_state_bounds_for_zoom(choro_data, state):
+def get_state_bounds_for_zoom(state):
     """
-    Calculate geographic bounds (latitude/longitude) for a state to enable auto-zoom.
-    Uses a hardcoded mapping of states to approximate bounds.
-    
+    Return approximate geographic center and zoom level for a state.
+
     Args:
-        choro_data: Choropleth dataframe
         state: State abbreviation
-    
+
     Returns:
-        Dictionary with 'lat' (center), 'lon' (center), 'zoom' level, or None if not available
+        Dict with 'lat', 'lon', 'zoom' keys, or None if state not in table.
     """
-    # State bounds (approximate center lat/lon and zoom level for Plotly)
-    # These values provide good visual framing for each state
     STATE_BOUNDS = {
-        "AL": {"lat": 32.8, "lon": -86.8, "zoom": 6},
-        "AK": {"lat": 64.0, "lon": -153.0, "zoom": 3},
-        "AZ": {"lat": 33.7, "lon": -111.4, "zoom": 6},
-        "AR": {"lat": 34.8, "lon": -92.4, "zoom": 6},
-        "CA": {"lat": 37.0, "lon": -119.5, "zoom": 5},
-        "CO": {"lat": 39.0, "lon": -105.5, "zoom": 6},
-        "CT": {"lat": 41.6, "lon": -72.7, "zoom": 8},
-        "DE": {"lat": 39.0, "lon": -75.5, "zoom": 8},
-        "FL": {"lat": 27.7, "lon": -81.8, "zoom": 6},
-        "GA": {"lat": 32.8, "lon": -83.6, "zoom": 6},
-        "HI": {"lat": 21.1, "lon": -156.5, "zoom": 5},
-        "ID": {"lat": 44.2, "lon": -114.0, "zoom": 6},
-        "IL": {"lat": 40.0, "lon": -89.0, "zoom": 6},
-        "IN": {"lat": 39.8, "lon": -86.2, "zoom": 7},
-        "IA": {"lat": 42.0, "lon": -93.5, "zoom": 6},
-        "KS": {"lat": 38.5, "lon": -97.5, "zoom": 6},
-        "KY": {"lat": 37.7, "lon": -84.7, "zoom": 6},
-        "LA": {"lat": 31.0, "lon": -91.5, "zoom": 6},
-        "ME": {"lat": 45.3, "lon": -69.0, "zoom": 7},
-        "MD": {"lat": 39.1, "lon": -76.8, "zoom": 7},
-        "MA": {"lat": 42.2, "lon": -71.8, "zoom": 7},
-        "MI": {"lat": 44.3, "lon": -85.4, "zoom": 6},
-        "MN": {"lat": 46.0, "lon": -93.9, "zoom": 6},
-        "MS": {"lat": 32.8, "lon": -89.7, "zoom": 6},
-        "MO": {"lat": 38.5, "lon": -92.3, "zoom": 6},
-        "MT": {"lat": 47.0, "lon": -110.0, "zoom": 5},
-        "NE": {"lat": 41.5, "lon": -99.9, "zoom": 6},
-        "NV": {"lat": 39.5, "lon": -116.9, "zoom": 6},
-        "NH": {"lat": 43.5, "lon": -71.5, "zoom": 8},
-        "NJ": {"lat": 40.0, "lon": -74.5, "zoom": 8},
-        "NM": {"lat": 34.5, "lon": -106.6, "zoom": 6},
-        "NY": {"lat": 43.0, "lon": -75.5, "zoom": 6},
-        "NC": {"lat": 35.5, "lon": -79.8, "zoom": 6},
-        "ND": {"lat": 47.5, "lon": -100.5, "zoom": 6},
-        "OH": {"lat": 40.4, "lon": -82.9, "zoom": 6},
-        "OK": {"lat": 35.5, "lon": -97.5, "zoom": 6},
-        "OR": {"lat": 44.0, "lon": -121.3, "zoom": 6},
-        "PA": {"lat": 40.8, "lon": -77.8, "zoom": 6},
-        "RI": {"lat": 41.7, "lon": -71.5, "zoom": 9},
-        "SC": {"lat": 34.0, "lon": -81.0, "zoom": 6},
-        "SD": {"lat": 44.5, "lon": -100.0, "zoom": 6},
-        "TN": {"lat": 35.5, "lon": -86.5, "zoom": 6},
-        "TX": {"lat": 31.0, "lon": -99.0, "zoom": 5},
-        "UT": {"lat": 39.0, "lon": -111.5, "zoom": 6},
-        "VT": {"lat": 44.0, "lon": -72.7, "zoom": 7},
-        "VA": {"lat": 37.8, "lon": -78.2, "zoom": 6},
-        "WA": {"lat": 47.5, "lon": -120.5, "zoom": 6},
-        "WV": {"lat": 38.5, "lon": -81.9, "zoom": 7},
-        "WI": {"lat": 44.3, "lon": -89.6, "zoom": 6},
-        "WY": {"lat": 43.0, "lon": -107.5, "zoom": 6},
+        "AL": {"lat": 32.8,  "lon": -86.8,  "zoom": 6},
+        "AK": {"lat": 64.0,  "lon": -153.0, "zoom": 3},
+        "AZ": {"lat": 33.7,  "lon": -111.4, "zoom": 6},
+        "AR": {"lat": 34.8,  "lon": -92.4,  "zoom": 6},
+        "CA": {"lat": 37.0,  "lon": -119.5, "zoom": 5},
+        "CO": {"lat": 39.0,  "lon": -105.5, "zoom": 6},
+        "CT": {"lat": 41.6,  "lon": -72.7,  "zoom": 8},
+        "DE": {"lat": 39.0,  "lon": -75.5,  "zoom": 8},
+        "FL": {"lat": 27.7,  "lon": -81.8,  "zoom": 6},
+        "GA": {"lat": 32.8,  "lon": -83.6,  "zoom": 6},
+        "HI": {"lat": 21.1,  "lon": -156.5, "zoom": 5},
+        "ID": {"lat": 44.2,  "lon": -114.0, "zoom": 6},
+        "IL": {"lat": 40.0,  "lon": -89.0,  "zoom": 6},
+        "IN": {"lat": 39.8,  "lon": -86.2,  "zoom": 7},
+        "IA": {"lat": 42.0,  "lon": -93.5,  "zoom": 6},
+        "KS": {"lat": 38.5,  "lon": -97.5,  "zoom": 6},
+        "KY": {"lat": 37.7,  "lon": -84.7,  "zoom": 6},
+        "LA": {"lat": 31.0,  "lon": -91.5,  "zoom": 6},
+        "ME": {"lat": 45.3,  "lon": -69.0,  "zoom": 7},
+        "MD": {"lat": 39.1,  "lon": -76.8,  "zoom": 7},
+        "MA": {"lat": 42.2,  "lon": -71.8,  "zoom": 7},
+        "MI": {"lat": 44.3,  "lon": -85.4,  "zoom": 6},
+        "MN": {"lat": 46.0,  "lon": -93.9,  "zoom": 6},
+        "MS": {"lat": 32.8,  "lon": -89.7,  "zoom": 6},
+        "MO": {"lat": 38.5,  "lon": -92.3,  "zoom": 6},
+        "MT": {"lat": 47.0,  "lon": -110.0, "zoom": 5},
+        "NE": {"lat": 41.5,  "lon": -99.9,  "zoom": 6},
+        "NV": {"lat": 39.5,  "lon": -116.9, "zoom": 6},
+        "NH": {"lat": 43.5,  "lon": -71.5,  "zoom": 8},
+        "NJ": {"lat": 40.0,  "lon": -74.5,  "zoom": 8},
+        "NM": {"lat": 34.5,  "lon": -106.6, "zoom": 6},
+        "NY": {"lat": 43.0,  "lon": -75.5,  "zoom": 6},
+        "NC": {"lat": 35.5,  "lon": -79.8,  "zoom": 6},
+        "ND": {"lat": 47.5,  "lon": -100.5, "zoom": 6},
+        "OH": {"lat": 40.4,  "lon": -82.9,  "zoom": 6},
+        "OK": {"lat": 35.5,  "lon": -97.5,  "zoom": 6},
+        "OR": {"lat": 44.0,  "lon": -121.3, "zoom": 6},
+        "PA": {"lat": 40.8,  "lon": -77.8,  "zoom": 6},
+        "RI": {"lat": 41.7,  "lon": -71.5,  "zoom": 9},
+        "SC": {"lat": 34.0,  "lon": -81.0,  "zoom": 6},
+        "SD": {"lat": 44.5,  "lon": -100.0, "zoom": 6},
+        "TN": {"lat": 35.5,  "lon": -86.5,  "zoom": 6},
+        "TX": {"lat": 31.0,  "lon": -99.0,  "zoom": 5},
+        "UT": {"lat": 39.0,  "lon": -111.5, "zoom": 6},
+        "VT": {"lat": 44.0,  "lon": -72.7,  "zoom": 7},
+        "VA": {"lat": 37.8,  "lon": -78.2,  "zoom": 6},
+        "WA": {"lat": 47.5,  "lon": -120.5, "zoom": 6},
+        "WV": {"lat": 38.5,  "lon": -81.9,  "zoom": 7},
+        "WI": {"lat": 44.3,  "lon": -89.6,  "zoom": 6},
+        "WY": {"lat": 43.0,  "lon": -107.5, "zoom": 6},
     }
-    
-    if state in STATE_BOUNDS:
-        return STATE_BOUNDS[state]
-    
-    return None
+    return STATE_BOUNDS.get(state)
 
 
 def compute_national_timeseries(cases_df, deaths_df, metric_type="Cases"):
     """
     Compute national (United States-wide) timeseries by summing all counties.
-    
+
+    Statewide unallocated rows (countyFIPS == '00000') are excluded before
+    summing to prevent double-counting.
+
     Args:
         cases_df: Wide-format cases dataframe
         deaths_df: Wide-format deaths dataframe
         metric_type: Either "Cases" or "Deaths"
-    
+
     Returns:
-        DataFrame with columns: Date, Value (in long format)
+        DataFrame with columns: Date, Value (long format)
     """
-    identifier_cols = ["countyFIPS", "County Name", "State", "StateFIPS", "Location"]
-    date_cols = [col for col in cases_df.columns if col not in identifier_cols]
-    
-    if metric_type == "Cases":
-        source_df = cases_df
-    else:
-        source_df = deaths_df
-    
-    # Sum all counties for each date
-    national_values = source_df[date_cols].sum(axis=0)
-    
-    # Convert to long format
+    source_df = cases_df if metric_type == "Cases" else deaths_df
+    date_cols = get_date_columns(source_df)
+
+    valid_rows = source_df[source_df["countyFIPS"] != "00000"]
+    national_values = valid_rows[date_cols].apply(pd.to_numeric, errors="coerce").sum(axis=0)
+
     result = pd.DataFrame({
         "Date": pd.to_datetime(date_cols),
-        "Value": national_values.values
+        "Value": national_values.values,
     })
-    
     return result.sort_values("Date").reset_index(drop=True)
 
 
 def compute_national_daily(daily_df):
     """
-    Compute national daily timeseries from precomputed daily dataframe.
-    
+    Compute national daily timeseries from a precomputed daily dataframe.
+
+    Statewide unallocated rows (countyFIPS == '00000') are excluded.
+
     Args:
         daily_df: Wide-format daily cases/deaths dataframe
-    
+
     Returns:
-        DataFrame with columns: Date, Value (in long format)
+        DataFrame with columns: Date, Value (long format)
     """
-    identifier_cols = ["countyFIPS", "County Name", "State", "StateFIPS", "Location"]
-    date_cols = [col for col in daily_df.columns if col not in identifier_cols]
-    
-    # Sum all counties for each date
-    national_values = daily_df[date_cols].sum(axis=0)
-    
-    # Convert to long format
+    date_cols = get_date_columns(daily_df)
+    valid_rows = daily_df[daily_df["countyFIPS"] != "00000"]
+    national_values = valid_rows[date_cols].sum(axis=0)
+
     result = pd.DataFrame({
         "Date": pd.to_datetime(date_cols),
-        "Value": national_values.values
+        "Value": national_values.values,
     })
-    
     return result.sort_values("Date").reset_index(drop=True)
 
 
-def compute_national_per_capita(pc_df, population_df):
+URBAN_POPULATION_THRESHOLD = 100_000  # fallback threshold when RUCC data is absent
+
+
+def classify_county_type(population_df, urban_threshold=URBAN_POPULATION_THRESHOLD, rucc_df=None):
     """
-    Compute national per-capita timeseries (total cases/deaths per 100k US population).
-    
+    Classify every county as Metro/Nonmetro (preferred) or Urban/Rural (fallback).
+
+    When ``rucc_df`` is supplied (the AHRF feature table containing a
+    ``rucc_code`` column), the classification uses USDA Rural-Urban Continuum
+    Codes (RUCC 2013):
+        Metro    — RUCC 1-3  (metro counties of any size)
+        Nonmetro — RUCC 4-9  (non-metro counties of any adjacency)
+
+    When ``rucc_df`` is None the function falls back to the original
+    population-threshold approach:
+        Urban — population >= urban_threshold (default 100,000)
+        Rural — population <  urban_threshold
+
+    The return contract is unchanged: a DataFrame with columns
+    (countyFIPS, State, County_Type) so all downstream consumers work without
+    modification.  Statewide unallocated rows (FIPS == '00000') and rows with
+    invalid/missing data are excluded.
+
     Args:
-        pc_df: Wide-format per-capita dataframe (already computed per-capita for counties)
-        population_df: Population dataframe
-    
+        population_df:    Population dataframe (wide format).
+        urban_threshold:  Fallback minimum population for "Urban" classification.
+        rucc_df:          Optional AHRF feature DataFrame containing columns
+                          ``countyFIPS``, ``State`` (or ``state``), and
+                          ``rucc_code``.  Produced by
+                          ahrf_loader.build_ahrf_feature_table().
+
     Returns:
-        DataFrame with columns: Date, Value (per-capita, in long format)
+        DataFrame with columns: countyFIPS, State, County_Type
+        County_Type values: "Metro"|"Nonmetro" (RUCC) or "Urban"|"Rural" (fallback)
     """
-    identifier_cols = ["countyFIPS", "County Name", "State", "StateFIPS", "Location"]
-    date_cols = [col for col in pc_df.columns if col not in identifier_cols]
-    
-    # Get total US population (sum all valid county populations)
-    pop_col = [col for col in population_df.columns 
-               if col not in identifier_cols and col != "Location"][0]
+    if rucc_df is not None and "rucc_code" in rucc_df.columns:
+        state_col = "State" if "State" in rucc_df.columns else "state"
+        needed = {"countyFIPS", "rucc_code", state_col}
+        if needed.issubset(rucc_df.columns):
+            valid = rucc_df[["countyFIPS", state_col, "rucc_code"]].copy()
+            valid = valid.rename(columns={state_col: "State"})
+            valid = valid[valid["countyFIPS"] != "00000"].copy()
+
+            rucc = pd.to_numeric(valid["rucc_code"], errors="coerce")
+            valid["County_Type"] = np.where(
+                rucc.between(1, 3), "Metro",
+                np.where(rucc.between(4, 9), "Nonmetro", pd.NA)
+            )
+            valid = valid.dropna(subset=["County_Type"])
+            return valid[["countyFIPS", "State", "County_Type"]].reset_index(drop=True)
+
+    # Population-threshold fallback (no RUCC data available)
+    pop_col = get_population_column(population_df)
+    if pop_col is None:
+        raise ValueError("Population dataframe does not contain a population column")
+
+    valid = population_df[
+        (population_df["countyFIPS"] != "00000") &
+        (pd.to_numeric(population_df[pop_col], errors="coerce") > 0)
+    ][["countyFIPS", "State", pop_col]].copy()
+
+    valid[pop_col] = pd.to_numeric(valid[pop_col], errors="coerce")
+
+    valid["County_Type"] = np.where(
+        valid[pop_col] >= urban_threshold,
+        "Urban",
+        "Rural",
+    )
+
+    return valid[["countyFIPS", "State", "County_Type"]].reset_index(drop=True)
+
+
+def filter_choropleth_by_county_type(choro_data, county_type):
+    """
+    Filter a prepared choropleth DataFrame by county type classification.
+
+    Expects choro_data to contain a 'County_Type' column, added by merging
+    the output of classify_county_type() before this call.
+
+    Accepts both the RUCC-based Metro/Nonmetro labels (preferred, produced when
+    AHRF data is loaded) and the legacy population-threshold Urban/Rural labels
+    (used as a fallback when AHRF data is unavailable).
+
+    Args:
+        choro_data:   Choropleth DataFrame (output of prepare_choropleth_for_date
+                      after County_Type has been merged in).
+        county_type:  One of:
+                        "All Counties"
+                        "Metro Counties"    / "Urban Counties"   (treated identically)
+                        "Nonmetro Counties" / "Rural Counties"   (treated identically)
+
+    Returns:
+        Filtered copy of choro_data, or the full copy for "All Counties".
+    """
+    if county_type == "All Counties":
+        return choro_data.copy()
+
+    # Normalise both label families to their target County_Type value
+    type_map = {
+        # RUCC-based (preferred)
+        "Metro Counties":    "Metro",
+        "Nonmetro Counties": "Nonmetro",
+        # Population-threshold fallback
+        "Urban Counties":    "Urban",
+        "Rural Counties":    "Rural",
+    }
+    target = type_map.get(county_type)
+    if target is None:
+        return choro_data.copy()
+
+    if "County_Type" not in choro_data.columns:
+        # County_Type column not present — return unfiltered rather than crashing
+        return choro_data.copy()
+
+    return choro_data[choro_data["County_Type"] == target].copy()
+
+
+def compute_national_per_capita(raw_df, population_df):
+    """
+    Compute national per-capita timeseries directly from raw cumulative counts.
+
+    This avoids the floating-point round-trip of the previous implementation,
+    which reconstructed raw counts from precomputed per-capita values.
+    Statewide unallocated rows (countyFIPS == '00000') are excluded from both
+    the numerator and the total population denominator.
+
+    Args:
+        raw_df: Wide-format raw (cumulative) cases or deaths dataframe
+        population_df: Population dataframe
+
+    Returns:
+        DataFrame with columns: Date, Value (per 100k, long format)
+    """
+    date_cols = get_date_columns(raw_df)
+
+    pop_col = get_population_column(population_df)
+    if pop_col is None:
+        raise ValueError("Population dataframe does not contain a population column")
+
     total_pop = population_df[
-        (population_df["countyFIPS"] != "00000") & 
-        (population_df["population"] > 0)
-    ][pop_col].sum()
-    
-    # Sum raw values (not per-capita) to compute national per-capita correctly
-    # We need to recompute from raw counts divided by total US population
-    cases_or_deaths_df = None
-    for idx, row in pc_df.head(1).iterrows():
-        # pc_df contains already-computed per-capita values
-        # We need original counts to recalculate properly
-        break
-    
-    # Since we have per-capita values, we can back-calculate by averaging
-    # Or better: sum the absolute counts and divide by total pop
-    # For now, compute using the identity: sum(per_capita_values) / num_counties * avg_pop / total_pop
-    # Actually, this gets complex. Let's return average of county per-capita values as proxy
-    
-    national_pc_values = pc_df[date_cols].mean(axis=0)
-    
+        (population_df["countyFIPS"] != "00000") &
+        (population_df[pop_col] > 0)
+    ][pop_col].apply(pd.to_numeric, errors="coerce").sum()
+
+    valid_rows = raw_df[raw_df["countyFIPS"] != "00000"]
+    national_counts = (
+        valid_rows[date_cols].apply(pd.to_numeric, errors="coerce").sum(axis=0)
+    )
+
     result = pd.DataFrame({
         "Date": pd.to_datetime(date_cols),
-        "Value": national_pc_values.values
+        "Value": (national_counts / total_pop) * 100_000,
     })
-    
     return result.sort_values("Date").reset_index(drop=True)

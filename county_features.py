@@ -2,19 +2,27 @@
 County-level feature table for COVID-19 analysis and external data integration.
 
 Provides a modular architecture for aggregating county-level metrics and
-merging with external datasets (healthcare access, socioeconomic, demographic).
+merging with external datasets (AHRF healthcare, socioeconomic, demographic).
 
-Future use cases:
-- Correlation analysis (Pearson, Spearman)
-- Linear regression on outcomes
-- County clustering
-- Rural vs urban comparisons
-- Feature importance analysis
+Public API:
+    create_county_feature_table()   — COVID metrics only (backward compatible)
+    create_master_county_table()    — COVID + AHRF feature table (full research table)
+    add_external_dataset()          — Generic FIPS-join hook for any external dataset
+    compute_bivariate_correlation() — Pearson + Spearman with p-values
+    compute_correlation_matrix()    — All-vs-all correlation matrix
+    normalize_feature()             — Min-max normalization
+    standardize_feature()           — Z-score standardization
+    prepare_for_regression()        — X, y matrices ready for OLS
+    prepare_for_clustering()        — Feature matrix ready for K-means / hierarchical
+
 """
 
-import pandas as pd
+import warnings
+from typing import List, Optional, Tuple
+
 import numpy as np
-from typing import Dict, List, Optional
+import pandas as pd
+from scipy import stats
 
 
 def create_county_feature_table(
@@ -24,369 +32,480 @@ def create_county_feature_table(
     wave_metrics_df: Optional[pd.DataFrame] = None,
 ) -> pd.DataFrame:
     """
-    Create master county-level feature table with current metrics.
+    Create a county-level feature table with COVID metrics.
+
+    This is the original function; its interface is unchanged for backward
+    compatibility.  For the full research table (COVID + AHRF), use
+    create_master_county_table().
 
     Args:
-        cases_df: Cases dataframe (wide format, cumulative)
-        deaths_df: Deaths dataframe (wide format, cumulative)
-        population_df: Population dataframe
-        wave_metrics_df: Optional wave metrics dataframe from wave_analysis module
+        cases_df:       Wide-format cumulative cases DataFrame.
+        deaths_df:      Wide-format cumulative deaths DataFrame.
+        population_df:  Population DataFrame.
+        wave_metrics_df: Optional wave metrics from wave_analysis module.
 
     Returns:
-        DataFrame with one row per county and columns:
-        - countyFIPS, County Name, State, Population
-        - Total Cases, Total Deaths
-        - Cases per 100k, Deaths per 100k
-        - Wave metrics (if provided)
+        DataFrame with one row per county containing COVID metrics.
     """
-    # Get most recent date for totals
     identifier_cols = ["countyFIPS", "County Name", "State", "StateFIPS", "Location"]
-    date_cols = [col for col in cases_df.columns if col not in identifier_cols]
+    date_cols  = [c for c in cases_df.columns if c not in identifier_cols]
     latest_date = sorted(date_cols)[-1]
 
-    # Initialize with population and FIPS
-    pop_cols = [col for col in population_df.columns if col not in identifier_cols and col != "Location"]
-    pop_col = pop_cols[0] if pop_cols else "population"
+    pop_cols = [c for c in population_df.columns
+                if c not in identifier_cols and c != "Location"]
+    pop_col  = pop_cols[0] if pop_cols else "population"
 
-    features = population_df[[
-        "countyFIPS", "County Name", "State", pop_col
-    ]].rename(columns={pop_col: "population"}).copy()
-
-    # Filter out statewide entries and zero population
-    features = features[(features["countyFIPS"] != "00000") & (features["population"] > 0)].copy()
-    features = features.reset_index(drop=True)
-
-    # Add total cases and deaths
-    cases_totals = cases_df[["countyFIPS", "State", latest_date]].rename(
-        columns={latest_date: "total_cases"}
+    features = (
+        population_df[["countyFIPS", "County Name", "State", pop_col]]
+        .rename(columns={pop_col: "population"})
+        .copy()
     )
-    deaths_totals = deaths_df[["countyFIPS", "State", latest_date]].rename(
-        columns={latest_date: "total_deaths"}
-    )
+    features = features[
+        (features["countyFIPS"] != "00000") & (features["population"] > 0)
+    ].reset_index(drop=True)
 
-    features = features.merge(cases_totals, on=["countyFIPS", "State"], how="left")
+    cases_totals  = cases_df[["countyFIPS", "State", latest_date]].rename(columns={latest_date: "total_cases"})
+    deaths_totals = deaths_df[["countyFIPS", "State", latest_date]].rename(columns={latest_date: "total_deaths"})
+
+    features = features.merge(cases_totals,  on=["countyFIPS", "State"], how="left")
     features = features.merge(deaths_totals, on=["countyFIPS", "State"], how="left")
 
-    # Calculate per-capita metrics
-    features["total_cases"] = pd.to_numeric(features["total_cases"], errors="coerce")
+    features["total_cases"]  = pd.to_numeric(features["total_cases"],  errors="coerce")
     features["total_deaths"] = pd.to_numeric(features["total_deaths"], errors="coerce")
 
     features["cases_per_100k"] = np.where(
         (features["population"] > 0) & features["population"].notna(),
-        (features["total_cases"] / features["population"]) * 100000,
-        np.nan
+        (features["total_cases"]  / features["population"]) * 100_000, np.nan,
     )
     features["deaths_per_100k"] = np.where(
         (features["population"] > 0) & features["population"].notna(),
-        (features["total_deaths"] / features["population"]) * 100000,
-        np.nan
+        (features["total_deaths"] / features["population"]) * 100_000, np.nan,
     )
 
-    # Merge wave metrics if provided
     if wave_metrics_df is not None and len(wave_metrics_df) > 0:
-        wave_cols = [col for col in wave_metrics_df.columns
-                     if col not in ["countyFIPS", "County Name", "State"]]
+        wave_cols = [c for c in wave_metrics_df.columns
+                     if c not in ["countyFIPS", "County Name", "State"]]
         features = features.merge(
             wave_metrics_df[["countyFIPS", "State"] + wave_cols],
-            on=["countyFIPS", "State"],
-            how="left"
+            on=["countyFIPS", "State"], how="left",
         )
 
     return features
 
 
-def add_external_dataset(
-    features_df: pd.DataFrame,
-    external_df: pd.DataFrame,
-    external_fips_col: str = "countyFIPS",
-    join_state: bool = True,
-) -> pd.DataFrame:
+def create_master_county_table(
+    cases_df:       pd.DataFrame,
+    deaths_df:      pd.DataFrame,
+    population_df:  pd.DataFrame,
+    ahrf_df:        Optional[pd.DataFrame] = None,
+    wave_metrics_df: Optional[pd.DataFrame] = None,
+    vax_df:         Optional[pd.DataFrame] = None,
+    verbose: bool = True,
+) -> Tuple[pd.DataFrame, dict]:
     """
-    Merge external county-level dataset into feature table.
+    Build the master county feature table combining COVID outcomes with
+    AHRF healthcare, socioeconomic, and demographic variables.
+
+    Join key: countyFIPS (5-character zero-padded string).
 
     Args:
-        features_df: County feature table (from create_county_feature_table)
-        external_df: External dataset to merge
-        external_fips_col: Name of FIPS column in external_df
-        join_state: If True, join on (FIPS, State); if False, join on FIPS only
+        cases_df:       Wide-format cumulative cases DataFrame.
+        deaths_df:      Wide-format cumulative deaths DataFrame.
+        population_df:  Population DataFrame from USAFacts.
+        ahrf_df:        AHRF feature DataFrame (from ahrf_loader.build_ahrf_feature_table).
+                        If None, AHRF columns are omitted.
+        wave_metrics_df: Optional pre-computed wave metrics per county.
+        vax_df:         Optional vaccination latest-snapshot DataFrame
+                        (from vaccination_loader.load_vaccination_latest).
+                        Joined on countyFIPS. Columns added: vax_dose1_pct,
+                        vax_complete_pct, vax_booster_pct, vax_complete_65plus_pct,
+                        vax_bivalent_pct, vax_last_date.
+        verbose:        Print join diagnostics.
 
     Returns:
-        Updated feature table with external columns added
+        (master_df, diagnostics) where master_df has one row per county.
+    """
+    diag = {}
+
+    covid_features = create_county_feature_table(
+        cases_df, deaths_df, population_df, wave_metrics_df
+    )
+
+    covid_features["countyFIPS"] = (
+        covid_features["countyFIPS"].astype(str).str.zfill(5)
+    )
+    diag["covid_counties"] = len(covid_features)
+
+    if ahrf_df is None:
+        if verbose:
+            print("No AHRF data provided — returning COVID-only feature table")
+        return covid_features, diag
+
+    ahrf_copy = ahrf_df.copy()
+    ahrf_copy["countyFIPS"] = ahrf_copy["countyFIPS"].astype(str).str.zfill(5)
+
+    exclude_from_ahrf = {
+        "countyFIPS", "state", "county_name",
+        "County Name", "State", "population",  # avoid duplicates
+    }
+    ahrf_cols = [c for c in ahrf_copy.columns if c not in exclude_from_ahrf]
+
+    master = covid_features.merge(
+        ahrf_copy[["countyFIPS"] + ahrf_cols],
+        on="countyFIPS",
+        how="left",
+    )
+
+    n_matched  = master["pcp_per_100k"].notna().sum() if "pcp_per_100k" in master.columns else "N/A"
+    n_unmatched = master["pcp_per_100k"].isna().sum()  if "pcp_per_100k" in master.columns else "N/A"
+
+    diag.update({
+        "ahrf_counties":   len(ahrf_df),
+        "master_counties": len(master),
+        "matched_ahrf":    n_matched,
+        "unmatched_ahrf":  n_unmatched,
+        "ahrf_columns_added": len(ahrf_cols),
+    })
+
+    if verbose:
+        print(f"Master table: {len(master):,} counties, {len(master.columns)} columns")
+        print(f"  COVID counties:  {diag['covid_counties']:,}")
+        print(f"  AHRF matched:    {n_matched}")
+        print(f"  AHRF unmatched:  {n_unmatched}")
+
+    # Vaccination data join
+    if vax_df is not None and not vax_df.empty:
+        vax_copy = vax_df.copy()
+        vax_copy["countyFIPS"] = vax_copy["countyFIPS"].astype(str).str.zfill(5)
+        # Exclude columns already in master (avoid duplicates)
+        vax_cols = [c for c in vax_copy.columns if c not in {"countyFIPS"} and c not in master.columns]
+        master = master.merge(
+            vax_copy[["countyFIPS"] + vax_cols],
+            on="countyFIPS",
+            how="left",
+        )
+        n_vax_matched = master["vax_complete_pct"].notna().sum() if "vax_complete_pct" in master.columns else "N/A"
+        diag["vax_counties"]    = len(vax_df)
+        diag["vax_matched"]     = n_vax_matched
+        diag["vax_cols_added"]  = len(vax_cols)
+        if verbose:
+            print(f"  Vaccination matched: {n_vax_matched}")
+
+    return master, diag
+
+
+def add_external_dataset(
+    features_df:       pd.DataFrame,
+    external_df:       pd.DataFrame,
+    external_fips_col: str  = "countyFIPS",
+    join_state:        bool = True,
+) -> pd.DataFrame:
+    """
+    Merge any county-level external dataset into the feature table.
+
+    Standardises FIPS in the external dataset before joining.  Where
+    possible, joins on (countyFIPS, State) to prevent cross-state FIPS
+    collisions.
+
+    Args:
+        features_df:       Master feature table.
+        external_df:       Dataset to merge (must contain a FIPS column).
+        external_fips_col: Name of the FIPS column in external_df.
+        join_state:        If True, join on (FIPS, State); else FIPS only.
+
+    Returns:
+        Updated feature table with external columns appended.
     """
     result = features_df.copy()
 
-    # Standardize FIPS in external data
-    if external_fips_col in external_df.columns:
-        external_df = external_df.copy()
-        external_df[external_fips_col] = (
-            pd.to_numeric(external_df[external_fips_col], errors="coerce")
-            .fillna(0)
-            .astype(int)
-            .astype(str)
-            .str.zfill(5)
-        )
+    if external_fips_col not in external_df.columns:
+        warnings.warn(f"Column '{external_fips_col}' not found in external_df — returning unchanged")
+        return result
 
-        if join_state and "State" in external_df.columns:
-            # Join on (FIPS, State)
-            merge_cols = [external_fips_col, "State"]
-            external_df = external_df.rename(columns={external_fips_col: "countyFIPS"})
-            result = result.merge(
-                external_df,
-                on=merge_cols,
-                how="left",
-                suffixes=("", "_external")
-            )
-        else:
-            # Join on FIPS only
-            external_df = external_df.rename(columns={external_fips_col: "countyFIPS"})
-            result = result.merge(
-                external_df,
-                on="countyFIPS",
-                how="left",
-                suffixes=("", "_external")
-            )
+    ext = external_df.copy()
+    ext[external_fips_col] = (
+        pd.to_numeric(ext[external_fips_col], errors="coerce")
+        .fillna(0).astype(int).astype(str).str.zfill(5)
+    )
+    ext = ext.rename(columns={external_fips_col: "countyFIPS"})
 
+    on_cols = ["countyFIPS", "State"] if (join_state and "State" in ext.columns) else ["countyFIPS"]
+
+    result = result.merge(ext, on=on_cols, how="left", suffixes=("", "_external"))
     return result
 
 
-def normalize_feature(feature_series: pd.Series) -> pd.Series:
+def compute_bivariate_correlation(
+    df:           pd.DataFrame,
+    x_col:        str,
+    y_col:        str,
+    filter_mask:  Optional[pd.Series] = None,
+    min_n:        int = 30,
+) -> dict:
     """
-    Normalize a feature to [0, 1] range using min-max normalization.
+    Compute Pearson and Spearman correlations between two columns.
+
+    Both NaN-containing rows and rows excluded by filter_mask are dropped
+    before computation.  Returns NaN statistics when fewer than min_n
+    valid rows are available.
 
     Args:
-        feature_series: Series of feature values
+        df:          Feature DataFrame.
+        x_col:       Name of the X (predictor) column.
+        y_col:       Name of the Y (outcome) column.
+        filter_mask: Boolean Series aligned with df; True rows are kept.
+        min_n:       Minimum number of valid pairs required.
 
     Returns:
-        Normalized series
+        Dict with keys:
+            n, pearson_r, pearson_p, spearman_r, spearman_p,
+            r_squared, x_mean, y_mean, x_std, y_std
     """
-    valid_values = feature_series.dropna()
-    if len(valid_values) == 0:
+    empty = {
+        "n": 0, "pearson_r": np.nan, "pearson_p": np.nan,
+        "spearman_r": np.nan, "spearman_p": np.nan,
+        "r_squared": np.nan, "x_mean": np.nan, "y_mean": np.nan,
+        "x_std": np.nan, "y_std": np.nan,
+    }
+
+    if x_col not in df.columns or y_col not in df.columns:
+        return empty
+
+    sub = df.copy()
+    if filter_mask is not None:
+        sub = sub[filter_mask.values if hasattr(filter_mask, "values") else filter_mask]
+
+    valid = sub[[x_col, y_col]].dropna()
+    x = pd.to_numeric(valid[x_col], errors="coerce")
+    y = pd.to_numeric(valid[y_col], errors="coerce")
+    valid = pd.DataFrame({"x": x, "y": y}).dropna()
+
+    n = len(valid)
+    if n < min_n:
+        return {**empty, "n": n}
+
+    pr, pp = stats.pearsonr(valid["x"], valid["y"])
+    sr, sp = stats.spearmanr(valid["x"], valid["y"])
+
+    return {
+        "n":          n,
+        "pearson_r":  float(pr),
+        "pearson_p":  float(pp),
+        "spearman_r": float(sr),
+        "spearman_p": float(sp),
+        "r_squared":  float(pr ** 2),
+        "x_mean":     float(valid["x"].mean()),
+        "y_mean":     float(valid["y"].mean()),
+        "x_std":      float(valid["x"].std()),
+        "y_std":      float(valid["y"].std()),
+    }
+
+
+def compute_ols_trend(
+    df:          pd.DataFrame,
+    x_col:       str,
+    y_col:       str,
+    filter_mask: Optional[pd.Series] = None,
+) -> dict:
+    """
+    Fit a simple OLS regression (y ~ x) and return slope/intercept/R².
+
+    Args:
+        df:          Feature DataFrame.
+        x_col:       Predictor column name.
+        y_col:       Outcome column name.
+        filter_mask: Boolean Series; True rows are kept.
+
+    Returns:
+        Dict with keys: slope, intercept, r_squared, n, x_min, x_max,
+        y_pred_min, y_pred_max
+    """
+    empty = {"slope": np.nan, "intercept": np.nan, "r_squared": np.nan,
+             "n": 0, "x_min": np.nan, "x_max": np.nan,
+             "y_pred_min": np.nan, "y_pred_max": np.nan}
+
+    if x_col not in df.columns or y_col not in df.columns:
+        return empty
+
+    sub = df.copy()
+    if filter_mask is not None:
+        sub = sub[filter_mask.values if hasattr(filter_mask, "values") else filter_mask]
+
+    valid = sub[[x_col, y_col]].dropna()
+    x = pd.to_numeric(valid[x_col], errors="coerce")
+    y = pd.to_numeric(valid[y_col], errors="coerce")
+    valid = pd.DataFrame({"x": x, "y": y}).dropna()
+
+    n = len(valid)
+    if n < 3:
+        return {**empty, "n": n}
+
+    slope, intercept, r, p, se = stats.linregress(valid["x"], valid["y"])
+    x_min, x_max = valid["x"].min(), valid["x"].max()
+
+    return {
+        "slope":      float(slope),
+        "intercept":  float(intercept),
+        "r_squared":  float(r ** 2),
+        "n":          n,
+        "x_min":      float(x_min),
+        "x_max":      float(x_max),
+        "y_pred_min": float(slope * x_min + intercept),
+        "y_pred_max": float(slope * x_max + intercept),
+    }
+
+
+def compute_correlation_matrix(
+    df:              pd.DataFrame,
+    feature_cols:    List[str],
+    outcome_cols:    List[str],
+    method:          str = "pearson",
+) -> pd.DataFrame:
+    """
+    Compute a correlation matrix between feature columns and outcome columns.
+
+    Args:
+        df:           Feature DataFrame.
+        feature_cols: Column names for the predictor variables (X).
+        outcome_cols: Column names for the outcome variables (Y).
+        method:       'pearson' or 'spearman'.
+
+    Returns:
+        DataFrame with feature_cols as rows and outcome_cols as columns,
+        containing correlation coefficients.  NaN where insufficient data.
+    """
+    method = method.lower()
+    corr_data: dict = {oc: {} for oc in outcome_cols}
+
+    for fc in feature_cols:
+        for oc in outcome_cols:
+            res = compute_bivariate_correlation(df, fc, oc)
+            r = res["pearson_r"] if method == "pearson" else res["spearman_r"]
+            corr_data[oc][fc] = r
+
+    return pd.DataFrame(corr_data, index=feature_cols)
+
+
+def normalize_feature(feature_series: pd.Series) -> pd.Series:
+    """Min-max normalise a feature to [0, 1]."""
+    valid = feature_series.dropna()
+    if len(valid) == 0:
         return feature_series
-
-    min_val = valid_values.min()
-    max_val = valid_values.max()
-
-    if min_val == max_val:
+    mn, mx = valid.min(), valid.max()
+    if mn == mx:
         return pd.Series([0.5] * len(feature_series), index=feature_series.index)
-
-    return (feature_series - min_val) / (max_val - min_val)
+    return (feature_series - mn) / (mx - mn)
 
 
 def standardize_feature(feature_series: pd.Series) -> pd.Series:
-    """
-    Standardize a feature using z-score normalization.
-
-    Args:
-        feature_series: Series of feature values
-
-    Returns:
-        Standardized series (mean=0, std=1)
-    """
-    valid_values = feature_series.dropna()
-    if len(valid_values) == 0:
+    """Z-score standardise a feature (mean=0, std=1)."""
+    valid = feature_series.dropna()
+    if len(valid) == 0:
         return feature_series
-
-    mean_val = valid_values.mean()
-    std_val = valid_values.std()
-
-    if std_val == 0:
-        return pd.Series([0] * len(feature_series), index=feature_series.index)
-
-    return (feature_series - mean_val) / std_val
+    mu, sigma = valid.mean(), valid.std()
+    if sigma == 0:
+        return pd.Series([0.0] * len(feature_series), index=feature_series.index)
+    return (feature_series - mu) / sigma
 
 
-# ===== FUTURE ANALYTICS SKELETON =====
-# These functions are templates for future implementation.
-# They establish the architecture for analytics that will use the feature table.
-
-
-def prepare_for_correlation_analysis(
-    features_df: pd.DataFrame,
-    outcome_column: str,
-    exclude_columns: Optional[List[str]] = None,
-) -> pd.DataFrame:
+def prepare_for_regression(
+    df:             pd.DataFrame,
+    outcome_col:    str,
+    feature_cols:   Optional[List[str]] = None,
+    standardize:    bool = True,
+) -> Tuple[pd.DataFrame, pd.Series]:
     """
-    Prepare feature table for correlation analysis (Pearson/Spearman).
+    Prepare (X, y) matrices for multiple linear regression.
 
-    Future implementation: Compute Pearson and Spearman correlations
-    between features and outcome variable.
+    Rows with any missing values in X or y are dropped.  Optionally
+    standardises all features and the outcome.
 
     Args:
-        features_df: County feature table
-        outcome_column: Column name of outcome variable (e.g., 'deaths_per_100k')
-        exclude_columns: Columns to exclude from analysis
+        df:            Feature DataFrame.
+        outcome_col:   Name of the outcome (dependent) variable.
+        feature_cols:  Predictor columns; None = all numeric except outcome
+                       and identifier columns.
+        standardize:   If True, z-score standardise X and y.
 
     Returns:
-        DataFrame ready for correlation analysis
+        (X_df, y_series) ready for OLS fitting.
     """
-    if exclude_columns is None:
-        exclude_columns = ["countyFIPS", "County Name", "State"]
+    id_cols = {"countyFIPS", "County Name", "State", "county_name",
+               "state", "census_region_name", "census_division_name",
+               "rucc_group", "is_metro", "hpsa_shortage_flag"}
 
-    analysis_df = features_df.drop(columns=exclude_columns, errors="ignore").copy()
+    if feature_cols is None:
+        feature_cols = [
+            c for c in df.select_dtypes(include=[np.number]).columns
+            if c != outcome_col and c not in id_cols
+        ]
 
-    # Remove rows where outcome is missing
-    analysis_df = analysis_df[analysis_df[outcome_column].notna()].copy()
+    X = df[feature_cols].copy()
+    y = df[outcome_col].copy()
 
-    # TODO: Implement Pearson and Spearman correlation computation
-    # TODO: Compute p-values and effect sizes
-    # TODO: Return ranked feature importance
-
-    return analysis_df
-
-
-def prepare_for_regression_analysis(
-    features_df: pd.DataFrame,
-    outcome_column: str,
-    feature_columns: Optional[List[str]] = None,
-    standardize: bool = True,
-) -> tuple:
-    """
-    Prepare feature table for multiple linear regression.
-
-    Future implementation: Fit OLS regression, compute R², coefficients, p-values.
-
-    Args:
-        features_df: County feature table
-        outcome_column: Column name of outcome variable
-        feature_columns: Specific columns to use as features; if None, use all except identifiers
-        standardize: If True, standardize features and outcome
-
-    Returns:
-        Tuple of (X, y) ready for regression
-    """
-    if feature_columns is None:
-        exclude = ["countyFIPS", "County Name", "State", outcome_column]
-        feature_columns = [col for col in features_df.columns if col not in exclude]
-
-    X = features_df[feature_columns].copy()
-    y = features_df[outcome_column].copy()
-
-    # Remove rows with missing data
-    valid_mask = ~(X.isna().any(axis=1) | y.isna())
-    X = X[valid_mask].reset_index(drop=True)
-    y = y[valid_mask].reset_index(drop=True)
+    valid = (~X.isna().any(axis=1)) & y.notna()
+    X = X[valid].reset_index(drop=True)
+    y = y[valid].reset_index(drop=True)
 
     if standardize:
         for col in X.columns:
             X[col] = standardize_feature(X[col])
         y = standardize_feature(y)
 
-    # TODO: Implement OLS regression fitting
-    # TODO: Compute R², adjusted R², coefficients, p-values, VIF
-    # TODO: Model diagnostics (residuals, heteroscedasticity, normality)
-
     return X, y
 
 
-def prepare_for_clustering_analysis(
-    features_df: pd.DataFrame,
-    feature_columns: Optional[List[str]] = None,
-    standardize: bool = True,
+def prepare_for_clustering(
+    df:             pd.DataFrame,
+    feature_cols:   Optional[List[str]] = None,
+    standardize:    bool = True,
 ) -> pd.DataFrame:
     """
-    Prepare feature table for county clustering (K-means, hierarchical, etc.).
-
-    Future implementation: Determine optimal number of clusters, fit clustering model,
-    assign cluster labels.
+    Prepare a feature matrix for county clustering (K-means, hierarchical).
 
     Args:
-        features_df: County feature table
-        feature_columns: Specific columns for clustering; if None, use COVID metrics
-        standardize: If True, standardize features
+        df:            Feature DataFrame.
+        feature_cols:  Columns to use; None = all per-100k and pct columns.
+        standardize:   If True, z-score standardise all features.
 
     Returns:
-        DataFrame with clustering features prepared
+        DataFrame with rows=counties (no NaN), columns=features.
+        The countyFIPS column is retained as the index.
     """
-    if feature_columns is None:
-        feature_columns = [
-            col for col in features_df.columns
-            if "cases" in col.lower() or "deaths" in col.lower() or "wave" in col.lower()
+    if feature_cols is None:
+        feature_cols = [
+            c for c in df.columns
+            if any(kw in c for kw in ["per_100k", "pct_", "rate", "_pct"])
         ]
 
-    X = features_df[feature_columns].copy()
-
-    # Remove rows with missing data
+    X = df.set_index("countyFIPS")[feature_cols].copy() if "countyFIPS" in df.columns \
+        else df[feature_cols].copy()
     X = X.dropna()
 
     if standardize:
         for col in X.columns:
             X[col] = standardize_feature(X[col])
 
-    # TODO: Implement clustering (K-means with optimal k, hierarchical, etc.)
-    # TODO: Compute silhouette scores and elbow curve
-    # TODO: Assign county cluster labels
-
     return X
 
 
-def prepare_for_rural_urban_analysis(
-    features_df: pd.DataFrame,
-    rural_urban_column: str = "rural_urban_class",
-) -> pd.DataFrame:
-    """
-    Prepare feature table for rural vs urban outcome comparison.
-
-    Future implementation: Compare outcome metrics (deaths per 100k, case rates, etc.)
-    across rural/urban categories.
-
-    Args:
-        features_df: County feature table
-        rural_urban_column: Column name indicating rural/urban classification
-
-    Returns:
-        DataFrame ready for rural/urban analysis
-    """
-    if rural_urban_column not in features_df.columns:
-        # TODO: Add rural/urban classification using population density or USDA categories
-        pass
-
-    # TODO: Implement statistical comparisons (t-tests, ANOVA)
-    # TODO: Compute summary statistics by category
-    # TODO: Visualize outcome distributions
-
-    return features_df
-
-
-def prepare_for_feature_importance_analysis(
-    features_df: pd.DataFrame,
-    outcome_column: str,
-) -> pd.DataFrame:
-    """
-    Prepare feature table for feature importance analysis.
-
-    Future implementation: Use tree-based models or other methods to rank feature importance.
-
-    Args:
-        features_df: County feature table
-        outcome_column: Column name of outcome variable
-
-    Returns:
-        DataFrame with features ranked by importance
-    """
-    # TODO: Implement feature importance using:
-    # - Random Forest permutation importance
-    # - SHAP values
-    # - Univariate statistical tests (correlation, Mann-Whitney U, etc.)
-    # TODO: Return ranked feature list with importance scores
-
-    return features_df
-
-
 if __name__ == "__main__":
-    # Example usage
-    from tools import load_data, precompute_daily_diffs
-    from wave_analysis import calculate_waves_for_all_counties
+    from tools import load_data
+    from ahrf_loader import build_ahrf_feature_table
 
-    print("Creating county feature table...")
+    print("Loading COVID data...")
     cases, deaths, pop = load_data()
-    daily_cases, daily_deaths = precompute_daily_diffs(cases, deaths)
+    covid_fips = set(cases[cases["countyFIPS"] != "00000"]["countyFIPS"].unique())
 
-    # Create base feature table
-    features = create_county_feature_table(cases, deaths, pop)
-    print(f"Created feature table with {len(features)} counties")
-    print(f"Columns: {features.columns.tolist()}")
+    print("Loading AHRF feature table...")
+    ahrf_df, _ = build_ahrf_feature_table(covid_fips=covid_fips, verbose=False)
 
-    # Example: Show a few counties
-    print(f"\nSample counties:")
-    print(features[["County Name", "State", "population", "total_cases",
-                    "total_deaths", "cases_per_100k", "deaths_per_100k"]].head(10).to_string())
+    print("Building master county table...")
+    master, diag = create_master_county_table(cases, deaths, pop, ahrf_df)
+    print(f"Master table: {master.shape}")
+
+    print("\nSample correlation (pcp_per_100k vs deaths_per_100k):")
+    res = compute_bivariate_correlation(master, "pcp_per_100k", "deaths_per_100k")
+    print(f"  n={res['n']}, Pearson r={res['pearson_r']:.3f}, p={res['pearson_p']:.4f}")
+    print(f"  Spearman r={res['spearman_r']:.3f}, p={res['spearman_p']:.4f}")
+    print(f"  R² = {res['r_squared']:.3f}")

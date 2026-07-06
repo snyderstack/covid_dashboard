@@ -1,0 +1,20 @@
+.DS_Store
+__pycache__/
+*.py[cod]
+venv/
+.venv/
+.streamlit/secrets.toml
+
+# Large AHRF binary data files — not parsed (no layout files available for these years)
+data/ahrf2021.asc
+data/ahrf2022.asc
+
+# Large / supplementary data — download separately (see data/README.md)
+data/COVID-19_Vaccinations_in_the_United_States,County_20260623.csv
+data/AHRF_2020-2021_SAS/
+data/AHRF2020.asc
+data/AHRF_CSV_2022-2023-2/
+
+# Unused assets
+assets/images.png
+assets/Gettysburg_College_seal.svg.png
