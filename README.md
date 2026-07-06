@@ -30,7 +30,7 @@ Developed at Gettysburg College for public-health analysis, coursework, and expl
 
 All datasets are read from the local `data/` directory; nothing is downloaded at runtime. All joins use five-character zero-padded county FIPS codes (with `(countyFIPS, State)` compound keys where duplicate FIPS rows exist).
 
-The USAFacts CSVs and `ahrf2023.csv` are included in the repository, so the dashboard runs immediately after cloning. Larger files (the CDC vaccination CSV and supplementary AHRF releases) exceed GitHub size limits and must be downloaded separately — see `data/README.md` for sources and exact paths. The dashboard degrades gracefully when they are absent: vaccination features are hidden and AHRF falls back to the primary 2023 CSV.
+The USAFacts CSVs and `ahrf2023.csv` are included in the repository, so the dashboard runs immediately after cloning. Larger files (the CDC vaccination CSV and supplementary AHRF releases) exceed GitHub size limits and must be downloaded separately — see `data/README.md` for sources and exact paths. The dashboard degrades when they are absent: vaccination features are hidden and AHRF falls back to the primary 2023 CSV.
 
 ## Installation
 
