@@ -11,6 +11,7 @@ from tools import (
     compute_national_timeseries,
     compute_window_outcomes,
     extract_county_state,
+    find_data_corrections,
     get_state_bounds_for_zoom,
     monthly_snapshot_long,
     precompute_daily_diffs,
@@ -98,3 +99,14 @@ def test_classify_county_type_fallback_and_rucc(population_df):
 def test_state_bounds():
     assert get_state_bounds_for_zoom("PA")["zoom"] == 6
     assert get_state_bounds_for_zoom("ZZ") is None
+
+
+def test_find_data_corrections(cases_df):
+    # Gamma County's cumulative series dips 30 → 25 at index 5
+    corr = find_data_corrections(cases_df, "Gamma County", "BB")
+    assert len(corr) == 1
+    assert corr["Date"].iloc[0] == pd.Timestamp(DATES[5])
+    assert corr["correction"].iloc[0] == -5.0
+    # monotone series → no corrections; missing county → empty
+    assert find_data_corrections(cases_df, "Alpha County", "AA").empty
+    assert find_data_corrections(cases_df, "Nowhere County", "ZZ").empty

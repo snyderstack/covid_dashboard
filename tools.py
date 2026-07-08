@@ -784,6 +784,41 @@ def filter_choropleth_by_county_type(choro_data, county_type):
     return choro_data[choro_data["County_Type"] == target].copy()
 
 
+def find_data_corrections(df_wide, county_name, state):
+    """
+    Find dates where a county's cumulative series decreased.
+
+    A cumulative count can only legitimately rise; a decrease means the source
+    revised earlier figures (backfill, de-duplication, jurisdiction change).
+    The daily-diff pipeline clips these to zero for analysis; this function
+    recovers them so charts can flag correction events instead of hiding them.
+
+    Args:
+        df_wide: Wide-format cumulative dataframe (cases or deaths).
+        county_name, state: Identify the county.
+
+    Returns:
+        DataFrame with columns Date (Timestamp) and correction (the negative
+        one-day change). Empty DataFrame if the county is missing or its
+        series never decreases.
+    """
+    row = df_wide[
+        (df_wide["County Name"] == county_name) & (df_wide["State"] == state)
+    ]
+    if row.empty:
+        return pd.DataFrame(columns=["Date", "correction"])
+
+    date_cols = get_date_columns(df_wide)
+    values = pd.to_numeric(row.iloc[0][date_cols], errors="coerce")
+    diffs = values.diff()
+    mask = diffs < 0
+
+    return pd.DataFrame({
+        "Date": pd.to_datetime(pd.Index(date_cols)[mask.values]),
+        "correction": diffs[mask.values].astype(float).values,
+    })
+
+
 def monthly_snapshot_long(metric_df):
     """
     Melt a wide metric table to long format with one date per calendar month.

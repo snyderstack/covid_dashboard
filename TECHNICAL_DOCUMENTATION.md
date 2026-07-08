@@ -168,7 +168,7 @@ Wave detail dictionaries use the key `"peak_value"` for the peak count (accurate
 
 These are the current, deliberate limitations of the platform. Each is either disclosed in the UI where it matters or inherent to county-level surveillance data. (Historical findings and their resolution status are catalogued in Section 13.0.)
 
-**Data handling.** Statewide unallocated records and zero-population rows are retained in raw loaded data for traceability but excluded from maps, per-capita math, and national totals. Negative daily diffs (source-data corrections) are clipped to zero, which conceals the size of backfill events; cumulative analyses are unaffected. Per-capita rates use a single static population per county for the entire 2020–2023 period — a small systematic bias for high-growth counties.
+**Data handling.** Statewide unallocated records and zero-population rows are retained in raw loaded data for traceability but excluded from maps, per-capita math, and national totals. Negative daily diffs (source-data corrections) are clipped to zero for analysis, but correction events are flagged with markers on the wave and daily comparison charts so they are visible rather than hidden; cumulative analyses are unaffected. Per-capita rates use a single static population per county for the entire 2020–2023 period — a small systematic bias for high-growth counties.
 
 **Statistical methods.** Moving averages use `min_periods=1`, so the first window−1 values of any smoothed series draw on fewer points (disclosed in the lag and wave methodology expanders). Lag analysis matches peaks greedily in chronological order (not globally optimal) and treats missing days as zero before peak detection. The Index=100 comparison rebases each series at its own first non-zero value, so curves can start from different epidemic moments. All associations everywhere are county-level (ecological); individual-level inference is invalid.
 
@@ -309,6 +309,38 @@ feature-importance description (impurity-based, not OOB), and Section 16.6
 outcome-data end date (July 2023, not "present"). Added `tests/__init__.py`
 for unambiguous pytest package imports. No functional code changes.
 
+### 2026-07-08 — Classroom and refinement release
+
+Eleven additive changes aimed at teaching use; no analytical outputs changed.
+
+**Educational layer** — `GLOSSARY` (21 plain-language term definitions) surfaced
+as a "Key terms on this page" popover per tab via `render_learning_aids()`,
+which also renders per-tab "Questions to investigate" expanders (2–3 curated
+prompts each). "Classroom examples" popover on the County Overview offers six
+pedagogically chosen counties. Methodology expanders now include the actual
+formulas (`st.latex`): per-capita rate and lag/severity ratio (Time Lag),
+wave significance score (Wave Analysis), OLS estimator and HC3 covariance
+(Statistical Modeling), and the Gi* statistic (map hotspot expander).
+
+**Interaction** — Clicking a county on the choropleth loads it into the County
+Overview (Plotly `on_select`; the selection is stashed in
+`_pending_overview_county` and consumed before widgets instantiate on the next
+run, with a re-processing guard). The Overview comparison table adds a **Peer
+Median** column — medians over the county's ten structural peers — alongside
+the national median. The Wave chart gains an optional national per-100k
+overlay (same smoothing window) for per-capita metrics.
+
+**Refinements** — Reporting corrections (dates where a cumulative source
+series decreased) are detected by new `tools.find_data_corrections()` and
+flagged as markers on the wave chart and daily comparison charts, closing
+roadmap item P3-B. Colorblind-safe palette toggle (Viridis) on the map.
+Shareable map URLs: `?metric=` and `?date=` seed the map widgets and stay in
+sync. First launch now narrates its 30–60 s load sequence in an `st.status`
+panel (subsequent reruns skip it). The sidebar date slider now sets only the
+map's initial date; the map's own slider governs thereafter.
+
+Tests: +1 (`find_data_corrections`), suite at 22.
+
 ### Change Log Policy
 
 Future changes should be appended to this section. Do not create new `*_SUMMARY.md`, `*_AUDIT.md`, `*_CHANGES.md`, `*_FIXES.md`, `*_NOTES.md`, `*_IMPLEMENTATION.md`, or similar documentation files.
@@ -358,7 +390,7 @@ Every finding below was re-verified against the current code. Statuses: **Fixed*
 | Roadmap P1-A…F | All complete | changelog 2026-06-15 |
 | Roadmap P2-A…H | All complete | changelog 2026-06-15 |
 | Roadmap P3-A, P3-C | Complete | disclosure notes; `mode='same'` |
-| Roadmap P3-B (surface data corrections) | Open by choice | clipping retained; revisit if corrections become a research question |
+| Roadmap P3-B (surface data corrections) | Fixed (2026-07-08) | `tools.find_data_corrections()`; correction markers on wave and comparison charts |
 | Roadmap P4-A, P4-B, P4-D, P4-E | Complete | modeling implementations, `tests/`, animated map, bundled GeoJSON |
 | Roadmap P4-C (`data_sources.py`) | Superseded | per-dataset loaders (`ahrf_loader`, `vaccination_loader`) + `add_external_dataset()` fill the role |
 
