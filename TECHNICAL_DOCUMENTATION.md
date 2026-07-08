@@ -40,7 +40,7 @@ The dashboard expects three local USAFacts datasets:
 
 The case and death datasets use a wide schema: `countyFIPS`, `County Name`, `State`, `StateFIPS`, followed by daily date columns in `YYYY-MM-DD` format. The population file contains county metadata and a `population` column.
 
-Data is loaded from the local `data/` directory. Runtime network download is intentionally not part of the application.
+Data is loaded from the local `data/` directory. Runtime network download of datasets is intentionally not part of the application; the single exception is the county boundary GeoJSON, which `tools.load_county_geojson()` fetches once and saves into `data/` if the bundled copy is missing, then reuses offline.
 
 ## 3. Data Processing Pipeline
 
@@ -164,17 +164,19 @@ Wave detail dictionaries use the key `"peak_value"` for the peak count (accurate
 
 `add_external_dataset()` supports merging additional county-level datasets by FIPS, optionally also requiring state matching. The module also provides `compute_bivariate_correlation()` (Pearson + Spearman with p-values), `compute_ols_trend()`, min-max normalization, z-score standardization, and `prepare_for_regression()` / `prepare_for_clustering()` helpers for external analysis workflows. Model fitting beyond simple OLS trends lives in `modeling.py` (see Section 15).
 
-## 10. Known Issues
+## 10. Known Issues and Accepted Limitations
 
-The USAFacts data includes statewide unallocated records and zero-population rows. These rows are retained in raw loaded data for traceability, but excluded from map rendering and per-capita lookup when they are not valid county geographies.
+These are the current, deliberate limitations of the platform. Each is either disclosed in the UI where it matters or inherent to county-level surveillance data. (Historical findings and their resolution status are catalogued in Section 13.0.)
 
-National per-capita rates are computed directly from raw cumulative counts (`compute_national_per_capita()` sums county counts, excluding statewide unallocated rows, and divides by total population). Any future national-rate work should follow the same raw-count aggregation pattern.
+**Data handling.** Statewide unallocated records and zero-population rows are retained in raw loaded data for traceability but excluded from maps, per-capita math, and national totals. Negative daily diffs (source-data corrections) are clipped to zero, which conceals the size of backfill events; cumulative analyses are unaffected. Per-capita rates use a single static population per county for the entire 2020–2023 period — a small systematic bias for high-growth counties.
 
-State map zoom uses approximate hardcoded centers and projection scales. It is sufficient for current visual filtering, but future work should use geographic bounds derived from county geometries.
+**Statistical methods.** Moving averages use `min_periods=1`, so the first window−1 values of any smoothed series draw on fewer points (disclosed in the lag and wave methodology expanders). Lag analysis matches peaks greedily in chronological order (not globally optimal) and treats missing days as zero before peak detection. The Index=100 comparison rebases each series at its own first non-zero value, so curves can start from different epidemic moments. All associations everywhere are county-level (ecological); individual-level inference is invalid.
 
-The validation audit samples counties randomly. It is useful for regression checks, but it is not a complete formal proof over every county/date combination.
+**Legacy wave path.** When the prominence-based detector is manually selected via Advanced controls, wave boundaries use the 10%-of-peak rule and can degenerate on short series (duration is floored at one day). The default region-based detector does not have this issue.
 
-Wave detection parameters are not calibrated by geography or reporting period. Small counties, sparse reporting, and data backfills may require different prominence thresholds.
+**Performance.** The startup moving-average precompute transposes full tables (acceptable at current data size). Computing wave metrics for all ~3,100 counties takes 60–90 seconds; it is user-triggered and cached for the session. The random-sample validation audit (`validation.py`) is a spot check, complemented by the deterministic suite in `tests/`.
+
+**Geography.** State map zoom uses approximate hardcoded centers and projection scales rather than bounds derived from geometry. County adjacency for hotspot analysis is derived from shared GeoJSON boundary vertices — coastal and island counties may have fewer neighbours than a Census adjacency file would give them.
 
 ## 11. Future Development
 
@@ -289,6 +291,24 @@ and friends) previously excluded the dataframe from their cache keys
 the state/region/metro filter could return stale results computed for a
 previous filter. The dataframe is now part of the cache key.
 
+### 2026-07-08 — Documentation ship-readiness review
+
+Re-verified every finding from the 2026-06-15 architecture audit against the
+current code and recorded the outcome in new Section 13.0 (Resolution Status):
+16 items Fixed, 3 Superseded by the v3 wave detector or bundled GeoJSON,
+2 By design (standalone validation), and the remainder Accepted limitations
+with UI disclosure. All Priority 1 and 2 roadmap items are complete; P3-B
+(surfacing data-correction events) remains open by choice; P4-C is superseded
+by the per-dataset loader modules.
+
+Section 10 rewritten as "Known Issues and Accepted Limitations" reflecting the
+current codebase. Corrected stale documentation claims: runtime downloads
+(the GeoJSON auto-fetch is now the documented single exception in Section 2
+and README), Section 15.3 imputation (numpy median, not SimpleImputer) and
+feature-importance description (impurity-based, not OOB), and Section 16.6
+outcome-data end date (July 2023, not "present"). Added `tests/__init__.py`
+for unambiguous pytest package imports. No functional code changes.
+
 ### Change Log Policy
 
 Future changes should be appended to this section. Do not create new `*_SUMMARY.md`, `*_AUDIT.md`, `*_CHANGES.md`, `*_FIXES.md`, `*_NOTES.md`, `*_IMPLEMENTATION.md`, or similar documentation files.
@@ -299,7 +319,50 @@ For user-facing changes, update `README.md`. For technical, architectural, valid
 
 ## 13. Full Architecture Audit (2026-06-15)
 
-This section records a complete audit of the codebase as it existed on 2026-06-15. The audit covers structure, data pipeline, choropleth, statistics, performance, code quality, research readiness, and documentation. No files were changed as part of this audit; findings are recommendations only.
+This section records a complete audit of the codebase **as it existed on 2026-06-15** and is retained as a historical record. The audit covers structure, data pipeline, choropleth, statistics, performance, code quality, research readiness, and documentation.
+
+### 13.0 Resolution Status (verified 2026-07-08)
+
+Every finding below was re-verified against the current code. Statuses: **Fixed** (code changed, most covered by `tests/`), **Superseded** (the design it criticized was replaced), **Accepted** (deliberate limitation, disclosed in Section 10 and/or the UI), **By design** (intended behavior of a standalone tool).
+
+| Finding | Status | Where |
+|---|---|---|
+| BR-1 national statewide double-count | Fixed | `compute_national_timeseries/daily` exclude FIPS 00000; `tests/test_tools.py` |
+| BR-2 hardcoded population column | Fixed | `validation.py` uses `get_population_column()` |
+| BR-3 negative daily values in lag | Fixed | `calculate_daily_changes` clips; explicit guard in `lag_analysis` |
+| BR-4 zero-duration waves | Superseded / mitigated | default detector is region-based; legacy path floors duration at 1 day |
+| BR-5 dead `pop_dict` session state | Fixed | removed |
+| BR-6 validation recomputes per-capita | By design | `validation.py` is an independent auditor; recomputation is the point |
+| BR-7 `peak_cases` key misnomer | Fixed | renamed `peak_value` everywhere |
+| BR-8 Section 7 described dead code | Fixed | rewritten for `lag_analysis.py` |
+| SR-1 `min_periods=1` early-window MAs | Accepted | disclosed in lag/wave methodology expanders |
+| SR-2 negative diffs silently zeroed | Accepted | disclosed; see Section 10 |
+| SR-3 static population denominator | Accepted | disclosed; see Section 10 |
+| SR-4 arbitrary 10% wave boundary | Superseded | v3 adaptive-baseline region detection (Section 8) |
+| SR-5 greedy lag peak matching | Accepted | disclosed in lag methodology expander |
+| SR-6 NaN→0 before peak detection | Accepted | documented in `lag_analysis.detect_peaks` |
+| SR-7 Index=100 baseline mismatch | Accepted | explained in the display-mode description |
+| SR-8 national per-capita round-trip | Fixed | computed from raw counts |
+| PR-1 row-wise population `apply` | Fixed | vectorized `(FIPS, State)` merge |
+| PR-2 transpose copies in MA precompute | Accepted | startup-only; documented in docstring |
+| PR-3 uncached choropleth prep | Fixed | `get_choropleth_data` cached |
+| PR-4 validation recomputation cost | By design | standalone diagnostic runner |
+| PR-5 `iterrows` in all-county waves | Accepted | user-triggered, cached, 60–90 s warning shown in UI |
+| PR-6 GeoJSON CDN dependency | Fixed | bundled with one-time auto-download |
+| RISK-1 national totals | Fixed | see BR-1 |
+| RISK-2 wave index mapping fragility | Mitigated | `mode='same'` everywhere; deterministic wave tests |
+| RISK-3 `(FIPS, State)` join discipline | Mitigated | dead FIPS-only dict removed; join math regression-tested |
+| RISK-4 silent analytics stubs | Resolved | stubs replaced with real implementations (`modeling.py`, `county_features.py`) |
+| RISK-5 early-pandemic MA reliability | Accepted | disclosure in UI; see SR-1 |
+| RISK-6 CDN outage blanks the map | Fixed | see PR-6 |
+| Roadmap P1-A…F | All complete | changelog 2026-06-15 |
+| Roadmap P2-A…H | All complete | changelog 2026-06-15 |
+| Roadmap P3-A, P3-C | Complete | disclosure notes; `mode='same'` |
+| Roadmap P3-B (surface data corrections) | Open by choice | clipping retained; revisit if corrections become a research question |
+| Roadmap P4-A, P4-B, P4-D, P4-E | Complete | modeling implementations, `tests/`, animated map, bundled GeoJSON |
+| Roadmap P4-C (`data_sources.py`) | Superseded | per-dataset loaders (`ahrf_loader`, `vaccination_loader`) + `add_external_dataset()` fill the role |
+
+No files were changed as part of the original audit; findings were recommendations only.
 
 ---
 
@@ -1042,7 +1105,7 @@ All model fitting is wrapped in `@st.cache_data` in `app.py` so expensive comput
 sklearn.ensemble.RandomForestRegressor(n_estimators=200, random_state=42)
 ```
 
-Missing feature values are imputed with column-wise medians (`sklearn.impute.SimpleImputer`) before fitting. The model trains on the full filtered dataset in one pass (no cross-validation — importance is computed from in-bag OOB samples).
+Missing feature values are imputed with column-wise medians (`modeling._impute_median`, numpy) before fitting. The model trains on the full filtered dataset in one pass; the reported importances are scikit-learn's impurity-based `feature_importances_` (no cross-validation).
 
 **Fallback (scikit-learn not installed):** Substitutes `|Pearson r|` as a linear importance proxy. The `Method` column in the output table identifies which was used.
 
@@ -1220,7 +1283,7 @@ For wave overlays and vaccination comparison charts, the full `vax_ts_df` is pas
 
 ### 16.6 Temporal Interpretation Cautions
 
-Vaccination data (Dec 2020 – May 2023) and COVID outcome data (Jan 2020 – present) overlap for approximately 2.5 years. Several analytical cautions apply:
+Vaccination data (Dec 2020 – May 2023) and COVID outcome data (Jan 2020 – Jul 2023) overlap for approximately 2.5 years. Several analytical cautions apply:
 
 **Static snapshot vs dynamic:** The master county table uses the *final* vaccination rate (as of May 2023). This is appropriate for asking "did higher eventual vaccination associate with lower cumulative mortality?" but is inappropriate for causal claims about early-pandemic outcomes (when vaccination was zero for everyone).
 

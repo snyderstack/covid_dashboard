@@ -28,7 +28,7 @@ Developed at Gettysburg College for public-health analysis, coursework, and expl
 | HRSA Area Health Resources Files | `data/ahrf2023.csv` (primary), `data/AHRF2020.asc`, `data/AHRF_2020-2021_SAS/AHRF2021.sas7bdat` (supplementary) | 2018 – 2023 vintages |
 | CDC county vaccination | `data/COVID-19_Vaccinations_in_the_United_States,County_20260623.csv` | Dec 2020 – May 2023 |
 
-All datasets are read from the local `data/` directory; nothing is downloaded at runtime. All joins use five-character zero-padded county FIPS codes (with `(countyFIPS, State)` compound keys where duplicate FIPS rows exist).
+All datasets are read from the local `data/` directory; no dataset is downloaded at runtime (the small county boundary file described below is the single exception). All joins use five-character zero-padded county FIPS codes (with `(countyFIPS, State)` compound keys where duplicate FIPS rows exist).
 
 The USAFacts CSVs and `ahrf2023.csv` are included in the repository, so the dashboard runs immediately after cloning. Larger files (the CDC vaccination CSV and supplementary AHRF releases) exceed GitHub size limits and must be downloaded separately — see `data/README.md` for sources and exact paths. The dashboard degrades when they are absent: vaccination features are hidden and AHRF falls back to the primary 2023 CSV.
 
