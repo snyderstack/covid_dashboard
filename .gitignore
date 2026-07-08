@@ -9,6 +9,9 @@ venv/
 data/ahrf2021.asc
 data/ahrf2022.asc
 
+# Data supplement archive — distributed via GitHub Releases, never committed
+covid_data_supplement.zip
+
 # Large / supplementary data — download separately (see data/README.md)
 data/COVID-19_Vaccinations_in_the_United_States,County_20260623.csv
 data/AHRF_2020-2021_SAS/
