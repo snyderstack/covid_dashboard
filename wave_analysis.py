@@ -66,8 +66,14 @@ SENSITIVITY_PRESETS: Dict[str, Dict] = {
 
         # Within-region valley splitting — separates distinct epidemic events
         # that share a continuously-elevated baseline (e.g., Delta vs Omicron).
-        # Split when valley < (1 - valley_split_pct) × min(left_peak, right_peak).
-        "valley_split_pct":       0.30,  # only split at very deep valleys (→ fewer waves)
+        # Split when valley < (1 − valley_split_pct) × min(left_peak, right_peak),
+        # so a HIGHER value demands a DEEPER valley and yields FEWER splits.
+        "valley_split_pct":       0.75,  # valley must fall below 25% of the lower peak
+
+        # Peak significance: a wave's smoothed peak must exceed its local
+        # baseline by this multiple of the elevation threshold, or the region
+        # is discarded as a low-signal plateau rather than a wave.
+        "peak_significance_mult": 3.5,
 
         # Wave onset refinement
         "onset_lookback":         42,    # days to search backward for true onset
@@ -88,7 +94,9 @@ SENSITIVITY_PRESETS: Dict[str, Dict] = {
         "min_region_duration":    14,
         "region_merge_gap":       35,
 
-        "valley_split_pct":       0.40,  # split at moderate valleys (Delta/Omicron-type)
+        "valley_split_pct":       0.60,  # valley must fall below 40% of the lower peak
+
+        "peak_significance_mult": 2.5,
 
         "onset_lookback":         28,
 
@@ -106,7 +114,9 @@ SENSITIVITY_PRESETS: Dict[str, Dict] = {
         "min_region_duration":     7,
         "region_merge_gap":       21,
 
-        "valley_split_pct":       0.55,  # split at shallower valleys (→ more waves)
+        "valley_split_pct":       0.45,  # valley below 55% of the lower peak (→ more splits)
+
+        "peak_significance_mult": 1.5,
 
         "onset_lookback":         14,
 
@@ -350,8 +360,10 @@ def _refine_region_onset(
 def _split_regions_at_valleys(
     regions: List[Tuple[int, int]],
     smoothed: np.ndarray,
-    valley_split_pct: float = 0.40,
+    baseline: np.ndarray,
+    valley_split_pct: float = 0.60,
     min_sub_duration: int = 14,
+    threshold_abs: float = 2.0,
 ) -> List[Tuple[int, int]]:
     """
     Split epidemic regions that contain multiple distinct sub-waves.
@@ -362,28 +374,38 @@ def _split_regions_at_valleys(
     between these surges stayed chronically elevated). This function identifies
     and splits such regions by locating deep internal valleys.
 
-    A valley between two sub-peaks triggers a split when:
-        valley_min < (1 - valley_split_pct) × min(left_peak, right_peak)
+    All heights are measured in ELEVATION space — smoothed value minus the
+    adaptive local baseline — which makes the test scale-free at both extremes:
+    a high-burden county's chronic endemic floor no longer inflates its peaks,
+    and a low-count county's noise bumps no longer look proportionally deep.
 
-    This is the inverse of valley-depth merging: where merging says "join if
-    the valley is too shallow", splitting says "divide if the valley is deep
-    enough to indicate a true inter-wave trough". The asymmetric design
-    (merge gap used for proximity, valley depth used for distinctness) prevents
-    bimodal intra-wave surges (e.g., BA.1/BA.2) from being over-split while
-    still separating genuinely distinct waves (e.g., Delta vs Omicron).
+    A valley between two sub-peaks triggers a split only when ALL THREE hold:
 
-    Sub-peaks are identified as window-maximum points within the smoothed
-    signal — local maxima that dominate their surroundings over at least
-    min_sub_duration // 2 days and exceed 10% of the region's global maximum.
+        relative:  valley_elev < (1 − valley_split_pct) × min(left_elev, right_elev)
+        absolute:  min(left_elev, right_elev) − valley_elev ≥ 2 × threshold_abs
+        sustained: elevation stays below the relative split level for at least
+                   min_trough_days consecutive days between the two sub-peaks
+
+    The sustained-trough test is the decisive one. Reporting noise produces
+    dips that are deep but last only days; a genuine inter-wave trough (e.g.,
+    the Oct–Nov 2021 lull between Delta and Omicron) persists for weeks. Test
+    counties without it: a two-envelope rural county shredded into 11 "waves";
+    with it, splits occur only at real epidemiological boundaries.
+
+    Sub-peaks must dominate a ±(min_sub_duration // 2)-day window, rise at
+    least max(10% of the region's maximum elevation, 3 × threshold_abs) above
+    baseline, and be at least min_sub_duration days apart.
     """
     if valley_split_pct <= 0 or not regions:
         return regions
 
     result: List[Tuple[int, int]] = []
     hw = max(min_sub_duration // 2, 3)
+    min_trough_days = max(min_sub_duration, 10)
+    elevation_full = smoothed - baseline
 
     for s, e in regions:
-        region  = smoothed[s: e + 1]
+        region  = elevation_full[s: e + 1]
         n_reg   = len(region)
 
         if n_reg < min_sub_duration * 2 + 1:
@@ -391,21 +413,26 @@ def _split_regions_at_valleys(
             continue
 
         region_max = float(np.max(region))
-        sig_floor  = region_max * 0.10   # sub-peaks must exceed 10% of region max
+        # Relative part keeps Delta-sized sub-peaks visible next to Omicron in
+        # high-burden counties; absolute part stops single-digit noise bumps
+        # from counting as sub-peaks in low-count counties.
+        sig_floor  = max(region_max * 0.10, threshold_abs * 3.0)
 
-        # Locate significant local peaks: window-maximum over ±hw days
+        # Locate significant local peaks: window-maximum over ±hw days,
+        # spaced at least one minimum sub-wave duration apart
         peak_idxs: List[int] = []
         for i in range(hw, n_reg - hw):
             lo, hi = max(0, i - hw), min(n_reg, i + hw + 1)
             if region[i] == float(np.max(region[lo:hi])) and region[i] > sig_floor:
-                if not peak_idxs or (i - peak_idxs[-1]) >= hw:
+                if not peak_idxs or (i - peak_idxs[-1]) >= min_sub_duration:
                     peak_idxs.append(i)
 
         if len(peak_idxs) < 2:
             result.append((s, e))
             continue
 
-        # Walk consecutive peak pairs; split at deep valleys
+        # Walk consecutive peak pairs; split at valleys that are deep both
+        # relatively and absolutely (in elevation-above-baseline terms)
         sub_start = s
 
         for j in range(len(peak_idxs) - 1):
@@ -413,12 +440,24 @@ def _split_regions_at_valleys(
             pk2_loc = peak_idxs[j + 1]
 
             valley_slice   = region[pk1_loc: pk2_loc + 1]
-            valley_min     = float(valley_slice.min())
+            valley_elev    = float(valley_slice.min())
             split_at_local = pk1_loc + int(np.argmin(valley_slice))
             split_at_abs   = s + split_at_local
 
-            lower_peak = min(float(region[pk1_loc]), float(region[pk2_loc]))
-            if valley_min < lower_peak * (1.0 - valley_split_pct):
+            lower_elev = min(float(region[pk1_loc]), float(region[pk2_loc]))
+            split_level = lower_elev * (1.0 - valley_split_pct)
+            deep_rel = valley_elev < split_level
+            deep_abs = (lower_elev - valley_elev) >= 2.0 * threshold_abs
+
+            # Sustained trough: longest consecutive run below the split level
+            below = valley_slice < split_level
+            longest_run = run = 0
+            for flag in below:
+                run = run + 1 if flag else 0
+                longest_run = max(longest_run, run)
+            sustained = longest_run >= min_trough_days
+
+            if deep_rel and deep_abs and sustained:
                 left_dur = split_at_abs - sub_start + 1
                 if left_dur >= min_sub_duration:
                     result.append((sub_start, split_at_abs))
@@ -602,9 +641,10 @@ def find_waves(
         # Handles counties where transmission between distinct surges (e.g., Delta
         # and Omicron) stayed continuously elevated, preventing a clean region gap.
         raw_regions = _split_regions_at_valleys(
-            raw_regions, smoothed,
+            raw_regions, smoothed, baseline,
             valley_split_pct  = preset["valley_split_pct"],
             min_sub_duration  = preset["min_region_duration"],
+            threshold_abs     = preset["elevation_threshold_abs"],
         )
         diagnostics["epidemic_regions"] = len(raw_regions)
 
@@ -628,8 +668,15 @@ def find_waves(
             peak_local = int(np.argmax(region_slice))
             peak_idx   = refined_s + peak_local
 
-            raw_val    = daily_values[peak_idx]
-            peak_value = float(raw_val) if not np.isnan(raw_val) else float(smoothed[peak_idx])
+            # Peak value: the raw count on the smoothed-peak day. When that
+            # lands on a zero-reporting day (weekends, batch uploads) — which
+            # previously produced waves displaying "peak = 0" — fall back to
+            # the smoothed value, which represents the true daily rate there.
+            raw_val = daily_values[peak_idx]
+            if not np.isnan(raw_val) and raw_val > 0:
+                peak_value = float(raw_val)
+            else:
+                peak_value = float(smoothed[peak_idx])
 
             waves.append({
                 "peak_index":  peak_idx,
@@ -638,16 +685,37 @@ def find_waves(
                 "end_index":   e,
             })
 
-        diagnostics["onset_refined"]             = True
-        diagnostics["merge_applied_in_detection"] = True
-        diagnostics["candidate_peaks"]           = len(waves)
-        diagnostics["after_width_filter"]        = len(waves)
-        diagnostics["after_valley_merge"]        = len(waves)
-        diagnostics["final_waves"]               = len(waves)
-
-        # Audit log: one entry per wave/region in a format compatible with the UI
-        audit_log = []
+        # Step 4: peak-significance filter. A region can clear the elevation
+        # threshold for weeks while its peak barely rises above baseline — a
+        # low-signal plateau, not a wave. Require the smoothed peak to exceed
+        # the local baseline by a preset multiple of the elevation threshold.
+        # This is the guard that keeps small-count rural counties from
+        # reporting a dozen "waves" of statistical noise.
+        peak_mult = preset["peak_significance_mult"]
+        kept: List[Dict] = []
+        dropped: List[Dict] = []
         for w in waves:
+            idx = w["peak_index"]
+            elevation = float(smoothed[idx] - baseline[idx])
+            required  = peak_mult * (
+                baseline[idx] * preset["elevation_threshold_rel"]
+                + preset["elevation_threshold_abs"]
+            )
+            (kept if elevation >= required else dropped).append(w)
+
+        diagnostics["onset_refined"]              = True
+        diagnostics["merge_applied_in_detection"] = True
+        diagnostics["candidate_peaks"]            = len(waves)
+        diagnostics["after_width_filter"]         = len(waves)
+        diagnostics["after_valley_merge"]         = len(waves)
+        diagnostics["insignificant_dropped"]      = len(dropped)
+        diagnostics["final_waves"]                = len(kept)
+
+        # Audit log: one entry per candidate region (kept and dropped),
+        # in a format compatible with the diagnostics UI
+        audit_log = []
+        for w, removed_by in [(w, None) for w in kept] + \
+                             [(w, "significance_filter") for w in dropped]:
             idx = w["peak_index"]
             v   = float(smoothed[idx])
             audit_log.append({
@@ -656,12 +724,13 @@ def find_waves(
                 "pct_of_max":    round(min(v / signal_max, 1.0) * 100, 1),
                 "fwhm_days":     w["end_index"] - w["start_index"],
                 "eff_min_width": preset["min_region_duration"],
-                "width_pass":    True,
-                "removed_by":    None,
+                "width_pass":    removed_by is None,
+                "removed_by":    removed_by,
             })
+        audit_log.sort(key=lambda entry: entry["peak_index"])
         diagnostics["peak_audit_log"] = audit_log
 
-        return waves, diagnostics
+        return kept, diagnostics
 
     # Legacy prominence-based path (sensitivity=None)
 

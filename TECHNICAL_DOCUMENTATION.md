@@ -341,6 +341,52 @@ map's initial date; the map's own slider governs thereafter.
 
 Tests: +1 (`find_data_corrections`), suite at 22.
 
+### 2026-07-08 — Wave detection robustness (v3.1)
+
+User-reported defect: low-population counties produced implausible wave counts
+(Abbeville County, SC: 15 "waves" at Standard sensitivity, most of them noise
+blips), and the per-wave legend entries overflowed into the chart title.
+Instrumentation showed region detection was sound (Abbeville: exactly 2
+epidemic envelopes) — the within-region valley splitter caused the explosion
+(2 regions → 11 waves; Miami-Dade 4 → 24).
+
+Three detector changes in `wave_analysis.py`:
+
+1. **Inverted preset bug fixed.** `valley_split_pct` values were inverted
+   relative to intent: with the split condition
+   `valley < (1 − pct) × lower_peak`, Conservative (0.30) split *more*
+   eagerly than Sensitive (0.55). Values corrected to 0.75 / 0.60 / 0.45
+   (conservative / standard / sensitive) and comments rewritten.
+
+2. **Valley splitting hardened.** All depth tests now run in elevation space
+   (smoothed minus adaptive baseline), making them scale-free for both
+   high-burden endemic counties and low-count rural ones. A split now
+   requires relative depth AND absolute depth (≥ 2× the absolute elevation
+   threshold) AND a **sustained trough** — elevation must stay below the
+   split level for at least `min_region_duration` consecutive days. The
+   sustained-trough test is the decisive discriminator: reporting noise dips
+   for days, real inter-wave troughs (Delta→Omicron) persist for weeks.
+   Sub-peaks must clear max(10% of region max elevation, 3× absolute
+   threshold) and be a minimum sub-wave duration apart.
+
+3. **Peak-significance filter added.** A region whose smoothed peak rises
+   less than `peak_significance_mult` (3.5 / 2.5 / 1.5 by preset) times the
+   elevation threshold above its local baseline is discarded as a low-signal
+   plateau. Dropped candidates appear in the diagnostics audit log as
+   "Removed — below significance floor".
+
+Also fixed: waves displaying "peak = 0" when the smoothed argmax landed on a
+zero-reporting day (falls back to the smoothed rate), and the wave chart no
+longer emits per-wave legend entries (peaks are labelled on-chart), which
+eliminates the legend-overflow at any wave count.
+
+Reference-county results at Standard (before → after): Abbeville SC 15 → 4,
+Miami-Dade FL 15 → 6, King WA ~10 → 6, Los Angeles CA 8 → 4, Cook IL 8 → 5,
+Loving TX 1 → 0 (no epidemiologically significant wave — correct for a
+population of 64). All presets now land in their documented ranges.
+Tests: +2 (low-count noise regression; sustained-trough split vs brief-dip
+non-split), suite at 24.
+
 ### Change Log Policy
 
 Future changes should be appended to this section. Do not create new `*_SUMMARY.md`, `*_AUDIT.md`, `*_CHANGES.md`, `*_FIXES.md`, `*_NOTES.md`, `*_IMPLEMENTATION.md`, or similar documentation files.

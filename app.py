@@ -4018,7 +4018,10 @@ def render_wave_tab(cases_df, deaths_df, transforms, locations, population_df, v
                 f"Duration:   {wave['duration_days']} days<br>"
                 f"Burden:     {burden:{hover_fmt}}<extra></extra>"
             ),
-            showlegend=True,
+            # Peaks are labelled on-chart (W1, W2, …); per-wave legend entries
+            # only duplicated those labels and overflowed the legend into the
+            # title whenever many waves were detected.
+            showlegend=False,
         ))
 
         # Start / end triangle markers at y=0
@@ -4252,11 +4255,12 @@ def render_wave_tab(cases_df, deaths_df, transforms, locations, population_df, v
                 _min_dur = _e.get("eff_min_width", "—")
                 _removed = _e.get("removed_by") or "kept"
                 _status  = {
-                    "kept":           "Kept",
-                    "width_filter":   "Removed — width filter",
-                    "valley_merge":   "Merged — valley",
-                    "distance_merge": "Merged — distance",
-                    "date_merge":     "Merged — date",
+                    "kept":                "Kept",
+                    "width_filter":        "Removed — width filter",
+                    "valley_merge":        "Merged — valley",
+                    "distance_merge":      "Merged — distance",
+                    "date_merge":          "Merged — date",
+                    "significance_filter": "Removed — below significance floor",
                 }.get(_removed, _removed)
                 _val_fmt = f"{_val:.2f}" if is_percap_metric else f"{_val:,.0f}"
                 _audit_rows.append({
@@ -4336,13 +4340,19 @@ def render_wave_tab(cases_df, deaths_df, transforms, locations, population_df, v
    the local baseline by **+{_elev_rel}% + {_elev_abs:.0f} cases/day** for ≥ **{_min_reg} consecutive days**.
    Nearby elevated periods separated by ≤ **{_reg_gap} days** are merged into one region
    (one continuous epidemic envelope — e.g., the BA.1/BA.2 sub-waves of Omicron).
-4. **Wave onset refinement** — each region's start is walked back up to **{_onset_lb} days** using
+4. **Valley splitting** — a merged region spanning two genuinely distinct surges (e.g.,
+   Delta and Omicron) is split only at valleys that are deep **relative to the flanking
+   peaks**, deep in **absolute** terms, and **sustained** (elevation stays low for weeks,
+   not days). All three tests run on elevation above the local baseline, so reporting
+   noise in small counties cannot masquerade as an inter-wave trough.
+5. **Wave onset refinement** — each region's start is walked back up to **{_onset_lb} days** using
    slope analysis to capture the rising phase before the signal crosses the elevation threshold.
-   This is typically 1–3 weeks earlier than the threshold crossing.
-5. **Peak assignment** — the dominant smoothed value within each epidemic region is the
-   wave peak. A bimodal shape within one region is one wave (one epidemic envelope).
-6. **Significance score** — each wave is scored 0–100 combining prominence (30%), total
-   burden (30%), duration (20%), and burst intensity (20%), ranking waves by
+6. **Peak significance filter** — a region whose peak barely rises above baseline
+   (below a preset multiple of the elevation threshold) is discarded as a low-signal
+   plateau rather than reported as a wave. Dropped candidates appear in the Detection
+   Diagnostics log.
+7. **Significance score** — each surviving wave is scored 0–100 combining prominence (30%),
+   total burden (30%), duration (20%), and burst intensity (20%), ranking waves by
    epidemiological importance rather than simply peak height.
 
 **Sensitivity presets**

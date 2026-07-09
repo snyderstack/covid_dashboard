@@ -37,6 +37,47 @@ def test_region_detection_finds_two_waves():
     assert sig[max(sig)] > sig[min(sig)]
 
 
+def test_low_count_noise_is_not_shredded_into_waves():
+    # Regression test for the Abbeville County failure mode: a small county
+    # whose winter surge is a single noisy envelope of ~2-8 daily cases must
+    # not be split into many "waves" by proportionally-deep noise dips.
+    rng = np.random.default_rng(11)
+    n = 500
+    x = np.arange(n, dtype=float)
+    envelope = 6 * np.exp(-((x - 250) ** 2) / (2 * 60 ** 2))   # one broad surge
+    values = np.clip(rng.poisson(np.maximum(envelope, 0.05)).astype(float), 0, None)
+    dates = pd.date_range("2020-06-01", periods=n)
+    metrics = calculate_wave_metrics(values, dates, ma_window=5,
+                                     sensitivity="standard")
+    assert metrics["number_of_waves"] <= 2   # one envelope, at most one artifact
+
+
+def test_distinct_surges_detected_but_brief_dips_not_split():
+    # Two sharp surges over a chronic floor with a sustained trough between
+    # them must yield two waves (the Delta→Omicron pattern)...
+    x = np.arange(500, dtype=float)
+    dates = pd.date_range("2021-01-01", periods=len(x))
+    surge1 = 300 * np.exp(-((x - 150) ** 2) / (2 * 15 ** 2))
+    surge2 = 500 * np.exp(-((x - 260) ** 2) / (2 * 12 ** 2))
+    values = surge1 + surge2 + 40.0
+    metrics = calculate_wave_metrics(values, dates, ma_window=7,
+                                     sensitivity="standard")
+    assert metrics["number_of_waves"] == 2
+    peaks = sorted(w["peak_date"] for w in metrics["waves"])
+    assert abs((peaks[0] - dates[150]).days) <= 10
+    assert abs((peaks[1] - dates[260]).days) <= 10
+
+    # ...but the same two peaks bridged by a high plateau with only a brief
+    # 5-day dip must remain a single epidemic envelope, not two waves.
+    surge2b = 500 * np.exp(-((x - 240) ** 2) / (2 * 12 ** 2))
+    bridge = np.where((x >= 150) & (x <= 240), 260.0, 0.0)
+    merged = np.maximum(surge1 + surge2b, bridge) + 40.0
+    merged[193:198] = 60.0
+    metrics2 = calculate_wave_metrics(merged, dates, ma_window=7,
+                                      sensitivity="standard")
+    assert metrics2["number_of_waves"] == 1
+
+
 def test_significance_scores_bounded():
     waves = [
         {"peak_value": 100.0, "duration_days": 60, "wave_burden": 3000.0},
