@@ -492,6 +492,17 @@ st.markdown("""
     font-variant-numeric: tabular-nums;
 }
 
+/* st.subheader (used where a heading needs a help tooltip) — match the
+   .stMarkdown h4 style so both heading forms look identical inside tabs */
+[data-testid="stHeading"] h3 {
+    font-size: 1rem !important;
+    font-weight: 700 !important;
+    color: var(--navy-mid) !important;
+    margin: 0.4rem 0 0.35rem 0 !important;
+    padding-bottom: 0.45rem !important;
+    letter-spacing: -0.01em !important;
+}
+
 /* Markdown sub-headers inside tabs */
 .stMarkdown h4 {
     font-size: 1rem;
@@ -3239,7 +3250,16 @@ County-level (ecological) statistics — not individual-level or causal estimate
 </body></html>"""
 
 def _render_lag_chart(location_label, results, summary, lag_ma_window):
-    """Render the dual-axis cases/deaths chart with annotated matched peaks."""
+    """
+    Render the dual-axis cases/deaths chart with matched peaks.
+
+    Presentation notes: each matched pair is shown as a translucent band
+    spanning case peak → death peak rather than as vertical lines with
+    top-of-chart lag brackets — with many pairs, the old per-pair overlays
+    (2 dashed lines + connector + label each) collided with one another,
+    the legend, and the title. Lag labels are drawn only when few pairs
+    exist; hover and the pairs table always carry the exact values.
+    """
     cases_ts    = results["cases_ts"]
     deaths_ts   = results["deaths_ts"]
     case_peaks  = results["case_peaks"]
@@ -3249,14 +3269,14 @@ def _render_lag_chart(location_label, results, summary, lag_ma_window):
     fig = go.Figure()
     fig.add_trace(go.Scatter(
         x=cases_ts["Date"], y=cases_ts["Per100k MA"],
-        name=f"New Cases /100k ({lag_ma_window}-day MA)", mode="lines",
-        line=dict(color=NATIONAL_COLOR, width=2), yaxis="y",
+        name="New Cases /100k", mode="lines",
+        line=dict(color=NATIONAL_COLOR, width=2.2), yaxis="y",
         hovertemplate="Date: %{x|%Y-%m-%d}<br>Cases/100k: %{y:.2f}<extra></extra>",
     ))
     fig.add_trace(go.Scatter(
         x=deaths_ts["Date"], y=deaths_ts["Per100k MA"],
-        name=f"New Deaths /100k ({lag_ma_window}-day MA)", mode="lines",
-        line=dict(color="#c41e3a", width=2), yaxis="y2",
+        name="New Deaths /100k", mode="lines",
+        line=dict(color="rgba(196,30,58,0.75)", width=1.5), yaxis="y2",
         hovertemplate="Date: %{x|%Y-%m-%d}<br>Deaths/100k: %{y:.3f}<extra></extra>",
     ))
 
@@ -3275,8 +3295,8 @@ def _render_lag_chart(location_label, results, summary, lag_ma_window):
         fig.add_trace(go.Scatter(
             x=cp_dates, y=cp_values, name="Case Peaks", mode="markers",
             marker=dict(color=["#1a3d6d" if m else "#9fb3d1" for m in cp_matched],
-                        size=[12 if m else 9 for m in cp_matched],
-                        symbol="diamond", line=dict(color="white", width=1.5)),
+                        size=[10 if m else 7 for m in cp_matched],
+                        symbol="diamond", line=dict(color="white", width=1)),
             yaxis="y", customdata=cp_custom,
             hovertemplate=(
                 "<b>Case Peak</b><br>Peak Date: %{customdata[0]}<br>"
@@ -3295,8 +3315,8 @@ def _render_lag_chart(location_label, results, summary, lag_ma_window):
         fig.add_trace(go.Scatter(
             x=dp_dates, y=dp_values, name="Death Peaks", mode="markers",
             marker=dict(color=["#7a0f1f" if m else "#e3a8b1" for m in dp_matched],
-                        size=[12 if m else 9 for m in dp_matched],
-                        symbol="star", line=dict(color="white", width=1.5)),
+                        size=[10 if m else 7 for m in dp_matched],
+                        symbol="star", line=dict(color="white", width=1)),
             yaxis="y2", customdata=dp_custom,
             hovertemplate=(
                 "<b>Death Peak</b><br>Peak Date: %{customdata[0]}<br>"
@@ -3305,43 +3325,58 @@ def _render_lag_chart(location_label, results, summary, lag_ma_window):
             ),
         ))
 
+    # Matched pairs: one translucent band per pair spanning case peak → death
+    # peak. Lag labels are drawn only when they can't collide (few pairs).
     shapes, annotations = [], []
+    show_lag_labels = len(matches) <= 8
     for _, row in matches.iterrows():
         c_date = row["case_peak_date"]
         d_date = row["death_peak_date"]
         lag    = int(row["lag_days"])
-        shapes.extend([
-            dict(type="line", xref="x", yref="paper", x0=c_date, x1=c_date, y0=0, y1=1,
-                 line=dict(color=NATIONAL_COLOR, width=1, dash="dot"), opacity=0.4),
-            dict(type="line", xref="x", yref="paper", x0=d_date, x1=d_date, y0=0, y1=1,
-                 line=dict(color="#c41e3a", width=1, dash="dot"), opacity=0.4),
-            dict(type="line", xref="x", yref="paper", x0=c_date, x1=d_date, y0=1.04, y1=1.04,
-                 line=dict(color="#555555", width=1.5)),
-        ])
-        mid_date = c_date + (d_date - c_date) / 2
-        annotations.append(dict(
-            x=mid_date, y=1.08, xref="x", yref="paper",
-            text=f"Lag: {lag}d", showarrow=False, font=dict(size=10, color="#333333"),
+        shapes.append(dict(
+            type="rect", xref="x", yref="paper",
+            x0=c_date, x1=d_date, y0=0, y1=1,
+            fillcolor="rgba(242,106,33,0.07)", line_width=0, layer="below",
         ))
+        if show_lag_labels:
+            mid_date = c_date + (d_date - c_date) / 2
+            annotations.append(dict(
+                x=mid_date, y=1.02, xref="x", yref="paper",
+                text=f"{lag}d", showarrow=False,
+                font=dict(size=10, color="#64707F"),
+            ))
 
     fig.update_layout(
-        title=(
-            f"<b>New Cases vs New Deaths per 100k — {location_label}</b>"
-            f"<br><sub>{lag_ma_window}-day MA · {summary['n_matched']} matched peak pair(s)</sub>"
+        title=dict(
+            text=(
+                f"<b>New Cases vs New Deaths per 100k — {location_label}</b>"
+                f"<br><sub>{lag_ma_window}-day MA · {summary['n_matched']} matched peak pair(s) · "
+                "shaded bands span case peak → death peak</sub>"
+            ),
+            y=0.97, yanchor="top",
         ),
         xaxis=dict(title="Date", showgrid=True, gridcolor="rgba(200,200,200,0.3)"),
         yaxis=dict(title=dict(text="New Cases per 100k",   font=dict(color=NATIONAL_COLOR)),
                    side="left",  tickfont=dict(color=NATIONAL_COLOR),
-                   showgrid=True, gridcolor="rgba(200,200,200,0.3)"),
+                   showgrid=True, gridcolor="rgba(200,200,200,0.3)", rangemode="tozero"),
         yaxis2=dict(title=dict(text="New Deaths per 100k", font=dict(color="#c41e3a")),
-                    side="right", overlaying="y", tickfont=dict(color="#c41e3a"), showgrid=False),
+                    side="right", overlaying="y", tickfont=dict(color="#c41e3a"),
+                    showgrid=False, rangemode="tozero"),
         shapes=shapes, annotations=annotations,
-        hovermode="closest", height=600, margin=dict(t=100), template="plotly_white",
-        legend=dict(orientation="h", yanchor="bottom", y=1.12, xanchor="left", x=0,
-                    bgcolor="rgba(255,255,255,0.85)"),
+        hovermode="closest", height=640,
+        margin=dict(t=118, b=55, l=60, r=60),
+        template="plotly_white",
+        legend=dict(orientation="h", yanchor="bottom", y=1.06, xanchor="right", x=1,
+                    bgcolor="rgba(255,255,255,0.9)", font=dict(size=10)),
         font=dict(family="sans-serif", size=11),
     )
     st.plotly_chart(fig, use_container_width=True)
+    if not show_lag_labels and not matches.empty:
+        st.caption(
+            f"{len(matches)} matched pairs — individual lag labels are hidden at this "
+            "density to keep the chart readable. Hover any peak marker for its exact "
+            "lag, or see the full list in the pairs table below."
+        )
 
 def _render_lag_summary_metrics(summary, population):
     """Render the KPI metric row for a single county's lag results."""
@@ -3354,7 +3389,14 @@ def _render_lag_summary_metrics(summary, population):
             if pd.notna(summary["min_lag"]) and pd.notna(summary["max_lag"]) else "N/A"
         )
         st.metric("Lag Range", lag_range)
-    with s4: st.metric("Matched Pairs", summary["n_matched"])
+    with s4:
+        st.metric(
+            "Matched Pairs", summary["n_matched"],
+            help="Case peaks that were successfully paired with a death peak "
+                 "occurring within the lag window after them. Each pair lets us "
+                 "measure how many days deaths trailed behind that surge in "
+                 "infections. Peaks with no partner within the window stay unmatched.",
+        )
     with s5:
         sr = summary.get("mean_severity_ratio")
         st.metric(
@@ -3367,7 +3409,13 @@ def _render_lag_summary_metrics(summary, population):
 
 def _render_lag_pairs_table(matches):
     """Render the matched case→death peak pairs table with severity ratio column."""
-    st.markdown("#### Matched Case → Death Peak Pairs")
+    st.subheader(
+        "Matched Case → Death Peak Pairs",
+        help="Each row is a surge in cases that was followed by a surge in deaths "
+             "within the allowed time window. 'Lag' is the number of days between "
+             "the two peaks — a plain-language estimate of how long it took for a "
+             "wave of infections to translate into deaths in this county.",
+    )
     if not matches.empty:
         display = matches.copy()
         display["Severity Ratio"] = (

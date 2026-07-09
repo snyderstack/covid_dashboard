@@ -422,6 +422,30 @@ Result (LA, Standard, 5-day MA): Wave 1 now 2020-11-02 → 2021-02-11;
 Abbeville's winter wave 2020-11-17 → 2021-03-27. Regression test added
 (surge boundaries must exclude a long low lead-in); suite at 25.
 
+### 2026-07-09 — Time Lag Analysis presentation refresh
+
+Presentation-only change to `_render_lag_chart`, `_render_lag_summary_metrics`,
+and `_render_lag_pairs_table` in app.py; peak detection, matching, lag math,
+and all summary statistics are untouched (verified by diff — no analysis
+module modified).
+
+With many matched pairs, the old chart drew two dashed vertical lines, a
+top-of-chart connector bar, and a "Lag: Xd" annotation per pair (80+ overlay
+elements for 21 pairs), which collided with each other, the legend, and the
+title. Changes: each matched pair is now a single translucent band spanning
+case peak → death peak; per-pair lag labels render only when ≤ 8 pairs exist
+(hover and the pairs table always carry exact values, and a caption says so
+at higher densities); the legend is right-aligned above the plot clear of
+the title, with shortened trace names (the smoothing window already appears
+in the subtitle); peak markers are slightly smaller; the death curve is
+lighter-weight so the case curve reads as primary; both y-axes are anchored
+at zero; and the chart gained height and margin.
+
+Added plain-language help tooltips (consistent with the dashboard's existing
+tooltip style) on the "Matched Pairs" summary metric and the "Matched Case →
+Death Peak Pairs" table heading, plus a CSS rule so `st.subheader` headings
+match the existing in-tab heading style.
+
 ### Change Log Policy
 
 Future changes should be appended to this section. Do not create new `*_SUMMARY.md`, `*_AUDIT.md`, `*_CHANGES.md`, `*_FIXES.md`, `*_NOTES.md`, `*_IMPLEMENTATION.md`, or similar documentation files.
