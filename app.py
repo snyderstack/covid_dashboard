@@ -4345,8 +4345,12 @@ def render_wave_tab(cases_df, deaths_df, transforms, locations, population_df, v
    peaks**, deep in **absolute** terms, and **sustained** (elevation stays low for weeks,
    not days). All three tests run on elevation above the local baseline, so reporting
    noise in small counties cannot masquerade as an inter-wave trough.
-5. **Wave onset refinement** — each region's start is walked back up to **{_onset_lb} days** using
-   slope analysis to capture the rising phase before the signal crosses the elevation threshold.
+5. **Wave boundaries** — a region marks where the signal is elevated above local
+   background, which can begin months before the surge itself. Each wave's start and
+   end are therefore trimmed to the span where the signal stays above **10% of that
+   wave's peak elevation** (measured against the region's background floor, with a
+   5-day sustain rule so brief dips don't truncate the wave). The shaded interval
+   tracks the outbreak's actual rise and fall.
 6. **Peak significance filter** — a region whose peak barely rises above baseline
    (below a preset multiple of the elevation threshold) is discarded as a low-signal
    plateau rather than reported as a wave. Dropped candidates appear in the Detection

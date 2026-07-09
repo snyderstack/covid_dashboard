@@ -387,6 +387,41 @@ population of 64). All presets now land in their documented ranges.
 Tests: +2 (low-count noise regression; sustained-trough split vs brief-dip
 non-split), suite at 24.
 
+### 2026-07-09 — Wave boundary refinement (v3.2)
+
+User-reported defect: wave peaks were correct, but the shaded start/end
+intervals extended far beyond the actual outbreak (Los Angeles at Standard,
+5-day MA: Wave 1 spanned 2020-01-28 → 2021-11-23, 665 days, though the surge
+ran roughly November 2020 → February 2021).
+
+Cause: wave boundaries were the epidemic region's threshold crossings against
+the adaptive baseline. Low-level activity clears `baseline×rel + abs` months
+before a surge, and successive elevated periods chain through the merge gap;
+onset refinement only ever moved the start *earlier*, and the end was simply
+the last crossing. Region bounds answer "when was anything elevated?", not
+"when did this outbreak rise and fall?".
+
+Fix: new `_trim_wave_bounds()` applied after peak selection. Each wave's
+boundaries are trimmed to the span where the smoothed signal stays above
+10% of that wave's peak elevation (`WAVE_BOUNDARY_FRAC`), walking outward
+from the peak and stopping only after 5 consecutive quiet days
+(`WAVE_BOUNDARY_SUSTAIN_DAYS`), so brief dips during rise or decline cannot
+truncate the wave. Elevation is measured against the region's background
+floor (minimum adaptive baseline within the region) — the rolling baseline
+climbs during declines and the baseline at the peak sits inside the surge,
+so neither is a valid boundary reference. Bounds are clamped inside the
+original region and never exclude the peak.
+
+Explicitly unchanged: region detection, valley splitting, sensitivity
+presets, peak selection (peak dates verified identical on the reference
+counties), peak values, wave counts (verified identical across 8 counties ×
+3 presets), and the significance scoring formula. Duration and burden now
+describe the trimmed outbreak span, so significance scores shift modestly.
+
+Result (LA, Standard, 5-day MA): Wave 1 now 2020-11-02 → 2021-02-11;
+Abbeville's winter wave 2020-11-17 → 2021-03-27. Regression test added
+(surge boundaries must exclude a long low lead-in); suite at 25.
+
 ### Change Log Policy
 
 Future changes should be appended to this section. Do not create new `*_SUMMARY.md`, `*_AUDIT.md`, `*_CHANGES.md`, `*_FIXES.md`, `*_NOTES.md`, `*_IMPLEMENTATION.md`, or similar documentation files.

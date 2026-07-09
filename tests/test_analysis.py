@@ -78,6 +78,26 @@ def test_distinct_surges_detected_but_brief_dips_not_split():
     assert metrics2["number_of_waves"] == 1
 
 
+def test_wave_boundaries_track_the_surge_not_the_leadin():
+    # Regression test for the LA County boundary defect: months of low but
+    # above-threshold activity preceding a surge must not be included in the
+    # wave's reported span. The boundaries should hug the surge itself.
+    x = np.arange(500, dtype=float)
+    dates = pd.date_range("2020-01-01", periods=len(x))
+    leadin = np.where((x >= 30) & (x < 300), 8.0, 0.0)      # long low plateau
+    surge = 400 * np.exp(-((x - 330) ** 2) / (2 * 18 ** 2))  # the actual wave
+    values = leadin + surge
+    metrics = calculate_wave_metrics(values, dates, ma_window=7,
+                                     sensitivity="standard")
+    assert metrics["number_of_waves"] >= 1
+    main = max(metrics["waves"], key=lambda w: w["peak_value"])
+    assert abs((main["peak_date"] - dates[330]).days) <= 7   # peak unchanged
+    # start must sit on the surge's rise (within ~3 sigma), not on the plateau
+    assert main["start_date"] >= dates[270]
+    # end must sit on the surge's fall, not run to the end of the series
+    assert main["end_date"] <= dates[395]
+
+
 def test_significance_scores_bounded():
     waves = [
         {"peak_value": 100.0, "duration_days": 60, "wave_burden": 3000.0},

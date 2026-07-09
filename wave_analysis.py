@@ -26,6 +26,13 @@ Detection philosophy (v3 — region-based):
            a single region is one wave (one epidemic envelope); regions are only
            separated if the inter-epidemic gap exceeds the preset's merge tolerance.
 
+        5. Trim wave boundaries — regions mark where the signal is elevated above
+           local background, which can begin months before the actual surge. Each
+           wave's start/end are trimmed to the span where the signal stays above
+           10% of that wave's peak elevation (measured against the region's
+           background floor, with a 5-day sustain rule), so reported boundaries
+           track the outbreak's rise and fall.
+
     A wave significance score (0–100) combines prominence, total burden, duration,
     and burst intensity to identify the most epidemiologically important event.
 
@@ -311,6 +318,75 @@ def _detect_epidemic_regions(
 
     # Filter by minimum duration
     return [(s, e) for s, e in merged if (e - s + 1) >= min_duration]
+
+
+# Wave boundary trimming: a wave's displayed start/end should track its own
+# rise and fall, not the region's threshold crossings against the adaptive
+# baseline (which begin months early during low-level activity and can chain
+# through merge gaps). A boundary day must have elevation above
+# WAVE_BOUNDARY_FRAC × the wave's peak elevation; the walk outward from the
+# peak stops only after WAVE_BOUNDARY_SUSTAIN_DAYS consecutive quiet days, so
+# brief noise dips during the rise or decline cannot truncate the wave.
+WAVE_BOUNDARY_FRAC = 0.10
+WAVE_BOUNDARY_SUSTAIN_DAYS = 5
+
+
+def _trim_wave_bounds(
+    smoothed: np.ndarray,
+    baseline: np.ndarray,
+    start: int,
+    end: int,
+    peak_idx: int,
+    frac: float = WAVE_BOUNDARY_FRAC,
+    sustain: int = WAVE_BOUNDARY_SUSTAIN_DAYS,
+) -> Tuple[int, int]:
+    """
+    Trim a wave's boundaries to its actual rise and fall.
+
+    Walks outward from the peak in both directions and cuts the boundary at
+    the nearest run of `sustain` consecutive days below `frac` × the peak's
+    elevation. Elevation is measured against a FIXED reference — the minimum
+    of the adaptive baseline across the wave's region, i.e. the true
+    inter-wave background floor. Neither the rolling baseline (which climbs
+    during rises and declines and would truncate the wave early) nor the
+    baseline at the peak (which sits inside the surge and is inflated by it)
+    is a valid reference for boundary purposes. The result is clamped inside
+    the original region, and the peak index is never excluded, so peak
+    detection, region membership, and wave counts are unaffected — only
+    where the wave is said to begin and end.
+    """
+    base_ref = float(np.min(baseline[start: end + 1]))
+    elev = smoothed - base_ref
+    peak_elev = float(elev[peak_idx])
+    if peak_elev <= 0:
+        return start, end
+    level = frac * peak_elev
+
+    new_start = start
+    quiet = 0
+    for i in range(peak_idx, start - 1, -1):
+        if elev[i] < level:
+            quiet += 1
+            if quiet >= sustain:
+                new_start = i + sustain
+                break
+        else:
+            quiet = 0
+
+    new_end = end
+    quiet = 0
+    for i in range(peak_idx, end + 1):
+        if elev[i] < level:
+            quiet += 1
+            if quiet >= sustain:
+                new_end = i - sustain
+                break
+        else:
+            quiet = 0
+
+    new_start = max(start, min(new_start, peak_idx))
+    new_end = min(end, max(new_end, peak_idx))
+    return new_start, new_end
 
 
 def _refine_region_onset(
@@ -678,11 +754,18 @@ def find_waves(
             else:
                 peak_value = float(smoothed[peak_idx])
 
+            # Trim boundaries to this wave's own rise and fall (see
+            # _trim_wave_bounds). Regions mark where the signal is elevated
+            # above local background; the wave itself is the surge within.
+            wave_start, wave_end = _trim_wave_bounds(
+                smoothed, baseline, refined_s, e, peak_idx
+            )
+
             waves.append({
                 "peak_index":  peak_idx,
                 "peak_value":  peak_value,
-                "start_index": refined_s,
-                "end_index":   e,
+                "start_index": wave_start,
+                "end_index":   wave_end,
             })
 
         # Step 4: peak-significance filter. A region can clear the elevation
