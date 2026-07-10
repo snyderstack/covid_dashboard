@@ -145,7 +145,7 @@ This analysis is exploratory. Lag estimates should be interpreted alongside repo
 
 `wave_analysis.py` detects outbreak waves in smoothed daily case or death series. It is exposed as the "Wave Analysis" tab and also feeds the wave summary on the County Overview tab.
 
-The primary detection path is region-based (v3): an adaptive local baseline (rolling low percentile) is estimated, sustained elevated periods above that baseline are extracted as epidemic regions, merged regions containing genuinely distinct surges are split at deep internal valleys, and each region's onset is refined by slope analysis. One wave is reported per epidemic region, and each wave receives a significance score (0–100) combining prominence (30%), burden (30%), duration (20%), and burst intensity (20%). Three sensitivity presets (`conservative`, `standard`, `sensitive`) parameterize the detector; the module docstring documents the full algorithm.
+The primary detection path is region-based (v3.2): an adaptive local baseline (rolling low percentile) is estimated, sustained elevated periods above that baseline are extracted as epidemic regions, and merged regions containing genuinely distinct surges are split at internal valleys that are deep — relatively and absolutely, in elevation-above-baseline terms — and *sustained* for weeks rather than days. Each wave's start/end boundaries are then trimmed to the span where the signal stays above 10% of that wave's peak elevation (measured against the region's background floor, 5-day sustain rule), so reported intervals track the outbreak's rise and fall rather than the region's threshold crossings. Finally, a peak-significance filter discards regions whose peak barely rises above baseline (low-signal plateaus). One wave is reported per surviving region, and each receives a significance score (0–100) combining prominence (30%), burden (30%), duration (20%), and burst intensity (20%). Three sensitivity presets (`conservative`, `standard`, `sensitive`) parameterize the detector; the module docstring documents the full algorithm and the 2026-07-08/09 changelog entries record its calibration on reference counties.
 
 A legacy prominence-based path (`sensitivity=None`, `scipy.signal.find_peaks` with wave boundaries at 10% of peak value) remains available and is used by the dashboard's advanced detection controls when the user overrides prominence manually.
 
@@ -445,6 +445,25 @@ Added plain-language help tooltips (consistent with the dashboard's existing
 tooltip style) on the "Matched Pairs" summary metric and the "Matched Case →
 Death Peak Pairs" table heading, plus a CSS rule so `st.subheader` headings
 match the existing in-tab heading style.
+
+### 2026-07-09 — Final consistency audit
+
+Project-wide review after the day's wave-detector and lag-presentation work.
+Static sweeps (compile, unused imports, widget keys, glossary coverage,
+emoji) plus a full real-data regression of every tab's backing pipeline
+(map/choropleth, overview master table and peers, factor correlations, VIF,
+clustering, wave detection with boundary invariants, national series,
+spatial adjacency) and the 25-test suite.
+
+Fixes: removed an unused `Optional` import in `spatial_analysis.py`; the
+County Overview wave-summary description still cited the retired
+"adaptive prominence · width + valley filters" pipeline and now names the
+current region-based detection with peak significance filter; Section 8
+updated to describe the v3.2 detector (elevation-space sustained-trough
+splitting, boundary trimming, significance filter); the `wave_analysis`
+module docstring gained the significance-filter step; two code comments
+phrased as development history ("the old…", "previously…") rewritten as
+present-tense rationale. No functional changes.
 
 ### Change Log Policy
 

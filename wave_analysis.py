@@ -33,6 +33,11 @@ Detection philosophy (v3 — region-based):
            background floor, with a 5-day sustain rule), so reported boundaries
            track the outbreak's rise and fall.
 
+        6. Peak significance filter — a region whose peak rises less than a preset
+           multiple of the elevation threshold above its local baseline is dropped
+           as a low-signal plateau rather than reported as a wave. This is what
+           keeps low-count rural counties from reporting waves of reporting noise.
+
     A wave significance score (0–100) combines prominence, total burden, duration,
     and burst intensity to identify the most epidemiologically important event.
 
@@ -745,9 +750,9 @@ def find_waves(
             peak_idx   = refined_s + peak_local
 
             # Peak value: the raw count on the smoothed-peak day. When that
-            # lands on a zero-reporting day (weekends, batch uploads) — which
-            # previously produced waves displaying "peak = 0" — fall back to
-            # the smoothed value, which represents the true daily rate there.
+            # lands on a zero-reporting day (weekends, batch uploads), fall
+            # back to the smoothed value — the true daily rate there — so a
+            # wave can never report a peak of zero.
             raw_val = daily_values[peak_idx]
             if not np.isnan(raw_val) and raw_val > 0:
                 peak_value = float(raw_val)

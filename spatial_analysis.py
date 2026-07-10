@@ -19,7 +19,7 @@ significant spatial clustering at the 5% level — a hotspot (high values
 surrounded by high) or coldspot (low surrounded by low).
 """
 
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Dict, List, Set, Tuple
 
 import numpy as np
 import pandas as pd

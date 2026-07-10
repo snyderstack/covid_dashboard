@@ -2579,7 +2579,7 @@ def render_county_overview_tab(
     st.markdown(
         '<div class="sub-section-header"><h3>2 — Wave Analysis Summary</h3>'
         '<p>Major COVID-19 outbreak waves detected with Standard sensitivity '
-        '(7-day MA · adaptive prominence · width + valley filters). '
+        '(7-day MA · adaptive-baseline region detection · peak significance filter). '
         'Sorted by wave significance score.</p></div>',
         unsafe_allow_html=True,
     )
@@ -3253,12 +3253,10 @@ def _render_lag_chart(location_label, results, summary, lag_ma_window):
     """
     Render the dual-axis cases/deaths chart with matched peaks.
 
-    Presentation notes: each matched pair is shown as a translucent band
-    spanning case peak → death peak rather than as vertical lines with
-    top-of-chart lag brackets — with many pairs, the old per-pair overlays
-    (2 dashed lines + connector + label each) collided with one another,
-    the legend, and the title. Lag labels are drawn only when few pairs
-    exist; hover and the pairs table always carry the exact values.
+    Each matched pair is shown as a translucent band spanning case peak →
+    death peak; per-pair line-and-bracket overlays don't scale to counties
+    with many pairs. Lag labels are drawn only when few pairs exist — hover
+    and the pairs table always carry the exact values.
     """
     cases_ts    = results["cases_ts"]
     deaths_ts   = results["deaths_ts"]
