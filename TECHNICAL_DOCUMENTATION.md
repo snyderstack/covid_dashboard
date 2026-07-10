@@ -515,6 +515,39 @@ over/under-performance vs expectation), and the archetype k selector (no
 single correct k). Other candidates already carry help text or are covered
 by the per-tab Key Terms glossary — deliberately not tooltipped everywhere.
 
+### 2026-07-09 — Map-first landing and Overview interaction polish
+
+Presentation/UX changes in app.py; no analytics touched. Tests 25/25.
+
+**Map-first landing.** The Geographic Map is now the first tab, so opening
+the dashboard lands on a large interactive choropleth. The control panel
+moved from the left to the right of the map (CDC PLACES-style layout) and is
+collapsible via a toggle: hiding it gives the map the full content width
+(and extra height). Control state persists across collapse — unmounted
+widgets normally lose their session entries, so the six panel keys are
+re-registered as app state each run, and the hidden-panel path reads the
+persisted values with validated fallbacks.
+
+**Overview navigation cards.** The explore chips are now real buttons:
+`st.tabs` has no programmatic switching, so the cards render in a small
+embedded component whose clicks locate the matching tab button in the parent
+document by visible label and click it. If the DOM ever changes, cards
+degrade to inert labels rather than erroring. The static chip CSS was
+removed along with the old hover-only chips.
+
+**"Questions to Investigate" removed** from all seven tabs at the user's
+request (the `render_learning_aids` helper now renders only the Key Terms
+glossary popover). Layouts close up cleanly; no orphaned CSS remains.
+
+**Overview mini lag chart** now opens zoomed to the county's outbreak window
+(peaks ± ~6 weeks) with a mini-map range slider for full-timeline
+exploration, replacing three years compressed into 260 px.
+
+**Header mark** replaced: the college "G" image gave way to a stylized
+coronavirus (generated inline SVG data URI — gradient sphere, twelve spike
+proteins in the dashboard's orange palette; no asset file or network fetch).
+The footer seal is unchanged.
+
 ### Change Log Policy
 
 Future changes should be appended to this section. Do not create new `*_SUMMARY.md`, `*_AUDIT.md`, `*_CHANGES.md`, `*_FIXES.md`, `*_NOTES.md`, `*_IMPLEMENTATION.md`, or similar documentation files.

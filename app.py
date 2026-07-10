@@ -1,9 +1,11 @@
 import base64
+import math
 import os
 import random
 from contextlib import nullcontext
 
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
 import numpy as np
 import plotly.express as px
@@ -330,40 +332,6 @@ st.markdown("""
     line-height: 1.65;
     max-width: 92ch;
 }
-.explore-chips {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 0.8rem;
-    margin: 1.1rem 0 2rem 0;
-}
-@media (max-width: 1100px) { .explore-chips { grid-template-columns: repeat(2, 1fr); } }
-.explore-chip {
-    background: var(--bg-card);
-    border: 1px solid var(--border-lt);
-    border-radius: var(--radius-sm);
-    padding: 0.8rem 1rem 0.75rem;
-    box-shadow: var(--shadow-sm);
-    transition: transform 0.2s var(--ease), box-shadow 0.2s var(--ease),
-                border-color 0.2s var(--ease);
-}
-.explore-chip:hover {
-    transform: translateY(-2px);
-    box-shadow: var(--shadow-md);
-    border-color: rgba(242,106,33,0.4);
-}
-.explore-chip .chip-title {
-    display: block;
-    font-size: 0.78rem;
-    font-weight: 700;
-    color: var(--navy);
-    margin-bottom: 0.15rem;
-}
-.explore-chip .chip-desc {
-    font-size: 0.74rem;
-    color: var(--text-3);
-    line-height: 1.45;
-}
-
 /* County hero banner (Overview tab) */
 .county-hero {
     background: linear-gradient(135deg, var(--navy) 0%, var(--navy-mid) 60%, #1a5080 100%);
@@ -680,31 +648,59 @@ def _load_asset_b64(stem):
             return f"data:{mime};base64,{b64}"
     return None
 
-_G_LOGO_B64   = _load_asset_b64("gettysburg_g")
 _SEAL_LOGO_B64 = _load_asset_b64("gettysburg_seal")
+
+
+def _virus_logo_data_uri():
+    """
+    Build the header's stylized coronavirus mark as an inline SVG data URI.
+
+    Generated rather than shipped as an asset: a gradient sphere with twelve
+    spike proteins in the dashboard's orange palette, sized for the dark navy
+    header. No external file or network fetch involved.
+    """
+    spikes = []
+    for k in range(12):
+        a = math.radians(k * 30)
+        x1, y1 = 60 + 34 * math.cos(a), 60 + 34 * math.sin(a)
+        x2, y2 = 60 + 46 * math.cos(a), 60 + 46 * math.sin(a)
+        spikes.append(
+            f"<line x1='{x1:.1f}' y1='{y1:.1f}' x2='{x2:.1f}' y2='{y2:.1f}'/>"
+            f"<circle cx='{x2:.1f}' cy='{y2:.1f}' r='4.6' fill='#F9A26B' stroke='none'/>"
+        )
+    svg = (
+        "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 120'>"
+        "<defs><radialGradient id='body' cx='38%' cy='32%' r='78%'>"
+        "<stop offset='0%' stop-color='#FA9A5F'/>"
+        "<stop offset='55%' stop-color='#F26A21'/>"
+        "<stop offset='100%' stop-color='#C2531B'/>"
+        "</radialGradient></defs>"
+        f"<g stroke='#F9A26B' stroke-width='3'>{''.join(spikes)}</g>"
+        "<circle cx='60' cy='60' r='33' fill='url(#body)'/>"
+        "<circle cx='48' cy='50' r='7' fill='rgba(255,255,255,0.20)'/>"
+        "<circle cx='70' cy='68' r='9' fill='rgba(11,35,65,0.18)'/>"
+        "<circle cx='66' cy='44' r='4.5' fill='rgba(255,255,255,0.15)'/>"
+        "<circle cx='50' cy='72' r='5' fill='rgba(11,35,65,0.14)'/>"
+        "</svg>"
+    )
+    return "data:image/svg+xml;base64," + base64.b64encode(svg.encode()).decode()
+
+
+_HEADER_LOGO_URI = _virus_logo_data_uri()
 
 def render_header(latest_date=None) -> None:
     """Render professional dashboard header with Gettysburg College branding."""
     date_text = latest_date if latest_date else "—"
 
-    # Header logo: real image via CSS background-image when the file exists,
-    # plain styled "G" badge as fallback. CSS background-image with a data URI
-    # passes through Streamlit's HTML processor safely.
-    if _G_LOGO_B64:
-        logo_div = (
-            '<div style="flex-shrink:0;width:88px;height:88px;'
-            f'background-image:url(\'{_G_LOGO_B64}\');'
-            'background-size:contain;background-repeat:no-repeat;'
-            'background-position:center;margin-left:1.75rem;opacity:0.95;"></div>'
-        )
-    else:
-        logo_div = (
-            '<div style="flex-shrink:0;width:82px;height:82px;'
-            'background:#F26A21;border-radius:14px;'
-            'display:flex;align-items:center;justify-content:center;'
-            'font-size:46px;font-weight:900;color:#0B2341;'
-            'font-family:Georgia,serif;margin-left:1.75rem;">G</div>'
-        )
+    # Header mark: stylized coronavirus SVG (inline data URI — see
+    # _virus_logo_data_uri). CSS background-image passes through Streamlit's
+    # HTML processor safely.
+    logo_div = (
+        '<div style="flex-shrink:0;width:92px;height:92px;'
+        f'background-image:url(\'{_HEADER_LOGO_URI}\');'
+        'background-size:contain;background-repeat:no-repeat;'
+        'background-position:center;margin-left:1.75rem;opacity:0.95;"></div>'
+    )
 
     st.markdown(
         '<div style="background:linear-gradient(135deg,#0A1F3C 0%,#0B2341 45%,#153A66 100%);'
@@ -822,18 +818,14 @@ GLOSSARY = {
     "hotspot":        ("Hotspot (Gi*)", "A county whose whole neighbourhood shows unusually high values — statistically significant spatial clustering, not just one high county."),
 }
 
-def render_learning_aids(terms=(), questions=()) -> None:
-    """Render the per-tab 'Key terms' popover and 'Questions to investigate' expander."""
+def render_learning_aids(terms=()) -> None:
+    """Render the per-tab 'Key terms' glossary popover."""
     if terms:
         with st.popover("Key terms on this page"):
             for key in terms:
                 if key in GLOSSARY:
                     label, definition = GLOSSARY[key]
                     st.markdown(f"**{label}** — {definition}")
-    if questions:
-        with st.expander("Questions to investigate", expanded=False):
-            for q in questions:
-                st.markdown(f"- {q}")
 
 def apply_chart_styling(fig):
     """Apply consistent professional styling to Plotly charts."""
@@ -1490,86 +1482,119 @@ def render_map_tab(transforms, cases_df, deaths_df, population_df, dates, unique
     if _qp_date in dates and "map_date" not in st.session_state:
         st.session_state["map_date"] = _qp_date
 
-    # Two-column layout: control panel + map
-    map_ctrl_col, map_viz_col = st.columns([3, 9])
+    # Widgets that unmount (collapsed panel) lose their session entries unless
+    # re-registered as app state each run — the standard persistence idiom.
+    for _k in ("map_date", "map_metric", "map_state_filter", "county_type_filter",
+               "color_scale_mode", "map_county_for_overview"):
+        if _k in st.session_state:
+            st.session_state[_k] = st.session_state[_k]
 
-    with map_ctrl_col:
-        with st.container(border=True):
+    # Map-first layout: the choropleth is the main stage (left), controls sit
+    # in a collapsible panel on the right; hiding it hands the map the full
+    # width while every setting is preserved.
+    _sp, _tg = st.columns([9.6, 2.4])
+    with _tg:
+        show_panel = st.toggle(
+            "Control panel", value=True, key="map_panel_open",
+            help="Hide to give the map the full width — your settings are kept.",
+        )
 
-            st.markdown(
-                '<p class="map-ctrl-title">Geographic Explorer</p>',
-                unsafe_allow_html=True,
-            )
+    if show_panel:
+        map_viz_col, map_ctrl_col = st.columns([9, 3])
+    else:
+        map_viz_col, map_ctrl_col = st.container(), None
 
-            _date_kwargs = {} if "map_date" in st.session_state else {"value": selected_date}
-            map_selected_date = st.select_slider(
-                "Date",
-                options=dates,
-                key="map_date",
-                help="Select the date to visualize. Vaccination metrics always show the most recent CDC snapshot.",
-                **_date_kwargs,
-            )
+    if map_ctrl_col is None:
+        # Panel hidden: read the persisted control state (validated, with the
+        # same defaults the widgets use on first render)
+        map_selected_date = st.session_state.get("map_date", selected_date)
+        if map_selected_date not in dates:
+            map_selected_date = selected_date
+        metric_name = st.session_state.get("map_metric", "Cumulative Cases")
+        if metric_name not in all_metric_names:
+            metric_name = "Cumulative Cases"
+        map_state_filter = st.session_state.get("map_state_filter", "United States")
+        county_type_filter = st.session_state.get("county_type_filter", "All Counties")
+        color_scale_mode = st.session_state.get("color_scale_mode", "Percentile Clip")
+    else:
+        with map_ctrl_col:
+            with st.container(border=True):
 
-            st.markdown('<p class="map-ctrl-group">Metric</p>', unsafe_allow_html=True)
-            _metric_kwargs = {} if "map_metric" in st.session_state else {"index": 0}
-            metric_name = st.selectbox(
-                "Metric",
-                all_metric_names,
-                key="map_metric",
-                label_visibility="collapsed",
-                help=(
-                    "COVID metrics reflect the selected date above. "
-                    "Vaccination metrics show the most recent CDC snapshot (through May 2023)."
-                ),
-                **_metric_kwargs,
-            )
-
-            st.markdown('<p class="map-ctrl-group">Filter</p>', unsafe_allow_html=True)
-            map_state_filter = st.selectbox(
-                "State",
-                ["United States"] + unique_states,
-                key="map_state_filter",
-                help="Zoom to a specific state or view the entire US",
-            )
-            county_type_filter = st.selectbox(
-                "County Type",
-                ["All Counties", "Metro Counties", "Nonmetro Counties"],
-                index=0,
-                key="county_type_filter",
-                help=(
-                    "Metro: RUCC 1–3 (metropolitan)  |  "
-                    "Nonmetro: RUCC 4–9 (non-metropolitan)  |  "
-                    "USDA Rural-Urban Continuum Codes (2013)"
-                ),
-            )
-            color_scale_mode = st.selectbox(
-                "Color Scale",
-                ["Percentile Clip", "Absolute", "Log Scale"],
-                index=0,
-                key="color_scale_mode",
-                help=(
-                    "Percentile Clip: clips top 1% of outliers for clearer spatial patterns.  "
-                    "Absolute: full national range (may look pale for right-skewed metrics).  "
-                    "Log Scale: log₁₊₁ axis — best for cumulative counts spanning many orders of magnitude."
-                ),
-            )
-            # Palette accessibility is a global setting, set in the sidebar
-            cb_safe = st.session_state.get("cb_safe_global", False)
-
-            # Open County Overview
-            st.markdown('<p class="map-ctrl-group">County Profile</p>', unsafe_allow_html=True)
-            _map_county_pick = st.selectbox(
-                "County",
-                locations,
-                key="map_county_for_overview",
-                label_visibility="collapsed",
-                help="Select a county, then click the button to open its full public health profile.",
-            )
-            if st.button("Open County Overview →", key="map_open_overview", type="primary", use_container_width=True):
-                st.session_state["overview_county"] = _map_county_pick
-                st.toast(
-                    f"**{_map_county_pick}** loaded — click the **County Overview** tab to view its full profile.",
+                st.markdown(
+                    '<p class="map-ctrl-title">Geographic Explorer</p>',
+                    unsafe_allow_html=True,
                 )
+
+                _date_kwargs = {} if "map_date" in st.session_state else {"value": selected_date}
+                map_selected_date = st.select_slider(
+                    "Date",
+                    options=dates,
+                    key="map_date",
+                    help="Select the date to visualize. Vaccination metrics always show the most recent CDC snapshot.",
+                    **_date_kwargs,
+                )
+
+                st.markdown('<p class="map-ctrl-group">Metric</p>', unsafe_allow_html=True)
+                _metric_kwargs = {} if "map_metric" in st.session_state else {"index": 0}
+                metric_name = st.selectbox(
+                    "Metric",
+                    all_metric_names,
+                    key="map_metric",
+                    label_visibility="collapsed",
+                    help=(
+                        "COVID metrics reflect the selected date above. "
+                        "Vaccination metrics show the most recent CDC snapshot (through May 2023)."
+                    ),
+                    **_metric_kwargs,
+                )
+
+                st.markdown('<p class="map-ctrl-group">Filter</p>', unsafe_allow_html=True)
+                map_state_filter = st.selectbox(
+                    "State",
+                    ["United States"] + unique_states,
+                    key="map_state_filter",
+                    help="Zoom to a specific state or view the entire US",
+                )
+                county_type_filter = st.selectbox(
+                    "County Type",
+                    ["All Counties", "Metro Counties", "Nonmetro Counties"],
+                    index=0,
+                    key="county_type_filter",
+                    help=(
+                        "Metro: RUCC 1–3 (metropolitan)  |  "
+                        "Nonmetro: RUCC 4–9 (non-metropolitan)  |  "
+                        "USDA Rural-Urban Continuum Codes (2013)"
+                    ),
+                )
+                color_scale_mode = st.selectbox(
+                    "Color Scale",
+                    ["Percentile Clip", "Absolute", "Log Scale"],
+                    index=0,
+                    key="color_scale_mode",
+                    help=(
+                        "Percentile Clip: clips top 1% of outliers for clearer spatial patterns.  "
+                        "Absolute: full national range (may look pale for right-skewed metrics).  "
+                        "Log Scale: log₁₊₁ axis — best for cumulative counts spanning many orders of magnitude."
+                    ),
+                )
+
+                # Open County Overview
+                st.markdown('<p class="map-ctrl-group">County Profile</p>', unsafe_allow_html=True)
+                _map_county_pick = st.selectbox(
+                    "County",
+                    locations,
+                    key="map_county_for_overview",
+                    label_visibility="collapsed",
+                    help="Select a county, then click the button to open its full public health profile.",
+                )
+                if st.button("Open County Overview →", key="map_open_overview", type="primary", use_container_width=True):
+                    st.session_state["overview_county"] = _map_county_pick
+                    st.toast(
+                        f"**{_map_county_pick}** loaded — click the **County Overview** tab to view its full profile.",
+                    )
+
+    # Palette accessibility is a global setting, set in the sidebar
+    cb_safe = st.session_state.get("cb_safe_global", False)
 
     _is_vax_metric = metric_name in _vax_metric_cols
 
@@ -1724,7 +1749,7 @@ def render_map_tab(transforms, cases_df, deaths_df, population_df, dates, unique
     fig_map.update_layout(
         title_text=title_text,
         geo=geo_config,
-        height=800,
+        height=800 if show_panel else 870,
         margin={"r": 0, "t": 65, "l": 0, "b": 0},
         font=dict(family="Inter, Helvetica Neue, Arial, sans-serif", size=11),
         paper_bgcolor="white",
@@ -1885,19 +1910,13 @@ def render_map_tab(transforms, cases_df, deaths_df, population_df, dates, unique
 
         render_learning_aids(
             terms=("per_100k", "cumulative", "moving_average", "hotspot"),
-            questions=(
-                "Step through early 2020 with the date slider. Where does the map light "
-                "up first, and how long before it reaches the middle of the country?",
-                "Switch between **Cumulative Cases** and **Cases per 100k**. Which regions "
-                "change most, and what does that say about raw counts?",
-                "Run the hotspot analysis on **Deaths per 100k**. Do the hotspots follow "
-                "state borders? Should they?",
-            ),
         )
 
-    # Export controls render back into the control-panel column; they depend on
-    # filtered_choro_data, which only exists after the pipeline above has run.
-    with map_ctrl_col:
+    # Export controls render back into the control-panel column (when shown);
+    # they depend on filtered_choro_data, which only exists after the pipeline
+    # above has run.
+    if map_ctrl_col is not None:
+      with map_ctrl_col:
         _export_cols = {
             "countyFIPS": "FIPS",
             "Location":   "County",
@@ -1936,14 +1955,6 @@ def render_comparison_tab(cases_df, deaths_df, population_df, locations, nationa
     )
     render_learning_aids(
         terms=("per_100k", "cumulative", "moving_average"),
-        questions=(
-            "Compare a dense metro county with a rural one using **Cases per 100k** — "
-            "does the raw-count impression survive normalization?",
-            "Switch to **Normalized (Index = 100)** for two counties whose outbreaks "
-            "started months apart. Which grew faster from its own starting point?",
-            "Find a pair of neighbouring counties whose death curves diverge even "
-            "though their case curves match. What might differ between them?",
-        ),
     )
 
     # Primary controls (always visible)
@@ -2455,23 +2466,60 @@ def render_county_overview_tab(
         '<h3>Every county had a different pandemic. Find out why.</h3>'
         '<p>Pick any of 3,000+ U.S. counties below to see its full story — outbreak waves, '
         'vaccination rollout, healthcare capacity, and how it compares to the rest of the '
-        'country. Then use the tabs above to dig deeper.</p>'
-        '</div>'
-        '<div class="explore-chips">'
-        '<div class="explore-chip"><span class="chip-title">Geographic Map</span>'
-        '<span class="chip-desc">Watch the pandemic move across the country, one date at a time.</span></div>'
-        '<div class="explore-chip"><span class="chip-title">County Comparison</span>'
-        '<span class="chip-desc">Put two counties side by side — or measure one against the nation.</span></div>'
-        '<div class="explore-chip"><span class="chip-title">Wave Analysis</span>'
-        '<span class="chip-desc">Find each outbreak wave and see how big, long, and severe it was.</span></div>'
-        '<div class="explore-chip"><span class="chip-title">Time Lag Analysis</span>'
-        '<span class="chip-desc">Measure how many days deaths trailed behind case surges.</span></div>'
-        '<div class="explore-chip"><span class="chip-title">County Factors</span>'
-        '<span class="chip-desc">See how income, healthcare access, and vaccination relate to outcomes.</span></div>'
-        '<div class="explore-chip"><span class="chip-title">Statistical Modeling</span>'
-        '<span class="chip-desc">Let regression and machine learning rank what mattered most.</span></div>'
+        'country. Then click a card to jump into an analysis.</p>'
         '</div>',
         unsafe_allow_html=True,
+    )
+
+    # Clickable navigation cards. st.tabs offers no programmatic switching, so
+    # each card clicks the matching tab button in the parent document (matched
+    # by visible label, case-insensitive). If the DOM ever changes, the cards
+    # degrade to inert labels rather than erroring.
+    _chip_defs = [
+        ("Geographic Map", "Watch the pandemic move across the country, one date at a time."),
+        ("County Comparison", "Put two counties side by side — or measure one against the nation."),
+        ("Wave Analysis", "Find each outbreak wave and see how big, long, and severe it was."),
+        ("Time Lag Analysis", "Measure how many days deaths trailed behind case surges."),
+        ("County Factors", "See how income, healthcare access, and vaccination relate to outcomes."),
+        ("Statistical Modeling", "Let regression and machine learning rank what mattered most."),
+    ]
+    _chip_buttons = "".join(
+        f'<button class="chip" onclick="go(\'{label}\')">'
+        f'<span class="t">{label}</span><span class="d">{desc}</span></button>'
+        for label, desc in _chip_defs
+    )
+    components.html(
+        f"""
+        <style>
+        body {{ margin: 0; font-family: 'Inter', 'Helvetica Neue', Arial, sans-serif; }}
+        .grid {{ display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }}
+        .chip {{
+            background: #ffffff; border: 1px solid #ECF0F5; border-radius: 8px;
+            padding: 12px 16px 11px; text-align: left; cursor: pointer;
+            box-shadow: 0 1px 2px rgba(11,35,65,0.05), 0 2px 10px rgba(11,35,65,0.05);
+            transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+        }}
+        .chip:hover {{
+            transform: translateY(-2px);
+            border-color: rgba(242,106,33,0.5);
+            box-shadow: 0 3px 10px rgba(11,35,65,0.08), 0 8px 24px rgba(11,35,65,0.06);
+        }}
+        .t {{ display: block; font-size: 13px; font-weight: 700; color: #0B2341; margin-bottom: 2px; }}
+        .d {{ display: block; font-size: 12px; color: #64707F; line-height: 1.45; }}
+        </style>
+        <div class="grid">{_chip_buttons}</div>
+        <script>
+        function go(name) {{
+            try {{
+                const tabs = window.parent.document.querySelectorAll('button[data-baseweb="tab"]');
+                for (const t of tabs) {{
+                    if (t.innerText.trim().toLowerCase() === name.toLowerCase()) {{ t.click(); return; }}
+                }}
+            }} catch (e) {{ /* sandboxed or DOM changed — cards stay inert */ }}
+        }}
+        </script>
+        """,
+        height=190,
     )
 
     # County selector. Session state key "overview_county" is shared with the
@@ -2542,13 +2590,6 @@ def render_county_overview_tab(
 
     render_learning_aids(
         terms=("per_100k", "cfr", "rucc", "hpsa", "ecological"),
-        questions=(
-            "Load two Classroom examples — King County, WA and Mingo County, WV — "
-            "and compare their vaccination rates and deaths per 100k. "
-            "What besides vaccination differs between them?",
-            "Check Section 7: is this county doing worse than its structural peers, "
-            "or just worse than the national median? Why might those disagree?",
-        ),
     )
 
     county_name, state = extract_county_state(location)
@@ -2775,10 +2816,19 @@ def render_county_overview_tab(
                                     line=dict(color="white", width=1)),
                         hovertemplate="Peak: %{x|%Y-%m-%d}<br>%{y:.2f} /100k<extra></extra>",
                     ))
+                # Default view: zoom to the county's active outbreak window
+                # (peaks ± ~6 weeks) rather than compressing three years into
+                # a small chart; the mini-map slider restores full exploration.
+                if _cp:
+                    _mini_x0 = min(p["peak_date"] for p in _cp) - pd.Timedelta(days=45)
+                    _mini_x1 = max(p["peak_date"] for p in _cp) + pd.Timedelta(days=60)
+                else:
+                    _mini_x0, _mini_x1 = _cts["Date"].min(), _cts["Date"].max()
+
                 fig_mini.update_layout(
-                    height=260, margin=dict(t=10, b=40, l=50, r=50),
+                    height=330, margin=dict(t=10, b=10, l=50, r=50),
                     template="plotly_white", hovermode="x unified",
-                    legend=dict(orientation="h", y=-0.25, x=0, font=dict(size=10)),
+                    legend=dict(orientation="h", y=1.04, x=0, font=dict(size=10)),
                     yaxis=dict(
                         title=dict(text="Cases /100k", font=dict(color=NATIONAL_COLOR, size=10)),
                         tickfont=dict(color=NATIONAL_COLOR, size=9),
@@ -2789,10 +2839,18 @@ def render_county_overview_tab(
                         tickfont=dict(color="#c41e3a", size=9),
                         overlaying="y", side="right", showgrid=False,
                     ),
-                    xaxis=dict(showgrid=False),
+                    xaxis=dict(
+                        showgrid=False,
+                        range=[_mini_x0, _mini_x1],
+                        rangeslider=dict(visible=True, thickness=0.09),
+                    ),
                     font=dict(family="sans-serif", size=10),
                 )
                 st.plotly_chart(fig_mini, use_container_width=True)
+                st.caption(
+                    "Opens zoomed to this county's outbreak period — drag the "
+                    "mini-map below the chart to explore the full timeline."
+                )
     else:
         st.info("Wave analysis unavailable for this county.")
 
@@ -3616,14 +3674,6 @@ def render_lag_tab(cases_df, deaths_df, population_df, locations) -> None:
     )
     render_learning_aids(
         terms=("lag", "severity_ratio", "prominence", "per_100k"),
-        questions=(
-            "Find a county whose death peak trailed its case peak by more than 60 days. "
-            "What could explain such a long delay?",
-            "Compare the **severity ratio** of a 2020 wave against an Omicron-era wave "
-            "in the same county. What changed between them?",
-            "In County vs County mode, compare an urban and a rural county's lags. "
-            "Is there a consistent difference, and which way does it run?",
-        ),
     )
 
     _lp1, _lp2, _lp3 = st.columns([2, 1, 2])
@@ -3831,14 +3881,6 @@ def render_wave_tab(cases_df, deaths_df, transforms, locations, population_df, v
     )
     render_learning_aids(
         terms=("wave", "prominence", "burden", "significance", "moving_average"),
-        questions=(
-            "Pick a county and switch between **Conservative** and **Sensitive** detection. "
-            "Which of the extra waves look real to you, and which look like noise?",
-            "Find a county whose largest wave by **burden** is not its tallest peak. "
-            "Why can a lower, longer wave matter more?",
-            "Using the validation panel, find a county with no detected wave during "
-            "the Winter 2020-21 window. Detection artifact, or genuinely spared?",
-        ),
     )
 
     r1c1, r1c2 = st.columns(2)
@@ -4572,15 +4614,6 @@ def render_county_factors_tab(
     )
     render_learning_aids(
         terms=("pearson", "spearman", "p_value", "r_squared", "ecological"),
-        questions=(
-            "Correlate **vaccination** with **deaths per 100k** on the full pandemic, then "
-            "restrict the outcome window to the post-rollout era. Does the association "
-            "strengthen, weaken, or flip — and why would the window matter?",
-            "Find a factor where Pearson and Spearman disagree noticeably. "
-            "Look at the scatter — what shape explains the gap?",
-            "Pick the strongest correlation in the rankings table and propose two "
-            "confounders that could produce it without any causal effect.",
-        ),
     )
 
     if master_df is None or master_df.empty:
@@ -5123,14 +5156,6 @@ def render_modeling_tab(master_county_df, locations) -> None:
     )
     render_learning_aids(
         terms=("r_squared", "p_value", "vif", "hc3", "residual", "ecological"),
-        questions=(
-            "Fit an OLS model with both income variables as predictors, then check the "
-            "**VIF** table. What happens to their coefficients, and why?",
-            "Find a predictor that is significant in the correlation matrix but not in "
-            "the multivariable regression. What does that tell you?",
-            "Run the resilience scores, then look up the most resilient county's profile. "
-            "What might the model be missing about it?",
-        ),
     )
 
     if master_county_df is None or master_county_df.empty:
@@ -6110,9 +6135,12 @@ def render_modeling_tab(master_county_df, locations) -> None:
 
 # Tab layout
 
-tab_overview, tab_map, tab_county_comparison, tab_waves, tab_lag, tab_factors, tab_modeling = st.tabs([
-    "County Overview",
+# Geographic Map is deliberately first: the opening view is a full-screen
+# interactive choropleth (data-exploration-tool first impression), with the
+# County Overview one click away — and one county-click away via the map.
+tab_map, tab_overview, tab_county_comparison, tab_waves, tab_lag, tab_factors, tab_modeling = st.tabs([
     "Geographic Map",
+    "County Overview",
     "County Comparison",
     "Wave Analysis",
     "Time Lag Analysis",
@@ -6120,14 +6148,14 @@ tab_overview, tab_map, tab_county_comparison, tab_waves, tab_lag, tab_factors, t
     "Statistical Modeling",
 ])
 
+with tab_map:
+    render_map_tab(transforms, cases_df, deaths_df, population_df, dates, unique_states, selected_date, county_type_df, vax_latest_df)
+
 with tab_overview:
     render_county_overview_tab(
         cases_df, deaths_df, population_df, locations, dates,
         master_county_df, transforms, vax_ts_df,
     )
-
-with tab_map:
-    render_map_tab(transforms, cases_df, deaths_df, population_df, dates, unique_states, selected_date, county_type_df, vax_latest_df)
 
 with tab_county_comparison:
     render_comparison_tab(cases_df, deaths_df, population_df, locations, national, vax_ts_df)

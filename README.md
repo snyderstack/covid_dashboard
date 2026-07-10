@@ -6,9 +6,9 @@ Developed at Gettysburg College for public-health analysis, coursework, and expl
 
 ## Dashboard Tabs
 
-**County Overview** — the landing page: a public health fact sheet for any county covering COVID outcomes, detected waves, case-to-death lag, healthcare capacity, socioeconomic context, vaccination status, and national- and peer-median comparisons. Includes a "Counties Like This One" structural-peer finder, classroom example presets, a random-county button, a downloadable one-page HTML report, and shareable `?county=` URLs.
+**Geographic Map** — the landing view: a full-width county choropleth with a collapsible control panel, a date slider, cumulative/daily/moving-average/per-capita COVID metrics, vaccination metrics, state zoom, Metro/Nonmetro filtering (USDA RUCC), configurable color scaling (percentile clip, absolute, log), and a colorblind-safe palette option. Click any county to load its Overview profile. Optional animated monthly playback, Getis-Ord Gi* hotspot analysis, and shareable `?metric=`/`?date=` URLs.
 
-**Geographic Map** — county choropleth with a date slider, cumulative/daily/moving-average/per-capita COVID metrics, vaccination metrics, state zoom, Metro/Nonmetro filtering (USDA RUCC), configurable color scaling (percentile clip, absolute, log), and a colorblind-safe palette option. Click any county to load its Overview profile. Optional animated monthly playback, Getis-Ord Gi* hotspot analysis, and shareable `?metric=`/`?date=` URLs.
+**County Overview** — a public health fact sheet for any county covering COVID outcomes, detected waves, case-to-death lag, healthcare capacity, socioeconomic context, vaccination status, and national- and peer-median comparisons. Includes clickable navigation cards into every analysis, a "Counties Like This One" structural-peer finder, classroom example presets, a random-county button, a downloadable one-page HTML report, and shareable `?county=` URLs.
 
 **County Comparison** — overlay two counties, a county against the national aggregate, or all three. Supports cumulative and daily views, smoothing, per-100k normalization, index rebasing, dual axes, log scale, and vaccination rollout comparison.
 
