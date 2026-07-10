@@ -673,10 +673,16 @@ def generate_ols_interpretation(
     """
     Generate rule-based interpretation bullets from an OLS results table.
 
+    Uses HC3-robust p-values for the significance classification when the
+    table carries them (safer for heteroscedastic county data), and reports
+    each significant coefficient with its 95% confidence interval.
+
     Returns a list of markdown strings suitable for st.markdown() bullets.
-    Does not use AI text generation — purely rule-based from model statistics.
+    Purely rule-based from model statistics.
     """
     bullets = []
+    p_col = "Robust p" if "Robust p" in summary_df.columns else "p-value"
+    p_label = "robust p" if p_col == "Robust p" else "p"
 
     # Overall model fit
     fit_word = (
@@ -689,35 +695,41 @@ def generate_ols_interpretation(
         f"(R² = {r_sq:.3f}, adj. R² = {adj_r_sq:.3f}, N = {n:,}) — a **{fit_word}** overall fit."
     )
 
-    # Significant predictors
+    # Significant predictors (robust p where available)
     sig = summary_df[
         (summary_df["Variable"] != "(Intercept)") &
-        (summary_df["p-value"] < 0.05)
+        (summary_df[p_col] < 0.05)
     ].copy()
     non_sig = summary_df[
         (summary_df["Variable"] != "(Intercept)") &
-        (summary_df["p-value"] >= 0.05)
+        (summary_df[p_col] >= 0.05)
     ]
 
     if sig.empty:
         bullets.append(
-            "No individual predictor reached statistical significance (p < 0.05) "
-            "after accounting for other variables in the model."
+            f"No individual predictor reached statistical significance "
+            f"({p_label} < 0.05) after accounting for other variables in the model."
         )
     else:
         for _, row in sig.iterrows():
             direction = "positively" if row["Coefficient"] > 0 else "negatively"
+            ci_text = ""
+            if pd.notna(row.get("CI Lower")) and pd.notna(row.get("CI Upper")):
+                ci_text = f", 95% CI {row['CI Lower']:.3f} to {row['CI Upper']:.3f}"
             bullets.append(
                 f"**{row['Variable']}** is {direction} associated with {outcome_label} "
-                f"after controlling for other predictors "
-                f"(β = {row['Coefficient']:.3f}, p = {row['p-value']:.4f})."
+                f"after controlling for the other predictors "
+                f"(β = {row['Coefficient']:.3f}{ci_text}, "
+                f"{p_label} = {row[p_col]:.4f}). A confidence interval that "
+                f"excludes zero is what makes this coefficient distinguishable "
+                f"from no effect."
             )
 
     if not non_sig.empty:
         non_sig_names = ", ".join(f"**{v}**" for v in non_sig["Variable"])
         bullets.append(
-            f"The following predictors were not statistically significant at p < 0.05: "
-            f"{non_sig_names}."
+            f"Not statistically significant at {p_label} < 0.05 — their "
+            f"confidence intervals include zero: {non_sig_names}."
         )
 
     bullets.append(

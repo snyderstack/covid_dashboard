@@ -34,6 +34,7 @@ from tools import (
     compute_window_outcomes,
     find_data_corrections,
     monthly_snapshot_long,
+    peer_median_series,
     load_county_geojson,
     GEOJSON_CDN_URL,
 )
@@ -58,6 +59,7 @@ from county_features import (
     compute_bivariate_correlation,
     compute_ols_trend,
     find_similar_counties,
+    generate_county_insights,
 )
 from modeling import (
     FACTOR_COLS as _MOD_FACTOR_COLS,
@@ -71,9 +73,11 @@ from modeling import (
     run_rf_partial_dependence,
     compute_county_clusters,
 )
+from plotly.subplots import make_subplots
 from spatial_analysis import (
     build_adjacency_from_geojson,
     compute_getis_ord_gi_star,
+    compute_morans_i,
 )
 
 # Page config and global CSS
@@ -999,6 +1003,16 @@ def get_hotspot_analysis(_choro_data, metric_key, date_str):
     )
 
 @st.cache_data
+def get_morans_i(_choro_data, metric_key, date_str):
+    """Global Moran's I for the current metric/date, cached alongside Gi*."""
+    adjacency = get_county_adjacency()
+    if adjacency is None:
+        return None
+    return compute_morans_i(
+        _choro_data[["countyFIPS", "value"]], adjacency,
+    )
+
+@st.cache_data
 def get_ahrf_features(covid_fips_frozenset):
     """
     Load and build the AHRF county feature table.
@@ -1863,6 +1877,26 @@ def render_map_tab(transforms, cases_df, deaths_df, population_df, dates, unique
                     if _hs is None or _hs["gi_z"].isna().all():
                         st.info("Not enough data to compute hotspot statistics.")
                     else:
+                        # Global clustering summary before the local map
+                        _mi = get_morans_i(
+                            choro_data, metric_name,
+                            map_selected_date if not _is_vax_metric else "latest",
+                        )
+                        if _mi and pd.notna(_mi.get("I")):
+                            _mi_strength = (
+                                "strong" if _mi["I"] >= 0.4 else
+                                "moderate" if _mi["I"] >= 0.15 else
+                                "weak"
+                            )
+                            _mi_p = ("< 0.001" if _mi["p_value"] < 0.001
+                                     else f"{_mi['p_value']:.3f}")
+                            st.markdown(
+                                f"**Global Moran's I = {_mi['I']:.2f}** "
+                                f"(z = {_mi['z']:.1f}, p {_mi_p}) — {_mi_strength} "
+                                "evidence that this metric clusters geographically: "
+                                "counties resemble their neighbours far more than "
+                                "chance would produce. The map below shows *where*."
+                            )
                         fig_hs = px.choropleth(
                             _hs,
                             locations="countyFIPS",
@@ -2669,6 +2703,26 @@ def render_county_overview_tab(
         unsafe_allow_html=True,
     )
 
+    # Structural peers — shared by the pandemic timeline (peer trajectory
+    # overlay), the comparison table (peer medians), the resilience profile,
+    # and the similar-counties section.
+    _fips_str5 = str(fips).zfill(5) if fips != "—" else None
+    _peers = (
+        find_similar_counties(master_county_df, _fips_str5, n=10)
+        if (_fips_str5 and master_county_df is not None and not master_county_df.empty)
+        else pd.DataFrame()
+    )
+    _peer_pool = (
+        master_county_df[master_county_df["countyFIPS"].isin(set(_peers["countyFIPS"]))]
+        if not _peers.empty else pd.DataFrame()
+    )
+
+    def _peer_med(col):
+        if _peer_pool.empty or col not in _peer_pool.columns:
+            return np.nan
+        _s = pd.to_numeric(_peer_pool[col], errors="coerce").dropna()
+        return float(_s.median()) if len(_s) else np.nan
+
     # SECTION 1 — COVID OUTCOMES
 
     st.markdown(
@@ -2782,7 +2836,10 @@ def render_county_overview_tab(
                     "Peak Deaths /100k shows the matching death wave peak within 90 days of each case peak."
                 )
 
-        # Compact mini-chart: smoothed daily cases per 100k with wave peak markers
+        # Integrated pandemic timeline: cases and deaths (per-100k, smoothed),
+        # detected waves as shaded bands with labelled peaks, a structural-peer
+        # median trajectory for context, and the vaccination rollout as a
+        # companion panel sharing the same time axis.
         if _wc["number_of_waves"] > 0 or _wd["number_of_waves"] > 0:
             _lag_ts_mini = analyze_county_lag(
                 cases_df, deaths_df, population_df, county_name, state,
@@ -2790,66 +2847,122 @@ def render_county_overview_tab(
                 max_lag_days=90, min_peak_distance_days=14,
             )
             if "error" not in _lag_ts_mini:
+                st.markdown("##### Pandemic Timeline")
                 _cts = _lag_ts_mini["cases_ts"]
                 _dts = _lag_ts_mini["deaths_ts"]
-                _cp  = _lag_ts_mini["case_peaks"]
 
-                fig_mini = go.Figure()
-                fig_mini.add_trace(go.Scatter(
+                _has_vax_ts = vax_ts_df is not None and not vax_ts_df.empty and _fips_str5
+                _tl = make_subplots(
+                    rows=2, cols=1, shared_xaxes=True,
+                    row_heights=[0.72, 0.28], vertical_spacing=0.07,
+                    specs=[[{"secondary_y": True}], [{}]],
+                )
+
+                _tl.add_trace(go.Scatter(
                     x=_cts["Date"], y=_cts["Per100k MA"],
                     name="Cases /100k (7d MA)", mode="lines",
-                    line=dict(color=NATIONAL_COLOR, width=1.8),
-                    hovertemplate="%{x|%b %Y}: %{y:.2f}<extra></extra>",
-                ))
-                fig_mini.add_trace(go.Scatter(
+                    line=dict(color=NATIONAL_COLOR, width=2),
+                    hovertemplate="%{x|%Y-%m-%d}: %{y:.2f} cases/100k<extra></extra>",
+                ), row=1, col=1, secondary_y=False)
+                _tl.add_trace(go.Scatter(
                     x=_dts["Date"], y=_dts["Per100k MA"],
                     name="Deaths /100k (7d MA)", mode="lines",
-                    line=dict(color="#c41e3a", width=1.8), yaxis="y2",
-                    hovertemplate="%{x|%b %Y}: %{y:.3f}<extra></extra>",
-                ))
-                if _cp:
-                    fig_mini.add_trace(go.Scatter(
-                        x=[p["peak_date"] for p in _cp],
-                        y=[p["peak_value"] for p in _cp],
-                        name="Case Peaks", mode="markers",
-                        marker=dict(color=COUNTY_COLOR, size=10, symbol="diamond",
-                                    line=dict(color="white", width=1)),
-                        hovertemplate="Peak: %{x|%Y-%m-%d}<br>%{y:.2f} /100k<extra></extra>",
-                    ))
-                # Default view: zoom to the county's active outbreak window
-                # (peaks ± ~6 weeks) rather than compressing three years into
-                # a small chart; the mini-map slider restores full exploration.
-                if _cp:
-                    _mini_x0 = min(p["peak_date"] for p in _cp) - pd.Timedelta(days=45)
-                    _mini_x1 = max(p["peak_date"] for p in _cp) + pd.Timedelta(days=60)
-                else:
-                    _mini_x0, _mini_x1 = _cts["Date"].min(), _cts["Date"].max()
+                    line=dict(color="rgba(196,30,58,0.65)", width=1.5),
+                    hovertemplate="%{x|%Y-%m-%d}: %{y:.3f} deaths/100k<extra></extra>",
+                ), row=1, col=1, secondary_y=True)
 
-                fig_mini.update_layout(
-                    height=330, margin=dict(t=10, b=10, l=50, r=50),
+                # Structural-peer median trajectory (10 most similar counties)
+                if not _peers.empty and "ma7_cases" in transforms:
+                    _peer_ts = peer_median_series(
+                        transforms["ma7_cases"], population_df,
+                        _peers["countyFIPS"].tolist(),
+                    )
+                    if not _peer_ts.empty:
+                        _tl.add_trace(go.Scatter(
+                            x=_peer_ts["Date"], y=_peer_ts["Value"],
+                            name="Peer median (10 similar counties)", mode="lines",
+                            line=dict(color="#8A94A3", width=1.4, dash="dash"),
+                            hovertemplate="%{x|%Y-%m-%d}: %{y:.2f} cases/100k (peer median)<extra></extra>",
+                        ), row=1, col=1, secondary_y=False)
+
+                # Detected waves: shaded spans + labelled peak markers placed
+                # on the case curve
+                _c_by_date = _cts.set_index("Date")["Per100k MA"]
+                for _w in _wc["waves"]:
+                    _tl.add_vrect(
+                        x0=_w["start_date"], x1=_w["end_date"],
+                        fillcolor="rgba(242,106,33,0.06)", line_width=0,
+                        layer="below", row=1, col=1,
+                    )
+                _pk_x = [pd.Timestamp(_w["peak_date"]) for _w in _wc["waves"]]
+                _pk_y = [float(_c_by_date.get(d, np.nan)) for d in _pk_x]
+                _tl.add_trace(go.Scatter(
+                    x=_pk_x, y=_pk_y, mode="markers+text",
+                    name="Wave peaks",
+                    text=[f"W{_w['wave_number']}" for _w in _wc["waves"]],
+                    textposition="top center",
+                    textfont=dict(size=10, color=COUNTY_COLOR),
+                    marker=dict(color=COUNTY_COLOR, size=10, symbol="diamond",
+                                line=dict(color="white", width=1)),
+                    hovertemplate="Wave peak: %{x|%Y-%m-%d}<br>%{y:.2f} cases/100k<extra></extra>",
+                ), row=1, col=1, secondary_y=False)
+
+                # Vaccination rollout panel on the shared time axis
+                if _has_vax_ts:
+                    _tl_vax = get_county_vax_timeseries(vax_ts_df, _fips_str5)
+                    if not _tl_vax.empty and "vax_complete_pct" in _tl_vax.columns:
+                        _tl.add_trace(go.Scatter(
+                            x=_tl_vax["Date"], y=_tl_vax["vax_complete_pct"],
+                            name="Fully vaccinated (%)", mode="lines",
+                            line=dict(color="#059669", width=1.8),
+                            fill="tozeroy", fillcolor="rgba(5,150,105,0.10)",
+                            hovertemplate="%{x|%Y-%m-%d}: %{y:.1f}% fully vaccinated<extra></extra>",
+                        ), row=2, col=1)
+
+                # Default view: the outbreak window; mini-map slider explores all
+                if _wc["waves"]:
+                    _tl_x0 = min(pd.Timestamp(_w["start_date"]) for _w in _wc["waves"]) - pd.Timedelta(days=30)
+                    _tl_x1 = max(pd.Timestamp(_w["end_date"]) for _w in _wc["waves"]) + pd.Timedelta(days=30)
+                else:
+                    _tl_x0, _tl_x1 = _cts["Date"].min(), _cts["Date"].max()
+
+                _tl.update_layout(
+                    height=560, margin=dict(t=30, b=10, l=55, r=55),
                     template="plotly_white", hovermode="x unified",
-                    legend=dict(orientation="h", y=1.04, x=0, font=dict(size=10)),
-                    yaxis=dict(
-                        title=dict(text="Cases /100k", font=dict(color=NATIONAL_COLOR, size=10)),
-                        tickfont=dict(color=NATIONAL_COLOR, size=9),
-                        showgrid=True, gridcolor="rgba(200,200,200,0.3)",
-                    ),
-                    yaxis2=dict(
-                        title=dict(text="Deaths /100k", font=dict(color="#c41e3a", size=10)),
-                        tickfont=dict(color="#c41e3a", size=9),
-                        overlaying="y", side="right", showgrid=False,
-                    ),
-                    xaxis=dict(
-                        showgrid=False,
-                        range=[_mini_x0, _mini_x1],
-                        rangeslider=dict(visible=True, thickness=0.09),
-                    ),
+                    legend=dict(orientation="h", y=1.05, x=0, font=dict(size=10)),
                     font=dict(family="sans-serif", size=10),
                 )
-                st.plotly_chart(fig_mini, use_container_width=True)
+                _tl.update_xaxes(range=[_tl_x0, _tl_x1], row=1, col=1, showgrid=False)
+                _tl.update_xaxes(
+                    range=[_tl_x0, _tl_x1], row=2, col=1, showgrid=False,
+                    rangeslider=dict(visible=True, thickness=0.08),
+                )
+                _tl.update_yaxes(
+                    title_text="Cases /100k", row=1, col=1, secondary_y=False,
+                    title_font=dict(color=NATIONAL_COLOR, size=10),
+                    tickfont=dict(color=NATIONAL_COLOR, size=9),
+                    showgrid=True, gridcolor="rgba(200,200,200,0.3)",
+                )
+                _tl.update_yaxes(
+                    title_text="Deaths /100k", row=1, col=1, secondary_y=True,
+                    title_font=dict(color="#c41e3a", size=10),
+                    tickfont=dict(color="#c41e3a", size=9), showgrid=False,
+                )
+                _tl.update_yaxes(
+                    title_text="Vacc. %", range=[0, 100], row=2, col=1,
+                    title_font=dict(color="#059669", size=10),
+                    tickfont=dict(color="#059669", size=9),
+                    showgrid=True, gridcolor="rgba(200,200,200,0.2)",
+                )
+                st.plotly_chart(_tl, use_container_width=True)
                 st.caption(
-                    "Opens zoomed to this county's outbreak period — drag the "
-                    "mini-map below the chart to explore the full timeline."
+                    "One integrated view of how the pandemic unfolded here: shaded "
+                    "spans are detected waves (peaks labelled W1, W2, …), the dashed "
+                    "gray line is the median trajectory of this county's ten "
+                    "structural peers, and the lower panel shows the vaccination "
+                    "rollout on the same time axis. Opens zoomed to the outbreak "
+                    "period — drag the mini-map to explore. Case-to-death lag "
+                    "detail lives in the Time Lag Analysis tab."
                 )
     else:
         st.info("Wave analysis unavailable for this county.")
@@ -3044,25 +3157,8 @@ def render_county_overview_tab(
         st.info("Vaccination data not available for this county.")
 
     # SECTION 7 — COUNTY VS NATIONAL & PEER MEDIANS
-
-    # Structural peers are computed here so the comparison table can show a
-    # peer median column; Section 9 reuses the same result for its display.
-    _fips_str5 = str(fips).zfill(5) if fips != "—" else None
-    _peers = (
-        find_similar_counties(master_county_df, _fips_str5, n=10)
-        if (_fips_str5 and master_county_df is not None and not master_county_df.empty)
-        else pd.DataFrame()
-    )
-    _peer_pool = (
-        master_county_df[master_county_df["countyFIPS"].isin(set(_peers["countyFIPS"]))]
-        if not _peers.empty else pd.DataFrame()
-    )
-
-    def _peer_med(col):
-        if _peer_pool.empty or col not in _peer_pool.columns:
-            return np.nan
-        _s = pd.to_numeric(_peer_pool[col], errors="coerce").dropna()
-        return float(_s.median()) if len(_s) else np.nan
+    # (structural peers were computed just after the hero banner — the
+    #  pandemic timeline, this table, and Sections 8-9 all share them)
 
     st.markdown(
         '<div class="sub-section-header"><h3>7 — County vs National &amp; Peer Medians</h3>'
@@ -3151,104 +3247,103 @@ def render_county_overview_tab(
     else:
         st.info("Insufficient data for national comparison.")
 
-    # SECTION 8 — RESEARCH SNAPSHOTS
+    # SECTION 8 — RESILIENCE PROFILE
 
     st.markdown(
-        '<div class="sub-section-header"><h3>8 — Research Snapshots</h3>'
-        '<p>Rule-based summary derived from the metrics above. Not a causal inference.</p></div>',
+        '<div class="sub-section-header"><h3>8 — Resilience Profile</h3>'
+        '<p>Automated analytical summary: where this county&rsquo;s mortality sits among '
+        'its ten structural peers and nationally, and which characteristics distinguish '
+        'it from those peers. Each factor&rsquo;s direction comes from its national '
+        'association with mortality — computed statistics only, and county-level '
+        '(ecological) associations, never causes.</p></div>',
         unsafe_allow_html=True,
     )
 
-    _findings = []
+    _insights = (
+        generate_county_insights(master_county_df, _fips_str5, _peers)
+        if _fips_str5 else None
+    )
 
-    def _above(col, county_v):
-        nat = nat_med.get(col, np.nan)
-        if pd.isna(county_v) or pd.isna(nat) or nat == 0:
-            return None
-        return county_v > nat
+    def _ins_val(v, suffix):
+        if suffix == "" and abs(v) >= 1000:
+            return f"{v:,.0f}"
+        return f"{v:,.1f}{suffix}"
 
-    # COVID burden
-    _c100 = _above("cases_per_100k", cases_100k)
-    if _c100 is not None:
-        _findings.append(
-            f"COVID case burden was **{'above' if _c100 else 'below'}-average** "
-            f"({_fmt(cases_100k, '.1f')} vs national median {_fmt(nat_med.get('cases_per_100k'), '.1f')} per 100k)."
+    def _factor_bullet(f, risk):
+        dir_word = "Higher" if f["county_value"] > f["peer_median"] else "Lower"
+        outcome_word = "higher" if risk else "lower"
+        return (
+            f"**{dir_word} {f['label']}** — {_ins_val(f['county_value'], f['suffix'])} "
+            f"vs peer median {_ins_val(f['peer_median'], f['suffix'])} "
+            f"(nationally, {dir_word.lower()} {f['label']} is associated with "
+            f"{outcome_word} mortality; r = {f['assoc_r']:+.2f})."
         )
 
-    _d100 = _above("deaths_per_100k", deaths_100k)
-    if _d100 is not None:
-        _findings.append(
-            f"COVID mortality was **{'above' if _d100 else 'below'}-average** "
-            f"({_fmt(deaths_100k, '.2f')} vs {_fmt(nat_med.get('deaths_per_100k'), '.2f')} deaths per 100k)."
+    if _insights:
+        _ic1, _ic2, _ic3 = st.columns(3)
+        with _ic1:
+            render_metric_card("Mortality vs Peers",
+                               f"{_insights['peer_percentile']:.0f}th pctile")
+        with _ic2:
+            render_metric_card("Mortality vs Nation",
+                               f"{_insights['national_percentile']:.0f}th pctile")
+        with _ic3:
+            render_metric_card("Peer Median Deaths /100k",
+                               f"{_insights['peer_median_outcome']:.1f}")
+
+        _pp = _insights["peer_percentile"]
+        _cmp_word = ("higher than" if _pp >= 60
+                     else "lower than" if _pp <= 40 else "in line with")
+        st.markdown(
+            f"COVID mortality here (**{_insights['outcome_value']:.1f} deaths/100k**) "
+            f"was **{_cmp_word}** most of its structural peers — above "
+            f"{_pp:.0f}% of the {_insights['n_peers']} most similar counties and "
+            f"{_insights['national_percentile']:.0f}% of all counties."
         )
 
-    # Healthcare
-    _pcp = _above("pcp_per_100k", _v("pcp_per_100k"))
-    if _pcp is not None:
-        _findings.append(
-            f"Primary care physician density was **{'above' if _pcp else 'below'}-average** "
-            f"({_fmt(_v('pcp_per_100k'), '.1f')} vs {_fmt(nat_med.get('pcp_per_100k'), '.1f')} per 100k)."
-        )
+        if _insights["risk_factors"]:
+            st.markdown("**Characteristics consistent with a worse outcome:**")
+            for _f in _insights["risk_factors"]:
+                st.markdown(f"- {_factor_bullet(_f, True)}")
+        if _insights["protective_factors"]:
+            st.markdown("**Characteristics consistent with a better outcome:**")
+            for _f in _insights["protective_factors"]:
+                st.markdown(f"- {_factor_bullet(_f, False)}")
+        if not _insights["risk_factors"] and not _insights["protective_factors"]:
+            st.markdown(
+                "No single characteristic strongly distinguishes this county from "
+                "its peers — every factor gap is under 0.8 national standard "
+                "deviations, so its outcome difference is not explained by any one "
+                "measured factor."
+            )
+    else:
+        st.info("Insufficient data to build a resilience profile for this county.")
 
-    _beds = _above("hospital_beds_per_100k", _v("hospital_beds_per_100k"))
-    if _beds is not None:
-        _findings.append(
-            f"Hospital bed capacity was **{'above' if _beds else 'below'}-average** "
-            f"({_fmt(_v('hospital_beds_per_100k'), '.1f')} vs {_fmt(nat_med.get('hospital_beds_per_100k'), '.1f')} per 100k)."
-        )
-
-    # Socioeconomic
-    _pov = _above("child_poverty_pct", _v("child_poverty_pct"))
-    if _pov is not None:
-        _findings.append(
-            f"Child poverty rate was **{'above' if _pov else 'below'}-average** "
-            f"({_fmt(_v('child_poverty_pct'), '.1f')}% vs {_fmt(nat_med.get('child_poverty_pct'), '.1f')}% national median)."
-        )
-
-    _unemp = _above("unemployment_rate", _v("unemployment_rate"))
-    if _unemp is not None:
-        _findings.append(
-            f"Unemployment was **{'above' if _unemp else 'below'}-average** "
-            f"({_fmt(_v('unemployment_rate'), '.1f')}% vs {_fmt(nat_med.get('unemployment_rate'), '.1f')}%)."
-        )
-
-    # Rural/urban context
+    # Context findings retained from the analyses above
+    _context = []
     if rucc_group in ("Metro", "Nonmetro"):
-        _findings.append(
+        _context.append(
             f"This is a **{rucc_group.lower()} county** "
             f"(RUCC {int(rucc) if pd.notna(rucc) else '—'})."
         )
-
-    # Lag summary
     if pd.notna(_lag_summary["avg_lag"]) and _lag_summary["n_matched"] > 0:
-        _findings.append(
-            f"Across {_lag_summary['n_matched']} matched wave pair(s), the average lag from case peak to death peak "
-            f"was **{_lag_summary['avg_lag']:.1f} days** (median {_lag_summary['median_lag']:.1f} d)."
+        _context.append(
+            f"Across {_lag_summary['n_matched']} matched wave pair(s), deaths peaked "
+            f"an average of **{_lag_summary['avg_lag']:.1f} days** after case peaks "
+            f"(median {_lag_summary['median_lag']:.1f} d)."
         )
-
-    # Vaccination context
-    _vax_c = _v("vax_complete_pct")
-    _nat_vax_c = nat_med.get("vax_complete_pct", np.nan)
-    if pd.notna(_vax_c) and pd.notna(_nat_vax_c):
-        _vax_above = _vax_c > _nat_vax_c
-        _findings.append(
-            f"Final vaccination rate was **{'above' if _vax_above else 'below'}-average** "
-            f"({_fmt(_vax_c, '.1f')}% fully vaccinated vs {_fmt(_nat_vax_c, '.1f')}% national median)."
+    if "error" not in _wave_results and _wave_results["cases"]["number_of_waves"] > 0:
+        _context.append(
+            f"**{_wave_results['cases']['number_of_waves']} distinct case wave(s)** "
+            "were detected at Standard sensitivity."
         )
-
-    # Wave count
-    if "error" not in _wave_results:
-        _n_waves = _wave_results["cases"]["number_of_waves"]
-        if _n_waves > 0:
-            _findings.append(
-                f"**{_n_waves} distinct case wave(s)** were detected with the default parameters."
-            )
-
-    if _findings:
-        for i, finding in enumerate(_findings):
-            st.markdown(f"- {finding}")
-    else:
-        st.info("Insufficient data to generate research snapshots for this county.")
+    for _c in _context:
+        st.markdown(f"- {_c}")
+    st.caption(
+        "_All associations here are county-level (ecological): they describe "
+        "counties, not individuals, and do not establish causation. Unmeasured "
+        "factors — policy, behavior, variant timing — also shaped outcomes._"
+    )
 
     # SECTION 9 — SIMILAR COUNTIES
 
@@ -3287,14 +3382,87 @@ def render_county_overview_tab(
 
         _peer_deaths = pd.to_numeric(_peers.get("deaths_per_100k"), errors="coerce").dropna()
         if len(_peer_deaths) >= 5 and pd.notna(deaths_100k):
-            _peer_med = float(_peer_deaths.median())
-            _cmp_word = "higher than" if deaths_100k > _peer_med else "lower than"
+            _peer_med_d = float(_peer_deaths.median())
+            _cmp_word = "higher than" if deaths_100k > _peer_med_d else "lower than"
             st.caption(
                 f"COVID mortality here ({_fmt(deaths_100k, '.1f')} deaths/100k) was "
                 f"**{_cmp_word}** the median of its ten structural peers "
-                f"({_peer_med:.1f}/100k). Distance is Euclidean in standardized "
+                f"({_peer_med_d:.1f}/100k). Distance is Euclidean in standardized "
                 "feature space — smaller means more similar."
             )
+
+        # Why these counties count as "similar": the features behind the match
+        with st.expander("Why these counties? The similarity features", expanded=False):
+            _sim_cols = {
+                "population":           ("Population", ",.0f"),
+                "pop_density_per_sqmi": ("Density /sq mi", ",.1f"),
+                "median_family_income": ("Median Income ($)", ",.0f"),
+                "pct_pop_65plus":       ("% 65+", ".1f"),
+                "pcp_per_100k":         ("PCP /100k", ".1f"),
+                "pct_college_4yr":      ("% College", ".1f"),
+                "unemployment_rate":    ("Unemp. (%)", ".1f"),
+                "rucc_code":            ("RUCC", ".0f"),
+            }
+            _sim_rows = []
+            for _col, (_lbl, _spec) in _sim_cols.items():
+                _cv = _v(_col)
+                _pv = _peer_med(_col)
+                if pd.isna(_cv) and pd.isna(_pv):
+                    continue
+                _sim_rows.append({
+                    "Feature": _lbl,
+                    "This County": f"{_cv:{_spec}}" if pd.notna(_cv) else "—",
+                    "Peer Median": f"{_pv:{_spec}}" if pd.notna(_pv) else "—",
+                })
+            if _sim_rows:
+                st.dataframe(pd.DataFrame(_sim_rows),
+                             use_container_width=True, hide_index=True)
+            st.caption(
+                "Counties are matched on these structural features (z-scored; "
+                "population log-transformed) — describing what a county *is*, "
+                "never its COVID outcomes, so outcome comparisons against peers "
+                "stay meaningful."
+            )
+
+        # Geographic neighbours — a different comparison set than structural
+        # peers: bordering counties share exposure and geography but can differ
+        # structurally.
+        _adj_ov = get_county_adjacency()
+        if _adj_ov is not None and _fips_str5:
+            _nb_fips = sorted(_adj_ov.get(_fips_str5, ()))
+            if _nb_fips:
+                with st.expander(f"Bordering counties ({len(_nb_fips)})", expanded=False):
+                    _nb_pool = master_county_df[
+                        master_county_df["countyFIPS"].astype(str).str.zfill(5).isin(set(_nb_fips))
+                    ]
+                    _nb_cols = {
+                        "County Name":        "County",
+                        "State":              "State",
+                        "deaths_per_100k":    "Deaths /100k",
+                        "cases_per_100k":     "Cases /100k",
+                        "vax_complete_pct":   "Fully Vacc. (%)",
+                    }
+                    _nb_disp = _nb_pool[[c for c in _nb_cols if c in _nb_pool.columns]].rename(columns=_nb_cols)
+                    if not _nb_disp.empty:
+                        st.dataframe(
+                            _nb_disp.style.format({
+                                "Deaths /100k": "{:.1f}",
+                                "Cases /100k": "{:,.0f}",
+                                "Fully Vacc. (%)": "{:.1f}",
+                            }),
+                            use_container_width=True, hide_index=True,
+                        )
+                        _nb_deaths = pd.to_numeric(_nb_pool.get("deaths_per_100k"), errors="coerce").dropna()
+                        if len(_nb_deaths) >= 3 and pd.notna(deaths_100k):
+                            _nb_word = "higher than" if deaths_100k > float(_nb_deaths.median()) else "lower than"
+                            st.caption(
+                                f"Mortality here was **{_nb_word}** the median of its "
+                                f"{len(_nb_deaths)} bordering counties "
+                                f"({float(_nb_deaths.median()):.1f}/100k). Neighbours share "
+                                "geography and exposure but may differ structurally — compare "
+                                "with the structural peers above. County outcomes cluster "
+                                "spatially; see the hotspot analysis on the Geographic Map."
+                            )
     else:
         st.info("Not enough complete structural data to find similar counties.")
 
@@ -3310,6 +3478,7 @@ def render_county_overview_tab(
             wave_results=_wave_results, lag_summary=_lag_summary,
             values=_v, nat_med=nat_med,
             data_through=dates[-1] if dates else "—",
+            insights=_insights,
         )
         st.download_button(
             "Download county report (HTML)",
@@ -3328,8 +3497,8 @@ def render_county_overview_tab(
 def _build_county_report_html(county_name, state, fips, population, rucc_group,
                               total_cases, total_deaths, cases_100k, deaths_100k,
                               cfr, wave_results, lag_summary, values, nat_med,
-                              data_through):
-    """Assemble a self-contained one-page HTML fact sheet for download."""
+                              data_through, insights=None):
+    """Assemble a self-contained HTML research fact sheet for download."""
     def fmt(v, spec=",.1f", fallback="N/A"):
         try:
             return f"{float(v):{spec}}" if pd.notna(v) else fallback
@@ -3343,12 +3512,57 @@ def _build_county_report_html(county_name, state, fips, population, rucc_group,
 
     n_waves = "N/A"
     peak_wave = "N/A"
+    wave_rows = ""
     if isinstance(wave_results, dict) and "error" not in wave_results:
         n_waves = wave_results["cases"]["number_of_waves"]
         pd_date = wave_results["cases"]["date_of_peak_wave"]
         peak_wave = str(pd_date)[:10] if pd_date else "N/A"
+        for w in wave_results["cases"]["waves"]:
+            wave_rows += (
+                f"<tr><td>Wave {w['wave_number']}</td>"
+                f"<td>{str(w['start_date'])[:10]}</td>"
+                f"<td>{str(w['peak_date'])[:10]}</td>"
+                f"<td>{str(w['end_date'])[:10]}</td>"
+                f"<td>{w['duration_days']} d</td>"
+                f"<td>{w.get('wave_significance', float('nan')):.0f}/100</td></tr>"
+            )
+    wave_table = (
+        "<h2>Detected waves (Standard sensitivity)</h2>"
+        "<table><tr><th>Wave</th><th>Start</th><th>Peak</th><th>End</th>"
+        f"<th>Duration</th><th>Significance</th></tr>{wave_rows}</table>"
+        if wave_rows else ""
+    )
 
     avg_lag = fmt(lag_summary.get("avg_lag"), ".1f") if lag_summary else "N/A"
+
+    # Resilience profile bullets (computed by generate_county_insights)
+    insight_html = ""
+    if insights:
+        def _iv(v, suffix):
+            return f"{v:,.0f}" if suffix == "" and abs(v) >= 1000 else f"{v:,.1f}{suffix}"
+
+        items = ""
+        for f_, risk in ([(f, True) for f in insights["risk_factors"]]
+                         + [(f, False) for f in insights["protective_factors"]]):
+            dir_word = "Higher" if f_["county_value"] > f_["peer_median"] else "Lower"
+            outcome_word = "higher" if risk else "lower"
+            items += (
+                f"<li><strong>{dir_word} {f_['label']}</strong> — "
+                f"{_iv(f_['county_value'], f_['suffix'])} vs peer median "
+                f"{_iv(f_['peer_median'], f_['suffix'])} (nationally, "
+                f"{dir_word.lower()} {f_['label']} is associated with "
+                f"{outcome_word} mortality; r = {f_['assoc_r']:+.2f})</li>"
+            )
+        insight_html = (
+            "<h2>Resilience profile</h2>"
+            f"<p>Mortality here ({insights['outcome_value']:.1f} deaths/100k) exceeded "
+            f"{insights['peer_percentile']:.0f}% of this county's ten structural peers "
+            f"and {insights['national_percentile']:.0f}% of all counties "
+            f"(peer median: {insights['peer_median_outcome']:.1f}/100k).</p>"
+            + (f"<ul>{items}</ul>" if items else
+               "<p>No measured characteristic strongly distinguishes this county "
+               "from its structural peers.</p>")
+        )
 
     rows = "".join([
         row("Total cases", total_cases, spec=",.0f"),
@@ -3393,6 +3607,29 @@ Average case-to-death lag: <strong>{avg_lag} days</strong>
 <tr><th>Metric</th><th>This county</th><th>National median</th></tr>
 {rows}
 </table>
+{insight_html}
+{wave_table}
+<h2>Methodology notes</h2>
+<p style="font-size:0.83rem;line-height:1.6;">
+Per-capita rates are counts ÷ county population × 100,000 (static population).
+Waves are detected on 7-day-smoothed daily counts via adaptive-baseline region
+detection with sustained-trough splitting and a peak-significance filter;
+boundaries mark where the signal stays above 10% of each wave's peak elevation.
+Case-to-death lag pairs each case peak with the nearest subsequent death peak
+within 90 days. Structural peers are the ten nearest counties by z-scored
+Euclidean distance over population (log), density, income, age structure,
+physician density, education, unemployment, and RUCC code. Resilience-profile
+factor directions are each factor's national Pearson correlation with
+mortality.</p>
+<h2>Data limitations</h2>
+<p style="font-size:0.83rem;line-height:1.6;">
+All statistics are county-level (ecological) — they describe counties, not
+individuals, and do not establish causation. Case counts depend on testing
+intensity; daily series contain reporting artifacts (negative revisions are
+clipped, flagged in the dashboard). Population denominators are fixed across
+2020–2023. AHRF variables are 2018–2023 vintages; vaccination data ends
+May 2023. Unmeasured factors — policy, behavior, variant timing — also shaped
+outcomes.</p>
 <p class="foot">Generated by the COVID-19 County Outcomes Analysis Platform, Gettysburg College.
 Sources: USAFacts, HRSA Area Health Resources Files, CDC county vaccination data.
 County-level (ecological) statistics — not individual-level or causal estimates.</p>
@@ -4893,8 +5130,16 @@ def render_county_factors_tab(
         )
 
     if corr["n"] >= 10:  # correlation stats annotation
+        # 95% CI for Pearson r via the Fisher z-transform
+        _ci_txt = ""
+        _r_, _n_ = corr["pearson_r"], corr["n"]
+        if pd.notna(_r_) and _n_ > 3 and abs(_r_) < 1:
+            _zf = math.atanh(_r_)
+            _se = 1.0 / math.sqrt(_n_ - 3)
+            _ci_txt = (f"  [95% CI {math.tanh(_zf - 1.96 * _se):.3f}, "
+                       f"{math.tanh(_zf + 1.96 * _se):.3f}]")
         ann_lines = [
-            f"<b>Pearson r</b> = {_fmt(corr['pearson_r'])}  (p {_fmt_p(corr['pearson_p'])})",
+            f"<b>Pearson r</b> = {_fmt(corr['pearson_r'])}{_ci_txt}  (p {_fmt_p(corr['pearson_p'])})",
             f"<b>Spearman r</b> = {_fmt(corr['spearman_r'])}  (p {_fmt_p(corr['spearman_p'])})",
             f"<b>R²</b> = {_fmt(corr['r_squared'])}  ·  <b>N</b> = {corr['n']:,}",
         ]

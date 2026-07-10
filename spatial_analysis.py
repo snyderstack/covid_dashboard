@@ -79,6 +79,87 @@ def build_adjacency_from_geojson(geojson: dict, min_shared_vertices: int = 2) ->
     return adjacency
 
 
+def compute_morans_i(
+    values_df: pd.DataFrame,
+    adjacency: Dict[str, Set[str]],
+    fips_col: str = "countyFIPS",
+    value_col: str = "value",
+) -> dict:
+    """
+    Global Moran's I spatial autocorrelation with binary contiguity weights.
+
+    Moran's I answers "do similar values cluster geographically?" for the map
+    as a whole (Gi* answers it locally, county by county). I ranges roughly
+    from −1 (checkerboard dispersion) through E[I] = −1/(n−1) ≈ 0 (spatial
+    randomness) to +1 (strong clustering). Significance uses the analytic
+    z-score under the normality assumption (Cliff & Ord 1981):
+
+        I = (n / S0) · Σᵢⱼ wᵢⱼ zᵢ zⱼ / Σᵢ zᵢ²
+
+    Returns:
+        Dict with keys: I, expected, z, p_value, n, n_edges.
+        NaN statistics when fewer than 30 counties or no edges exist.
+    """
+    df = values_df.dropna(subset=[value_col]).copy()
+    df[fips_col] = df[fips_col].astype(str).str.zfill(5)
+    df = df.drop_duplicates(subset=[fips_col]).reset_index(drop=True)
+
+    n = len(df)
+    empty = {"I": np.nan, "expected": np.nan, "z": np.nan,
+             "p_value": np.nan, "n": n, "n_edges": 0}
+    if n < 30:
+        return empty
+
+    idx_of = {f: i for i, f in enumerate(df[fips_col])}
+    x = df[value_col].astype(float).values
+    z = x - x.mean()
+    denom = float((z ** 2).sum())
+    if denom == 0:
+        return empty
+
+    cross = 0.0
+    degrees = np.zeros(n)
+    n_edges = 0
+    for fips, nbrs in adjacency.items():
+        i = idx_of.get(fips)
+        if i is None:
+            continue
+        for nb in nbrs:
+            j = idx_of.get(nb)
+            if j is None:
+                continue
+            cross += z[i] * z[j]      # ordered pairs — each edge counted twice
+            degrees[i] += 1
+            n_edges += 1
+
+    if n_edges == 0:
+        return empty
+
+    s0 = float(n_edges)               # Σ wij over ordered pairs
+    I = (n / s0) * (cross / denom)
+
+    # Analytic moments under normality (binary symmetric weights):
+    # S1 = ½ Σ (wij + wji)² = 2·S0 ;  S2 = Σᵢ (row_sumᵢ + col_sumᵢ)² = 4 Σ degᵢ²
+    e_i = -1.0 / (n - 1)
+    s1 = 2.0 * s0
+    s2 = 4.0 * float((degrees ** 2).sum())
+    var_i = (
+        (n * n * s1 - n * s2 + 3.0 * s0 * s0)
+        / ((n * n - 1.0) * s0 * s0)
+        - e_i * e_i
+    )
+    if var_i <= 0:
+        return {**empty, "I": I, "expected": e_i}
+
+    z_score = (I - e_i) / np.sqrt(var_i)
+    # two-sided normal p-value via erfc
+    from math import erfc, sqrt
+    p = erfc(abs(z_score) / sqrt(2.0))
+
+    return {"I": float(I), "expected": float(e_i), "z": float(z_score),
+            "p_value": float(p), "n": n, "n_edges": n_edges // 2}
+
+
 def compute_getis_ord_gi_star(
     values_df: pd.DataFrame,
     adjacency: Dict[str, Set[str]],

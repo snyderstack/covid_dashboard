@@ -531,6 +531,130 @@ def find_similar_counties(
     return result.nsmallest(n, "similarity_distance").reset_index(drop=True)
 
 
+# Factors examined by the insight engine: (column, plain-language label,
+# unit suffix for display). Directions are derived empirically from the data,
+# never hardcoded.
+INSIGHT_FACTORS = [
+    ("vax_complete_pct",       "vaccination coverage",            "%"),
+    ("pcp_per_100k",           "primary care physician density",  " per 100k"),
+    ("hospital_beds_per_100k", "hospital bed capacity",           " per 100k"),
+    ("icu_beds_per_100k",      "ICU bed capacity",                " per 100k"),
+    ("median_family_income",   "median family income",            ""),
+    ("unemployment_rate",      "unemployment",                    "%"),
+    ("child_poverty_pct",      "child poverty",                   "%"),
+    ("pct_no_hs_diploma",      "share of adults without a high school diploma", "%"),
+    ("pct_college_4yr",        "college attainment",              "%"),
+    ("pct_pop_65plus",         "share of population 65+",         "%"),
+    ("pop_density_per_sqmi",   "population density",              " per sq mi"),
+    ("median_age",             "median age",                      ""),
+]
+
+
+def generate_county_insights(
+    master_df: pd.DataFrame,
+    county_fips: str,
+    peers: pd.DataFrame,
+    outcome_col: str = "deaths_per_100k",
+    min_abs_z: float = 0.8,
+    max_factors: int = 4,
+) -> Optional[dict]:
+    """
+    Rule-based analytical summary for one county versus its structural peers.
+
+    Strictly computed statistics — no generated speculation:
+
+    1. Outcome position: percentile of the county's outcome within its peer
+       group and within all counties.
+    2. Distinguishing factors: for each INSIGHT_FACTOR present, the county's
+       gap from the peer median is standardized by the national SD. Gaps with
+       |z| ≥ min_abs_z are 'distinguishing'.
+    3. Direction: each factor's national Pearson correlation with the outcome
+       supplies the empirical direction (|r| ≥ 0.05 required). A factor is a
+       RISK factor when the county deviates from peers in the direction
+       associated nationally with a worse outcome, PROTECTIVE when opposite.
+
+    All associations are county-level (ecological) — callers must present
+    them as associations, not causes.
+
+    Returns:
+        Dict with keys: outcome_value, peer_median_outcome,
+        peer_percentile, national_percentile, n_peers,
+        risk_factors, protective_factors (lists of dicts with keys
+        label, county_value, peer_median, z, assoc_r, suffix)
+        — or None when the county/peers/outcome are unavailable.
+    """
+    county_fips = str(county_fips).zfill(5)
+    if (master_df is None or master_df.empty or peers is None or peers.empty
+            or outcome_col not in master_df.columns):
+        return None
+
+    mrow = master_df[master_df["countyFIPS"].astype(str).str.zfill(5) == county_fips]
+    if mrow.empty or pd.isna(mrow.iloc[0][outcome_col]):
+        return None
+    row = mrow.iloc[0]
+    outcome_value = float(row[outcome_col])
+
+    peer_fips = set(peers["countyFIPS"].astype(str).str.zfill(5))
+    peer_pool = master_df[master_df["countyFIPS"].astype(str).str.zfill(5).isin(peer_fips)]
+    peer_outcomes = pd.to_numeric(peer_pool.get(outcome_col), errors="coerce").dropna()
+    if len(peer_outcomes) < 5:
+        return None
+
+    nat_outcomes = pd.to_numeric(master_df[outcome_col], errors="coerce").dropna()
+    result = {
+        "outcome_value": outcome_value,
+        "peer_median_outcome": float(peer_outcomes.median()),
+        "peer_percentile": float((peer_outcomes < outcome_value).mean() * 100),
+        "national_percentile": float(
+            stats.percentileofscore(nat_outcomes.values, outcome_value, kind="rank")
+        ),
+        "n_peers": int(len(peer_outcomes)),
+        "risk_factors": [],
+        "protective_factors": [],
+    }
+
+    candidates = []
+    for col, label, suffix in INSIGHT_FACTORS:
+        if col not in master_df.columns or col == outcome_col:
+            continue
+        county_val = pd.to_numeric(pd.Series([row.get(col)]), errors="coerce").iloc[0]
+        peer_vals = pd.to_numeric(peer_pool[col], errors="coerce").dropna()
+        nat_vals = pd.to_numeric(master_df[col], errors="coerce").dropna()
+        if pd.isna(county_val) or len(peer_vals) < 5 or len(nat_vals) < 100:
+            continue
+        nat_sd = float(nat_vals.std())
+        if nat_sd == 0:
+            continue
+        z = (float(county_val) - float(peer_vals.median())) / nat_sd
+        if abs(z) < min_abs_z:
+            continue
+
+        # Empirical direction: national correlation of the factor with outcome
+        pair = master_df[[col, outcome_col]].dropna()
+        r = float(np.corrcoef(pair[col].astype(float), pair[outcome_col].astype(float))[0, 1])
+        if abs(r) < 0.05 or not np.isfinite(r):
+            continue
+
+        candidates.append({
+            "label": label,
+            "county_value": float(county_val),
+            "peer_median": float(peer_vals.median()),
+            "z": float(z),
+            "assoc_r": r,
+            "suffix": suffix,
+            # deviation aligned with worse outcome → risk
+            "is_risk": (z * r) > 0,
+        })
+
+    candidates.sort(key=lambda c: -abs(c["z"]))
+    for c in candidates[: max_factors * 2]:
+        bucket = result["risk_factors"] if c.pop("is_risk") else result["protective_factors"]
+        if len(bucket) < max_factors:
+            bucket.append(c)
+
+    return result
+
+
 def prepare_for_clustering(
     df:             pd.DataFrame,
     feature_cols:   Optional[List[str]] = None,

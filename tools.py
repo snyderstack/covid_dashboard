@@ -784,6 +784,48 @@ def filter_choropleth_by_county_type(choro_data, county_type):
     return choro_data[choro_data["County_Type"] == target].copy()
 
 
+def peer_median_series(daily_ma_df, population_df, fips_list):
+    """
+    Median daily-per-100k trajectory across a set of counties.
+
+    Used to overlay a "structural peers" reference curve on a county's
+    pandemic timeline: each peer's smoothed daily counts are converted to
+    per-100k rates, then the median across peers is taken date by date.
+
+    Args:
+        daily_ma_df:   Wide-format smoothed daily counts (e.g. ma7_cases).
+        population_df: Population dataframe.
+        fips_list:     Iterable of 5-char FIPS codes (the peer group).
+
+    Returns:
+        DataFrame with columns Date, Value (median per-100k rate), or an
+        empty DataFrame if fewer than 3 peers have valid population data.
+    """
+    fips_set = {str(f).zfill(5) for f in fips_list}
+    sub = daily_ma_df[daily_ma_df["countyFIPS"].isin(fips_set)]
+    if sub.empty:
+        return pd.DataFrame(columns=["Date", "Value"])
+
+    pop_col = get_population_column(population_df)
+    pops = population_df[
+        (population_df["countyFIPS"].isin(fips_set)) &
+        (pd.to_numeric(population_df[pop_col], errors="coerce") > 0)
+    ][["countyFIPS", "State", pop_col]].rename(columns={pop_col: "_pop"})
+
+    merged = sub.merge(pops, on=["countyFIPS", "State"], how="inner")
+    if len(merged) < 3:
+        return pd.DataFrame(columns=["Date", "Value"])
+
+    date_cols = get_date_columns(daily_ma_df)
+    rates = merged[date_cols].apply(pd.to_numeric, errors="coerce")
+    rates = rates.div(pd.to_numeric(merged["_pop"], errors="coerce").values, axis=0) * 100_000
+
+    return pd.DataFrame({
+        "Date": pd.to_datetime(date_cols),
+        "Value": rates.median(axis=0).values,
+    })
+
+
 def find_data_corrections(df_wide, county_name, state):
     """
     Find dates where a county's cumulative series decreased.

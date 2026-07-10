@@ -180,16 +180,21 @@ These are the current, deliberate limitations of the platform. Each is either di
 
 ## 11. Future Development
 
-Planned technical extensions include:
+Extensions that require datasets **not currently in the repository** (do not
+attempt without acquiring the data):
 
-- animated choropleth playback over time
+- excess-mortality analysis — needs all-cause death registrations (CDC WONDER)
+- age- or race-stratified outcomes — USAFacts county data carries no strata
+- policy/NPI timelines (mask mandates, closures) — needs OxCGRT or state data
+- hospital *utilization* time series — AHRF provides static capacity only
+- variant-era attribution — needs genomic surveillance data
+- time-varying population denominators — needs annual county estimates
+
+Extensions feasible with current data:
+
 - multi-county map brushing and comparison selection
-- hotspot detection and regional clustering
-- wave propagation analysis
+- wave propagation analysis (which counties' waves lead or lag their region)
 - county geometry-based state and regional zooming
-- deterministic validation fixtures for automated tests
-- heteroscedasticity-robust (HC3) standard errors for OLS (via statsmodels)
-- bundling the county GeoJSON locally instead of fetching it from the Plotly CDN
 
 Future work should preserve the current division of responsibility: data preparation in `tools.py`, validation in `validation.py`, UI in `app.py`, and research modules in purpose-specific files.
 
@@ -547,6 +552,52 @@ exploration, replacing three years compressed into 260 px.
 coronavirus (generated inline SVG data URI — gradient sphere, twelve spike
 proteins in the dashboard's orange palette; no asset file or network fetch).
 The footer seal is unchanged.
+
+### 2026-07-09 — Analytical platform release
+
+Six additions that shift the platform from visualization toward county-level
+epidemiological analysis. All are computed strictly from repository data;
+extensions requiring external datasets are catalogued in Section 11 instead
+of being half-implemented. Tests at 28.
+
+**Resilience Profile / automated insights** — new
+`county_features.generate_county_insights()`: places a county's mortality at
+a percentile within its ten structural peers and nationally, then identifies
+distinguishing characteristics (peer gaps ≥ 0.8 national SD) and classifies
+each as risk or protective using the factor's *empirical* national
+correlation with mortality (|r| ≥ 0.05 required; directions are never
+hardcoded). Peer-relative by design: traits shared by the whole peer group
+(e.g., low vaccination across an Appalachian peer set) are correctly not
+flagged as distinguishing. Replaces the Overview's "Research Snapshots"
+section; also embedded in the downloadable report. Degrades to None when
+data is insufficient.
+
+**Pandemic timeline** — the Overview's mini chart became an integrated
+two-panel timeline: smoothed cases and deaths per 100k (dual axes), detected
+wave spans with labelled peaks, a structural-peer median trajectory (new
+`tools.peer_median_series()`), and the vaccination rollout on a shared time
+axis, with outbreak-window default zoom and a mini-map slider.
+
+**Global Moran's I** — new `spatial_analysis.compute_morans_i()` (binary
+contiguity, analytic z under normality, Cliff & Ord 1981) answers "does this
+metric cluster geographically at all?" above the Gi* map, which answers
+"where?". Cached alongside the hotspot analysis.
+
+**Neighboring-county comparison** — the Overview's peer section gains a
+bordering-counties table (from the GeoJSON-derived adjacency) contrasting
+geographic neighbours (shared exposure) with structural peers (shared
+characteristics), plus a "why these counties?" expander showing the
+similarity features behind the peer match.
+
+**Statistical communication** — OLS interpretation bullets now classify
+significance by HC3-robust p-values when available and report each
+significant coefficient with its 95% CI (plus a plain-language note on what
+a CI excluding zero means); the County Factors annotation adds a Fisher-z
+95% CI for Pearson r.
+
+**Research report** — the downloadable HTML report gains the resilience
+profile, the detected-wave table, and explicit Methodology Notes and Data
+Limitations sections suitable for classroom or exploratory-research use.
 
 ### Change Log Policy
 

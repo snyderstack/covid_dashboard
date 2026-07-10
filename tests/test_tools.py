@@ -14,6 +14,7 @@ from tools import (
     find_data_corrections,
     get_state_bounds_for_zoom,
     monthly_snapshot_long,
+    peer_median_series,
     precompute_daily_diffs,
     precompute_per_capita,
 )
@@ -99,6 +100,17 @@ def test_classify_county_type_fallback_and_rucc(population_df):
 def test_state_bounds():
     assert get_state_bounds_for_zoom("PA")["zoom"] == 6
     assert get_state_bounds_for_zoom("ZZ") is None
+
+
+def test_peer_median_series(cases_df, deaths_df, population_df):
+    daily_c, _ = precompute_daily_diffs(cases_df, deaths_df)
+    pm = peer_median_series(daily_c, population_df, ["01001", "01003", "02001"])
+    assert len(pm) == len(DATES)
+    # last day's daily diffs: alpha 9, beta 10, gamma 10 → per-100k medians
+    per100k = sorted([9 / 10_000, 10 / 20_000, 10 / 50_000])
+    assert pm["Value"].iloc[-1] == pytest.approx(per100k[1] * 100_000)
+    # fewer than 3 valid peers → empty (graceful degradation)
+    assert peer_median_series(daily_c, population_df, ["01001"]).empty
 
 
 def test_find_data_corrections(cases_df):

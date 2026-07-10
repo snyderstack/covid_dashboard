@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from county_features import find_similar_counties
+from county_features import find_similar_counties, generate_county_insights
 from modeling import _kmeans_numpy, _ols_fit, compute_county_clusters, compute_vif
 
 
@@ -46,6 +46,30 @@ def test_find_similar_counties_handles_missing():
     df = _synthetic_master()
     df.loc[0, "median_family_income"] = np.nan   # reference county incomplete
     assert find_similar_counties(df, df["countyFIPS"].iloc[0], n=10).empty
+
+
+def test_insight_engine_flags_low_vaccination():
+    rng = np.random.default_rng(5)
+    df = _synthetic_master(seed=5)
+    df["vax_complete_pct"] = rng.normal(55, 6, len(df))
+    df["deaths_per_100k"] = 500 - 4 * df["vax_complete_pct"] + rng.normal(0, 10, len(df))
+    # target county: structurally typical, but far below peers on vaccination
+    df.loc[0, "vax_complete_pct"] = 30.0
+    df.loc[0, "deaths_per_100k"] = 500 - 4 * 30.0
+
+    peers = find_similar_counties(df, df["countyFIPS"].iloc[0], n=10)
+    ins = generate_county_insights(df, df["countyFIPS"].iloc[0], peers)
+
+    assert ins is not None and ins["n_peers"] >= 5
+    assert ins["peer_percentile"] > 75          # worse than most peers
+    risk_labels = [f["label"] for f in ins["risk_factors"]]
+    assert "vaccination coverage" in risk_labels
+    vax = next(f for f in ins["risk_factors"] if f["label"] == "vaccination coverage")
+    assert vax["county_value"] == pytest.approx(30.0)
+    assert vax["assoc_r"] < 0                   # empirically negative association
+    # graceful degradation
+    assert generate_county_insights(df, "99999", peers) is None
+    assert generate_county_insights(df, df["countyFIPS"].iloc[0], peers.iloc[0:0]) is None
 
 
 def test_vif_detects_collinearity():

@@ -5,7 +5,11 @@ import pandas as pd
 import pytest
 
 from lag_analysis import match_case_death_peaks
-from spatial_analysis import build_adjacency_from_geojson, compute_getis_ord_gi_star
+from spatial_analysis import (
+    build_adjacency_from_geojson,
+    compute_getis_ord_gi_star,
+    compute_morans_i,
+)
 from wave_analysis import (
     calculate_wave_metrics,
     match_waves_to_national_windows,
@@ -158,6 +162,28 @@ def test_adjacency_from_geojson():
     assert adj["00002"] == {"00001", "00003"}
     assert adj["00004"] == set()   # queen-only contact excluded
     assert adj["00005"] == set()   # island
+
+
+def test_morans_i_detects_clustering():
+    rng = np.random.default_rng(0)
+    fips = [f"{i:05d}" for i in range(1, 61)]
+    adjacency = {f: set() for f in fips}
+    for i in range(59):
+        adjacency[fips[i]].add(fips[i + 1])
+        adjacency[fips[i + 1]].add(fips[i])
+
+    clustered = np.concatenate([rng.normal(100, 3, 30), rng.normal(10, 3, 30)])
+    res = compute_morans_i(pd.DataFrame({"countyFIPS": fips, "value": clustered}), adjacency)
+    assert res["I"] > 0.7 and res["p_value"] < 0.001
+    assert res["n_edges"] == 59
+
+    shuffled = clustered.copy()
+    rng.shuffle(shuffled)
+    res_r = compute_morans_i(pd.DataFrame({"countyFIPS": fips, "value": shuffled}), adjacency)
+    assert abs(res_r["z"]) < 3          # no significant clustering after shuffling
+
+    tiny = compute_morans_i(pd.DataFrame({"countyFIPS": fips[:5], "value": clustered[:5]}), adjacency)
+    assert np.isnan(tiny["I"])          # too few counties → NaN, never crash
 
 
 def test_getis_ord_hotspot_detection():
