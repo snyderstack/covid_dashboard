@@ -3365,7 +3365,7 @@ def _render_lag_chart(location_label, results, summary, lag_ma_window):
     fig.add_trace(go.Scatter(
         x=deaths_ts["Date"], y=deaths_ts["Per100k MA"],
         name="New Deaths /100k", mode="lines",
-        line=dict(color="rgba(196,30,58,0.75)", width=1.5), yaxis="y2",
+        line=dict(color="rgba(196,30,58,0.6)", width=1.4), yaxis="y2",
         hovertemplate="Date: %{x|%Y-%m-%d}<br>Deaths/100k: %{y:.3f}<extra></extra>",
     ))
 
@@ -3414,20 +3414,22 @@ def _render_lag_chart(location_label, results, summary, lag_ma_window):
             ),
         ))
 
-    # Matched pairs: one translucent band per pair spanning case peak → death
-    # peak. Lag labels are drawn only when they can't collide (few pairs).
+    # Matched-pair overlays (bands + lag labels) are drawn only when they can
+    # be read individually. Beyond that density, overlapping bands wash out the
+    # whole timeline; the marker colors, hover, and the pairs table carry the
+    # matching information at any count.
     shapes, annotations = [], []
-    show_lag_labels = len(matches) <= 8
-    for _, row in matches.iterrows():
-        c_date = row["case_peak_date"]
-        d_date = row["death_peak_date"]
-        lag    = int(row["lag_days"])
-        shapes.append(dict(
-            type="rect", xref="x", yref="paper",
-            x0=c_date, x1=d_date, y0=0, y1=1,
-            fillcolor="rgba(242,106,33,0.07)", line_width=0, layer="below",
-        ))
-        if show_lag_labels:
+    show_pair_overlays = 0 < len(matches) <= 8
+    if show_pair_overlays:
+        for _, row in matches.iterrows():
+            c_date = row["case_peak_date"]
+            d_date = row["death_peak_date"]
+            lag    = int(row["lag_days"])
+            shapes.append(dict(
+                type="rect", xref="x", yref="paper",
+                x0=c_date, x1=d_date, y0=0, y1=1,
+                fillcolor="rgba(242,106,33,0.06)", line_width=0, layer="below",
+            ))
             mid_date = c_date + (d_date - c_date) / 2
             annotations.append(dict(
                 x=mid_date, y=1.02, xref="x", yref="paper",
@@ -3435,16 +3437,47 @@ def _render_lag_chart(location_label, results, summary, lag_ma_window):
                 font=dict(size=10, color="#64707F"),
             ))
 
+    # Default view: zoom to the analysis window (all matched pairs ± 6 weeks)
+    # instead of compressing three years into one frame. The range selector,
+    # slider, and drag-zoom let users explore any period or return to All.
+    if not matches.empty:
+        view_start = matches["case_peak_date"].min() - pd.Timedelta(days=45)
+        view_end   = matches["death_peak_date"].max() + pd.Timedelta(days=45)
+    else:
+        view_start, view_end = cases_ts["Date"].min(), cases_ts["Date"].max()
+
+    subtitle_bits = [f"{lag_ma_window}-day MA",
+                     f"{summary['n_matched']} matched peak pair(s)"]
+    if show_pair_overlays:
+        subtitle_bits.append("shaded bands span case peak → death peak")
+    subtitle_bits.append("drag to zoom · use the slider or buttons to navigate")
+
     fig.update_layout(
         title=dict(
             text=(
                 f"<b>New Cases vs New Deaths per 100k — {location_label}</b>"
-                f"<br><sub>{lag_ma_window}-day MA · {summary['n_matched']} matched peak pair(s) · "
-                "shaded bands span case peak → death peak</sub>"
+                f"<br><sub>{' · '.join(subtitle_bits)}</sub>"
             ),
-            y=0.97, yanchor="top",
+            y=0.98, yanchor="top",
         ),
-        xaxis=dict(title="Date", showgrid=True, gridcolor="rgba(200,200,200,0.3)"),
+        xaxis=dict(
+            title=None,
+            showgrid=True, gridcolor="rgba(200,200,200,0.3)",
+            range=[view_start, view_end],
+            rangeslider=dict(visible=True, thickness=0.07),
+            rangeselector=dict(
+                buttons=[
+                    dict(count=3,  label="3m", step="month", stepmode="backward"),
+                    dict(count=6,  label="6m", step="month", stepmode="backward"),
+                    dict(count=12, label="1y", step="month", stepmode="backward"),
+                    dict(step="all", label="All"),
+                ],
+                x=0, xanchor="left", y=1.06, yanchor="bottom",
+                bgcolor="rgba(255,255,255,0.9)",
+                activecolor="rgba(242,106,33,0.25)",
+                font=dict(size=11),
+            ),
+        ),
         yaxis=dict(title=dict(text="New Cases per 100k",   font=dict(color=NATIONAL_COLOR)),
                    side="left",  tickfont=dict(color=NATIONAL_COLOR),
                    showgrid=True, gridcolor="rgba(200,200,200,0.3)", rangemode="tozero"),
@@ -3452,20 +3485,29 @@ def _render_lag_chart(location_label, results, summary, lag_ma_window):
                     side="right", overlaying="y", tickfont=dict(color="#c41e3a"),
                     showgrid=False, rangemode="tozero"),
         shapes=shapes, annotations=annotations,
-        hovermode="closest", height=640,
-        margin=dict(t=118, b=55, l=60, r=60),
+        hovermode="closest", height=720,
+        margin=dict(t=125, b=30, l=60, r=60),
         template="plotly_white",
         legend=dict(orientation="h", yanchor="bottom", y=1.06, xanchor="right", x=1,
                     bgcolor="rgba(255,255,255,0.9)", font=dict(size=10)),
         font=dict(family="sans-serif", size=11),
     )
     st.plotly_chart(fig, use_container_width=True)
-    if not show_lag_labels and not matches.empty:
-        st.caption(
-            f"{len(matches)} matched pairs — individual lag labels are hidden at this "
-            "density to keep the chart readable. Hover any peak marker for its exact "
-            "lag, or see the full list in the pairs table below."
-        )
+    if not matches.empty:
+        if show_pair_overlays:
+            st.caption(
+                "The view opens zoomed to the analysis window; use the mini-map "
+                "slider below the chart, the 3m/6m/1y buttons, or drag on the "
+                "chart to explore. Shaded bands span each case peak → death peak."
+            )
+        else:
+            st.caption(
+                f"{len(matches)} matched pairs — per-pair bands and lag labels are "
+                "hidden at this density to keep the trends readable. Darker markers "
+                "are matched peaks; hover one for its exact lag, or see the full "
+                "list in the pairs table below. The view opens zoomed to the "
+                "analysis window — use the mini-map slider or buttons to navigate."
+            )
 
 def _render_lag_summary_metrics(summary, population):
     """Render the KPI metric row for a single county's lag results."""
@@ -5209,6 +5251,15 @@ def render_modeling_tab(master_county_df, locations) -> None:
         "Focus Outcome (table)",
         list(_available_outcomes.keys()),
         key="mod_corr_outcome",
+        help=(
+            "A correlation matrix shows how strongly each county characteristic "
+            "moves together with each COVID outcome. Pearson r measures the "
+            "strength and direction of a linear relationship between two "
+            "variables, while Spearman rho measures the strength of a monotonic "
+            "relationship based on ranked values and is less sensitive to "
+            "outliers. Values run from −1 (perfect negative) through 0 (none) "
+            "to +1 (perfect positive) — and correlation is not causation."
+        ),
     )
     corr_out_col = _available_outcomes[corr_out_label]
 
@@ -5291,6 +5342,13 @@ def render_modeling_tab(master_county_df, locations) -> None:
         "Outcome Variable",
         list(_available_outcomes.keys()),
         key="mod_fi_outcome",
+        help=(
+            "The Random Forest learns to predict this outcome from all county "
+            "factors at once. The importance scores show which factors the model "
+            "leaned on most to make accurate predictions — a measure of "
+            "predictive usefulness, not of cause and effect. Factors that are "
+            "correlated with each other share credit."
+        ),
     )
     fi_out_col = _available_outcomes[fi_out_label]
 
@@ -5411,6 +5469,14 @@ def render_modeling_tab(master_county_df, locations) -> None:
             list(_available_factors.keys()),
             default=list(_available_factors.keys())[:6],
             key="mod_ols_predictors",
+            help=(
+                "The factors entered into the model together. Each coefficient "
+                "then answers: holding the other selected predictors fixed, how "
+                "does this factor relate to the outcome? A factor that looks "
+                "strong on its own can lose significance here when another "
+                "predictor explains the same variation — check the VIF table "
+                "below if two predictors overlap heavily."
+            ),
         )
 
     if ols_pred_labels and st.button("Fit OLS Model", key="mod_ols_run"):
@@ -5506,6 +5572,13 @@ def render_modeling_tab(master_county_df, locations) -> None:
             index=list(_available_outcomes.keys()).index("Deaths per 100k")
                   if "Deaths per 100k" in _available_outcomes else 0,
             key="mod_res_outcome",
+            help=(
+                "The model predicts this outcome from each county's structural "
+                "characteristics (income, healthcare access, age, rurality…). "
+                "Resilience = predicted − actual: a county that did better than "
+                "counties with similar characteristics scores positive. It measures "
+                "over/under-performance versus expectation, not raw outcomes."
+            ),
         )
         res_out_col = _available_outcomes[res_out_label]
     with res_c2:
@@ -5946,7 +6019,15 @@ def render_modeling_tab(master_county_df, locations) -> None:
 
     _ac1, _ac2 = st.columns([1, 4], vertical_alignment="bottom")
     with _ac1:
-        arch_k = st.selectbox("Number of archetypes (k)", [3, 4, 5, 6], index=1, key="mod_arch_k")
+        arch_k = st.selectbox(
+            "Number of archetypes (k)", [3, 4, 5, 6], index=1, key="mod_arch_k",
+            help=(
+                "How many groups to split counties into. K-means finds the k "
+                "groupings whose members are most similar to each other. There is "
+                "no single correct k — try a few and keep the one whose profiles "
+                "are most interpretable."
+            ),
+        )
     with _ac2:
         run_arch = st.button("Identify archetypes", key="mod_arch_run")
 

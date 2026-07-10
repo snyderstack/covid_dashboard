@@ -489,6 +489,32 @@ now carries session-level context instead of per-tab controls:
 The map tab's initial date defaults to the latest available date, exactly
 as the removed slider's default did; no other behavior changed.
 
+### 2026-07-09 — Lag chart navigation and targeted tooltips
+
+Presentation-only (app.py; analytics untouched).
+
+**Time Lag chart.** Matched-pair bands are now drawn only when ≤ 8 pairs
+exist — the same density gate as the lag labels. Beyond that, overlapping
+bands tiled the entire timeline into a wash (the very clutter they replaced);
+marker colors, hover, and the pairs table carry the matching information at
+any density, and the caption says so. The chart now opens zoomed to the
+analysis window (first case peak → last death peak, ± 6 weeks) instead of
+compressing three years — including dead post-reporting tails — into one
+frame, and gains a range slider (mini-map), 3m/6m/1y/All range buttons, and
+drag-to-zoom, with height increased to 720 px. The death curve is drawn
+lighter still, so the case curve reads as primary.
+
+**Tooltips.** Five targeted help tooltips added to the Statistical Modeling
+tab, where student-facing concepts are densest: the correlation-matrix
+outcome selector (what a correlation matrix is; Pearson r vs Spearman ρ in
+plain language), the Random Forest outcome selector (importance = predictive
+usefulness, not causation; correlated factors share credit), the OLS
+predictor multiselect (coefficients are conditional on the other predictors;
+pointer to the VIF table), the resilience outcome selector (score =
+over/under-performance vs expectation), and the archetype k selector (no
+single correct k). Other candidates already carry help text or are covered
+by the per-tab Key Terms glossary — deliberately not tooltipped everywhere.
+
 ### Change Log Policy
 
 Future changes should be appended to this section. Do not create new `*_SUMMARY.md`, `*_AUDIT.md`, `*_CHANGES.md`, `*_FIXES.md`, `*_NOTES.md`, `*_IMPLEMENTATION.md`, or similar documentation files.
