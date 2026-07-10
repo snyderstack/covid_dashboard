@@ -1315,40 +1315,129 @@ with kpi_col3:
 with kpi_col4:
     render_metric_card(_kpi_label, _kpi_count)
 
-# Sidebar controls
+# Sidebar — persistent session panel. The sidebar is the only element visible
+# from every tab, so it carries session-level context (current county, recent
+# history), true global settings, and dataset health — not per-tab filters.
+
+# Map tab initial date (the map's own slider and ?date= URL param take over
+# from there).
+selected_date = dates[-1] if dates else None
+
+
+def _sidebar_label(text):
+    st.markdown(
+        f"<p style='font-size:0.68rem;font-weight:700;letter-spacing:0.1em;"
+        f"text-transform:uppercase;color:rgba(255,255,255,0.45);"
+        f"margin:1.4rem 0 0.6rem 0;'>{text}</p>",
+        unsafe_allow_html=True,
+    )
+
+
+def _jump_to_county(loc):
+    st.session_state["overview_county"] = loc
+
 
 with st.sidebar:
+    # Now Viewing — the county currently loaded in the Overview tab
+    _sb_county = st.session_state.get("overview_county", locations[0] if locations else None)
+    _sidebar_label("Now Viewing")
+    if _sb_county:
+        _sb_row = pd.Series(dtype=object)
+        if master_county_df is not None and not master_county_df.empty:
+            _sb_name, _sb_state = extract_county_state(_sb_county)
+            _sb_mask = (
+                (master_county_df["County Name"] == _sb_name)
+                & (master_county_df["State"] == _sb_state)
+            )
+            if _sb_mask.any():
+                _sb_row = master_county_df[_sb_mask].iloc[0]
+
+        def _sb_stat(col, spec):
+            v = _sb_row.get(col) if col in _sb_row.index else None
+            try:
+                return f"{float(v):{spec}}" if pd.notna(v) else "—"
+            except (TypeError, ValueError):
+                return "—"
+
+        st.markdown(
+            "<div style='padding:0.75rem 0.85rem;border-radius:8px;"
+            "background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);'>"
+            f"<p style='margin:0 0 0.3rem 0;font-size:0.9rem;font-weight:700;"
+            f"color:#ffffff;line-height:1.3;'>{_sb_county}</p>"
+            "<p style='margin:0;font-size:0.73rem;color:rgba(255,255,255,0.65);line-height:1.7;'>"
+            f"Population: {_sb_stat('population', ',.0f')}<br>"
+            f"Deaths /100k: {_sb_stat('deaths_per_100k', '.1f')}<br>"
+            f"Fully vaccinated: {_sb_stat('vax_complete_pct', '.1f')}%"
+            "</p></div>",
+            unsafe_allow_html=True,
+        )
+        st.button(
+            "Surprise me",
+            key="sidebar_surprise",
+            on_click=lambda: st.session_state.update(
+                overview_county=random.choice(locations)
+            ),
+            use_container_width=True,
+            help="Jump the County Overview to a randomly chosen county",
+        )
+
+    # Recently viewed — session history maintained by the Overview tab
+    _recent = [c for c in st.session_state.get("recent_counties", []) if c != _sb_county]
+    if _recent:
+        _sidebar_label("Recently Viewed")
+        for _rc in _recent[:4]:
+            st.button(
+                _rc,
+                key=f"recent_{_rc}",
+                on_click=_jump_to_county,
+                args=(_rc,),
+                use_container_width=True,
+            )
+
+    # Global display settings (consumed by the map tab and animation)
+    _sidebar_label("Display")
+    st.checkbox(
+        "Colorblind-safe palette",
+        value=False,
+        key="cb_safe_global",
+        help="Render map color scales with Viridis (perceptually uniform, readable "
+             "with all common color-vision deficiencies).",
+    )
+
+    # Dataset health — which optional sources actually loaded this session
+    _sidebar_label("Dataset Status")
+
+    def _status_row(label, ok, note_ok, note_missing):
+        color = "#34d399" if ok else "#f87171"
+        note = note_ok if ok else note_missing
+        return (
+            f"<p style='margin:0 0 0.3rem 0;font-size:0.75rem;"
+            f"color:rgba(255,255,255,0.7);line-height:1.45;'>"
+            f"<span style='color:{color};font-size:0.6rem;'>&#9679;</span>&ensp;"
+            f"<strong style='color:rgba(255,255,255,0.85);'>{label}</strong><br>"
+            f"<span style='font-size:0.68rem;color:rgba(255,255,255,0.45);'>{note}</span></p>"
+        )
+
     st.markdown(
-        "<p style='font-size:0.7rem;font-weight:700;letter-spacing:0.1em;"
-        "text-transform:uppercase;color:rgba(255,255,255,0.45);margin:0.5rem 0 1rem 0;'>"
-        "Dashboard Controls</p>",
+        "<div style='padding:0.7rem 0.85rem;border-radius:8px;"
+        "background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);'>"
+        + _status_row("USAFacts COVID data", True, "Cases, deaths, population", "")
+        + _status_row("AHRF socioeconomic", _ahrf_loaded,
+                      "Factors & modeling enabled",
+                      "County Factors/Modeling limited — see data/README.md")
+        + _status_row("CDC vaccination", vax_latest_df is not None and not vax_latest_df.empty,
+                      "Vaccination features enabled",
+                      "Vaccination features hidden — see data/README.md")
+        + _status_row("County boundaries", county_geojson is not None,
+                      "Offline maps & spatial analysis",
+                      "Using CDN fallback; hotspots unavailable")
+        + "</div>",
         unsafe_allow_html=True,
     )
-    selected_date = st.select_slider(
-        "Analysis Date",
-        options=dates,
-        value=dates[-1],
-        help="Initial date for the Map tab; the map's own slider takes over after that",
-    )
-    st.markdown(
-        "<p style='font-size:0.7rem;font-weight:700;letter-spacing:0.1em;"
-        "text-transform:uppercase;color:rgba(255,255,255,0.45);margin:1rem 0 0.5rem 0;'>"
-        "Default Filters</p>",
-        unsafe_allow_html=True,
-    )
-    analysis_state = st.selectbox(
-        "State",
-        ["All States"] + unique_states,
-        help="Pre-select state for Trend Analysis tab (can override within each tab)",
-    )
-    st.markdown(
-        "<p style='font-size:0.72rem;color:rgba(255,255,255,0.38);margin-top:1.5rem;'>"
-        "Filters can be adjusted within each tab independently.</p>",
-        unsafe_allow_html=True,
-    )
+
     # Data coverage notice — reminds users this is a historical archive
     st.markdown(
-        "<div style='margin-top:2rem;padding:0.75rem;border-radius:6px;"
+        "<div style='margin-top:1.4rem;padding:0.75rem;border-radius:6px;"
         "background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);'>"
         "<p style='font-size:0.68rem;font-weight:700;letter-spacing:0.08em;"
         "text-transform:uppercase;color:rgba(255,255,255,0.45);margin:0 0 0.35rem 0;'>"
@@ -1464,13 +1553,8 @@ def render_map_tab(transforms, cases_df, deaths_df, population_df, dates, unique
                     "Log Scale: log₁₊₁ axis — best for cumulative counts spanning many orders of magnitude."
                 ),
             )
-            cb_safe = st.checkbox(
-                "Colorblind-safe palette",
-                value=False,
-                key="map_cb_safe",
-                help="Render with the Viridis scale (perceptually uniform, "
-                     "readable with all common color-vision deficiencies).",
-            )
+            # Palette accessibility is a global setting, set in the sidebar
+            cb_safe = st.session_state.get("cb_safe_global", False)
 
             # Open County Overview
             st.markdown('<p class="map-ctrl-group">County Profile</p>', unsafe_allow_html=True)
@@ -2448,6 +2532,13 @@ def render_county_overview_tab(
     # Keep the URL shareable: reflect the current county into ?county=
     if st.query_params.get("county") != location:
         st.query_params["county"] = location
+
+    # Session history for the sidebar's Recently Viewed list
+    _hist = st.session_state.get("recent_counties", [])
+    if not _hist or _hist[0] != location:
+        st.session_state["recent_counties"] = (
+            [location] + [c for c in _hist if c != location]
+        )[:6]
 
     render_learning_aids(
         terms=("per_100k", "cfr", "rucc", "hpsa", "ecological"),

@@ -465,6 +465,30 @@ module docstring gained the significance-filter step; two code comments
 phrased as development history ("the old…", "previously…") rewritten as
 present-tense rationale. No functional changes.
 
+### 2026-07-09 — Sidebar repurposed as a session panel
+
+The sidebar previously held an "Analysis Date" slider (redundant: it only
+seeded the map's initial date, which the map's own slider and ?date= URL
+parameter control) and a "State" default filter that was assigned but never
+read anywhere — dead since the standalone Trend Analysis tab was merged into
+County Comparison. As the only element visible from every tab, the sidebar
+now carries session-level context instead of per-tab controls:
+
+- **Now Viewing** — the county currently loaded in the Overview (name,
+  population, deaths/100k, vaccination) with a Surprise Me button.
+- **Recently Viewed** — one-click jump-back buttons for the last few
+  counties visited (session history maintained by the Overview tab).
+- **Display** — the colorblind-safe palette toggle, promoted from the map
+  control panel to a global setting (`cb_safe_global` session key).
+- **Dataset Status** — loaded/missing indicators for USAFacts, AHRF, CDC
+  vaccination, and the county boundary file, with pointers to
+  data/README.md when something is absent — a deployment health check at
+  a glance.
+- The Data Coverage notice is retained.
+
+The map tab's initial date defaults to the latest available date, exactly
+as the removed slider's default did; no other behavior changed.
+
 ### Change Log Policy
 
 Future changes should be appended to this section. Do not create new `*_SUMMARY.md`, `*_AUDIT.md`, `*_CHANGES.md`, `*_FIXES.md`, `*_NOTES.md`, `*_IMPLEMENTATION.md`, or similar documentation files.
