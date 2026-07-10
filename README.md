@@ -2,7 +2,7 @@
 
 An interactive Streamlit dashboard for county-level COVID-19 analysis in the United States. The platform joins USAFacts case, death, and population data with HRSA Area Health Resources Files (AHRF) and CDC county-level vaccination data, providing geographic mapping, trend comparison, wave detection, case-to-death lag analysis, and statistical modeling across 3,000+ counties.
 
-Developed at Gettysburg College for public-health analysis, coursework, and exploratory research. Built to be classroom-friendly: every tab carries a plain-language "Key terms" glossary, curated "Questions to investigate" prompts, and the methodology expanders show the actual formulas behind each statistic.
+Developed at Gettysburg College for public-health analysis, coursework, and exploratory research. Built to be classroom-friendly: every tab carries a plain-language "Key terms" glossary, statistical controls have educational tooltips, and the methodology expanders show the actual formulas behind each statistic.
 
 ## Dashboard Tabs
 

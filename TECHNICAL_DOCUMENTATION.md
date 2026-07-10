@@ -106,7 +106,7 @@ Per-capita rates use:
 
 Rows with `countyFIPS == "00000"` or non-positive population are excluded from population lookup. Counties without valid population receive `NaN` per-capita values instead of misleading zeroes or inflated rates.
 
-`calculate_per_capita()` is used for single-county time series in the Trend Analysis tab. It follows the same population guardrails.
+`calculate_per_capita()` is used for single-county time series in the County Comparison tab. It follows the same population guardrails.
 
 ## 6. Moving Average Calculations
 
@@ -162,7 +162,9 @@ Wave detail dictionaries use the key `"peak_value"` for the peak count (accurate
 
 `county_features.py` creates a one-row-per-county feature table for downstream research. `create_county_feature_table()` merges county metadata, population, latest total cases, latest total deaths, cases per 100k, deaths per 100k, and optional wave metrics. `create_master_county_table()` extends this with AHRF healthcare/socioeconomic variables and CDC vaccination columns, joined on countyFIPS; this master table backs the County Overview, County Factors, and Statistical Modeling tabs.
 
-`add_external_dataset()` supports merging additional county-level datasets by FIPS, optionally also requiring state matching. The module also provides `compute_bivariate_correlation()` (Pearson + Spearman with p-values), `compute_ols_trend()`, min-max normalization, z-score standardization, and `prepare_for_regression()` / `prepare_for_clustering()` helpers for external analysis workflows. Model fitting beyond simple OLS trends lives in `modeling.py` (see Section 15).
+`add_external_dataset()` supports merging additional county-level datasets by FIPS, optionally also requiring state matching. The module also provides `compute_bivariate_correlation()` (Pearson + Spearman with p-values), `compute_ols_trend()`, min-max normalization, z-score standardization, and `prepare_for_regression()` / `prepare_for_clustering()` helpers for external analysis workflows.
+
+Two peer-analysis functions power the County Overview: `find_similar_counties()` ranks counties by z-scored Euclidean distance over structural features (population log-transformed, outcomes deliberately excluded), and `generate_county_insights()` builds the automated Resilience Profile — peer/national mortality percentiles plus risk/protective factor identification with directions taken from each factor's empirical national correlation with mortality (see the 2026-07-09 analytical-platform changelog entry for the full rules). Model fitting beyond simple OLS trends lives in `modeling.py` (see Section 15).
 
 ## 10. Known Issues and Accepted Limitations
 
