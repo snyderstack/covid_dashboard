@@ -5068,6 +5068,13 @@ def render_county_factors_tab(
             st.warning(msg)
         return
 
+    if factor_col == outcome_col:
+        st.info(
+            "The X and Y axes are the same variable — every point falls on a "
+            "perfect diagonal (r = 1.0 by definition). Pick a different factor "
+            "or outcome for a meaningful relationship."
+        )
+
     corr = compute_bivariate_correlation(plot_df, factor_col, outcome_col, min_n=10)
     ols  = compute_ols_trend(plot_df, factor_col, outcome_col)
 
@@ -5094,7 +5101,10 @@ def render_county_factors_tab(
 
     hover_cols = ["County Name", "State", "countyFIPS"]
     color_col  = "rucc_group" if "rucc_group" in plot_df.columns else None
-    keep_cols  = [factor_col, outcome_col] + hover_cols
+    # dict.fromkeys dedupes while preserving order — selecting the same column
+    # twice (factor == outcome) would create duplicate labels that break
+    # sorting and column access downstream
+    keep_cols  = list(dict.fromkeys([factor_col, outcome_col] + hover_cols))
     if color_col:
         keep_cols.append(color_col)
     valid_df = plot_df[[c for c in keep_cols if c in plot_df.columns]].dropna(
@@ -5261,8 +5271,8 @@ def render_county_factors_tab(
 
     ranking_rows = []
     for f_lbl, f_col_r in FACTOR_OPTIONS.items():
-        if f_col_r not in plot_df.columns:
-            continue
+        if f_col_r not in plot_df.columns or f_col_r == outcome_col:
+            continue  # a variable's correlation with itself is not informative
         r_corr = compute_bivariate_correlation(plot_df, f_col_r, outcome_col, min_n=10)
         if r_corr["n"] < 10:
             continue

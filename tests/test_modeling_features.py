@@ -4,7 +4,12 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from county_features import find_similar_counties, generate_county_insights
+from county_features import (
+    compute_bivariate_correlation,
+    compute_ols_trend,
+    find_similar_counties,
+    generate_county_insights,
+)
 from modeling import _kmeans_numpy, _ols_fit, compute_county_clusters, compute_vif
 
 
@@ -46,6 +51,20 @@ def test_find_similar_counties_handles_missing():
     df = _synthetic_master()
     df.loc[0, "median_family_income"] = np.nan   # reference county incomplete
     assert find_similar_counties(df, df["countyFIPS"].iloc[0], n=10).empty
+
+
+def test_same_column_correlation_does_not_crash():
+    # Regression test: County Factors lets vaccination appear as both factor
+    # and outcome; selecting the same column on both axes (or a vaccination
+    # outcome triggering the rankings loop) previously raised
+    # "TypeError: arg must be a list, tuple, 1-d array, or Series" because
+    # df[[c, c]] produces duplicate columns whose access yields a DataFrame.
+    df = _synthetic_master()
+    res = compute_bivariate_correlation(df, "median_family_income", "median_family_income")
+    assert res["pearson_r"] == 1.0 and res["r_squared"] == 1.0
+    assert res["n"] > 0 and res["x_std"] == res["y_std"]
+    ols = compute_ols_trend(df, "median_family_income", "median_family_income")
+    assert ols["slope"] == pytest.approx(1.0) and ols["intercept"] == pytest.approx(0.0, abs=1e-6)
 
 
 def test_insight_engine_flags_low_vaccination():

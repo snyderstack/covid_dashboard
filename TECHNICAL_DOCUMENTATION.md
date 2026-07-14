@@ -610,6 +610,31 @@ the county cannot appear, the tab explains why — excluded by the active
 state/region/metro filters, or missing data for the selected factor/outcome
 pair — instead of failing silently. UI-only; no analytics changed.
 
+### 2026-07-10 — Headless render audit; same-variable crash fixed
+
+Built a headless render harness (mock Streamlit returning default widget
+values, plotly stubbed, everything else real) that executes the entire app —
+startup plus all seven tabs — against the real datasets, then re-runs it
+with overridden widget states. Four sweeps: defaults, exotic map/comparison/
+wave/lag/modeling states, hidden control panel with animation and hotspots,
+and an edge-case pass (Loving County TX everywhere, self-comparisons,
+identical axes).
+
+One genuine crash found and fixed — almost certainly the remembered
+"red text" defect: County Factors lets vaccination metrics appear as both
+factor and outcome, and `df[[c, c]]` selection creates duplicate-named
+columns whose access returns a DataFrame, so `compute_bivariate_correlation`
+raised "TypeError: arg must be a list, tuple, 1-d array, or Series". The
+Factor Correlation Rankings loop triggered it *automatically* whenever a
+vaccination outcome was selected — no unusual input needed. Fixes:
+duplicate-safe column selection in `compute_bivariate_correlation` and
+`compute_ols_trend` (x == y returns the exact degenerate statistics, r = 1),
+deduplicated plot-frame columns (the same defect broke sorting in the data
+table one layer down), the rankings loop skips the self-correlation row, and
+an explanatory note appears when both axes hold the same variable.
+Regression test added (suite at 29). All four render sweeps now pass with
+zero errors or stray warnings.
+
 ### Change Log Policy
 
 Future changes should be appended to this section. Do not create new `*_SUMMARY.md`, `*_AUDIT.md`, `*_CHANGES.md`, `*_FIXES.md`, `*_NOTES.md`, `*_IMPLEMENTATION.md`, or similar documentation files.

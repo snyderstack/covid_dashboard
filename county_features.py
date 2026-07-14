@@ -275,14 +275,27 @@ def compute_bivariate_correlation(
     if filter_mask is not None:
         sub = sub[filter_mask.values if hasattr(filter_mask, "values") else filter_mask]
 
-    valid = sub[[x_col, y_col]].dropna()
+    # Selecting the same column twice would produce a duplicate-named frame
+    # whose column access returns a DataFrame, not a Series — guard the
+    # degenerate x == y case (a variable correlates perfectly with itself).
+    cols = [x_col] if x_col == y_col else [x_col, y_col]
+    valid = sub[cols].dropna()
     x = pd.to_numeric(valid[x_col], errors="coerce")
-    y = pd.to_numeric(valid[y_col], errors="coerce")
+    y = x if y_col == x_col else pd.to_numeric(valid[y_col], errors="coerce")
     valid = pd.DataFrame({"x": x, "y": y}).dropna()
 
     n = len(valid)
     if n < min_n:
         return {**empty, "n": n}
+
+    if x_col == y_col:
+        s = float(valid["x"].std())
+        return {
+            "n": n, "pearson_r": 1.0, "pearson_p": 0.0,
+            "spearman_r": 1.0, "spearman_p": 0.0, "r_squared": 1.0,
+            "x_mean": float(valid["x"].mean()), "y_mean": float(valid["x"].mean()),
+            "x_std": s, "y_std": s,
+        }
 
     pr, pp = stats.pearsonr(valid["x"], valid["y"])
     sr, sp = stats.spearmanr(valid["x"], valid["y"])
@@ -331,9 +344,11 @@ def compute_ols_trend(
     if filter_mask is not None:
         sub = sub[filter_mask.values if hasattr(filter_mask, "values") else filter_mask]
 
-    valid = sub[[x_col, y_col]].dropna()
+    # Same duplicate-column guard as compute_bivariate_correlation
+    cols = [x_col] if x_col == y_col else [x_col, y_col]
+    valid = sub[cols].dropna()
     x = pd.to_numeric(valid[x_col], errors="coerce")
-    y = pd.to_numeric(valid[y_col], errors="coerce")
+    y = x if y_col == x_col else pd.to_numeric(valid[y_col], errors="coerce")
     valid = pd.DataFrame({"x": x, "y": y}).dropna()
 
     n = len(valid)
