@@ -1158,13 +1158,19 @@ def get_county_classifications(_population_df, _ahrf_df=None):
 
 # Startup — load and precompute all data at module scope. On the very first
 # run of a session the sequence takes 30-60 s, so it is narrated inside an
-# st.status panel; on later reruns everything returns from cache instantly
-# and no panel is shown.
+# st.status panel; on later reruns everything returns from cache instantly.
+#
+# The status lives inside an st.empty() slot that renders on EVERY run:
+# Streamlit's frontend keeps the active tab only while the element tree above
+# st.tabs stays structurally identical between reruns, so a status block that
+# exists on run 1 and vanishes on run 2 would remount the tab bar and snap
+# the user back to the first tab on their first interaction of each session.
 
 _first_boot = "boot_complete" not in st.session_state
+_boot_slot = st.empty()          # always present → stable element tree
 _boot = (
-    st.status("Preparing the dashboard — first launch loads all datasets…",
-              expanded=True)
+    _boot_slot.status("Preparing the dashboard — first launch loads all datasets…",
+                      expanded=True)
     if _first_boot else nullcontext()
 )
 
@@ -1264,6 +1270,25 @@ _ahrf_loaded = (
         for c in _AHRF_SENTINEL_COLS
     )
 )
+
+# Per-county heavy computations used by the County Overview, cached so that
+# interacting with any other tab (all tabs re-execute on every rerun) does not
+# re-run wave detection and lag analysis for the same county each time.
+@st.cache_data
+def _cached_overview_waves(county_name, state):
+    return calculate_waves_for_county(
+        cases_df, deaths_df,
+        transforms["daily_cases"], transforms["daily_deaths"],
+        county_name, state, ma_window=7, sensitivity="standard",
+    )
+
+@st.cache_data
+def _cached_overview_lag(county_name, state):
+    return analyze_county_lag(
+        cases_df, deaths_df, population_df, county_name, state,
+        ma_window=7, case_prominence=1.0, death_prominence=0.05,
+        max_lag_days=90, min_peak_distance_days=14,
+    )
 
 COUNTY_COLOR      = "#F26A21"  # Gettysburg Orange — County A
 NATIONAL_COLOR    = "#153A66"  # Gettysburg Navy   — County B / trend lines
@@ -2770,12 +2795,7 @@ def render_county_overview_tab(
         unsafe_allow_html=True,
     )
 
-    _wave_results = calculate_waves_for_county(
-        cases_df, deaths_df,
-        transforms["daily_cases"], transforms["daily_deaths"],
-        county_name, state,
-        ma_window=7, sensitivity="standard",
-    )
+    _wave_results = _cached_overview_waves(county_name, state)
 
     if "error" not in _wave_results:
         _wc = _wave_results["cases"]
@@ -2841,11 +2861,7 @@ def render_county_overview_tab(
         # median trajectory for context, and the vaccination rollout as a
         # companion panel sharing the same time axis.
         if _wc["number_of_waves"] > 0 or _wd["number_of_waves"] > 0:
-            _lag_ts_mini = analyze_county_lag(
-                cases_df, deaths_df, population_df, county_name, state,
-                ma_window=7, case_prominence=1.0, death_prominence=0.05,
-                max_lag_days=90, min_peak_distance_days=14,
-            )
+            _lag_ts_mini = _cached_overview_lag(county_name, state)
             if "error" not in _lag_ts_mini:
                 st.markdown("##### Pandemic Timeline")
                 _cts = _lag_ts_mini["cases_ts"]
@@ -2975,11 +2991,8 @@ def render_county_overview_tab(
         unsafe_allow_html=True,
     )
 
-    _lag_results = analyze_county_lag(
-        cases_df, deaths_df, population_df, county_name, state,
-        ma_window=7, case_prominence=1.0, death_prominence=0.05,
-        max_lag_days=90, min_peak_distance_days=14,
-    )
+    # Same parameters as the timeline's lag data — one cached computation
+    _lag_results = _cached_overview_lag(county_name, state)
     _lag_summary = summarize_lag_results(_lag_results)
 
     if "error" not in _lag_results:
@@ -4936,6 +4949,15 @@ def render_county_factors_tab(
             help="Find a specific county among the 3,000+ dots — it will be "
                  "marked with a labelled star on the scatter plot.",
         )
+        cf_zoom = st.checkbox(
+            "Zoom to highlight",
+            value=False,
+            key="cf_zoom_highlight",
+            disabled=(cf_highlight == "(none)"),
+            help="Center the chart on the highlighted county when it sits inside "
+                 "a dense cluster. Double-click the chart to reset the view; "
+                 "drag-zoom and pan work at any time.",
+        )
 
     # Optional filters (collapsed by default to keep chart front-and-center)
     with st.expander("Filter counties", expanded=False):
@@ -5159,6 +5181,14 @@ def render_county_factors_tab(
         if not _hl_row.empty:
             _hl_x = float(_hl_row.iloc[0][factor_col])
             _hl_y = float(_hl_row.iloc[0][outcome_col])
+            # White halo ring beneath the star so it stays visible inside
+            # dense clusters of same-colored dots
+            fig.add_trace(go.Scatter(
+                x=[_hl_x], y=[_hl_y],
+                mode="markers", showlegend=False, hoverinfo="skip",
+                marker=dict(symbol="circle", size=30, color="rgba(255,255,255,0.85)",
+                            line=dict(color="#0B2341", width=1.5)),
+            ))
             fig.add_trace(go.Scatter(
                 x=[_hl_x], y=[_hl_y],
                 mode="markers",
@@ -5180,6 +5210,17 @@ def render_county_factors_tab(
                 bgcolor="rgba(255,255,255,0.9)",
                 bordercolor="#0B2341", borderwidth=1, borderpad=4,
             )
+            if cf_zoom:
+                # Window sized from robust (1st-99th pct) spans so outliers
+                # don't dictate the zoom level; double-click resets.
+                _xs = pd.to_numeric(valid_df[factor_col], errors="coerce").dropna()
+                _ys = pd.to_numeric(valid_df[outcome_col], errors="coerce").dropna()
+                _x_span = float(_xs.quantile(0.99) - _xs.quantile(0.01)) or 1.0
+                _y_span = float(_ys.quantile(0.99) - _ys.quantile(0.01)) or 1.0
+                fig.update_layout(
+                    xaxis_range=[_hl_x - 0.15 * _x_span, _hl_x + 0.15 * _x_span],
+                    yaxis_range=[_hl_y - 0.15 * _y_span, _hl_y + 0.15 * _y_span],
+                )
         else:
             # Diagnose the absence: filtered out, or missing data?
             _in_filtered = plot_df[

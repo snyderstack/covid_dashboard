@@ -635,6 +635,34 @@ an explanatory note appears when both axes hold the same variable.
 Regression test added (suite at 29). All four render sweeps now pass with
 zero errors or stray warnings.
 
+### 2026-07-10 — Tab-reset fix, per-county caching, highlight zoom
+
+**Tab reset ("any interaction sends me back to the first tab").** Streamlit's
+frontend keeps the active tab only while the element tree above `st.tabs`
+stays structurally identical between reruns. A tree audit showed exactly one
+conditional element above the tabs: the first-boot `st.status` narration —
+present on a session's first run, absent afterwards. Its disappearance
+shifted every element path and remounted the tab bar, snapping users back to
+the Geographic Map on their first interaction of each session (hence
+"random" recurrences). The status now renders inside an `st.empty()` slot
+that exists on every run, keeping the tree stable.
+
+**Interaction freeze.** Every widget interaction re-executes all seven tabs;
+the Overview additionally ran the identical lag analysis twice (timeline and
+lag-summary sections). Wave detection and lag analysis for the Overview
+county are now cached per county (`_cached_overview_waves` /
+`_cached_overview_lag`) and the duplicate call was removed, cutting several
+seconds from every rerun.
+
+**Highlight visibility.** The County Factors highlight star now sits on a
+white halo ring so it reads inside dense clusters, and a "Zoom to highlight"
+checkbox centers the view on the county using robust (1st–99th percentile)
+axis spans — double-click resets, and Plotly's native drag-zoom/pan remain
+available on every chart in the dashboard.
+
+Verified with the headless render harness (default + highlight-zoom
+configurations, all tabs, real data): no exceptions, no stray warnings.
+
 ### Change Log Policy
 
 Future changes should be appended to this section. Do not create new `*_SUMMARY.md`, `*_AUDIT.md`, `*_CHANGES.md`, `*_FIXES.md`, `*_NOTES.md`, `*_IMPLEMENTATION.md`, or similar documentation files.
