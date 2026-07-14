@@ -601,6 +601,15 @@ a CI excluding zero means); the County Factors annotation adds a Fisher-z
 profile, the detected-wave table, and explicit Methodology Notes and Data
 Limitations sections suitable for classroom or exploratory-research use.
 
+### 2026-07-10 — County highlight on the Factors scatter
+
+County Factors gains a "Highlight a county" selector beside the axis
+controls: the chosen county is drawn as a labelled star (with an arrow
+annotation and its own hover) above the scatter cloud and trend line. When
+the county cannot appear, the tab explains why — excluded by the active
+state/region/metro filters, or missing data for the selected factor/outcome
+pair — instead of failing silently. UI-only; no analytics changed.
+
 ### Change Log Policy
 
 Future changes should be appended to this section. Do not create new `*_SUMMARY.md`, `*_AUDIT.md`, `*_CHANGES.md`, `*_FIXES.md`, `*_NOTES.md`, `*_IMPLEMENTATION.md`, or similar documentation files.

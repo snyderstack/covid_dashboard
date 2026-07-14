@@ -4910,8 +4910,8 @@ def render_county_factors_tab(
 
     WAVE_OUTCOMES = {"peak_wave_cases_per_100k", "peak_wave_deaths_per_100k", "case_wave_count"}
 
-    # Primary axis selectors
-    sel_col1, sel_col2 = st.columns(2)
+    # Primary axis selectors + county highlight
+    sel_col1, sel_col2, sel_col3 = st.columns([2, 2, 1.6])
     with sel_col1:
         outcome_label = st.selectbox(
             "COVID Outcome (Y axis)",
@@ -4927,6 +4927,15 @@ def render_county_factors_tab(
             help="Select the county characteristic to plot on the X axis",
         )
         factor_col = FACTOR_OPTIONS[factor_label]
+
+    with sel_col3:
+        cf_highlight = st.selectbox(
+            "Highlight a county",
+            ["(none)"] + locations,
+            key="cf_highlight",
+            help="Find a specific county among the 3,000+ dots — it will be "
+                 "marked with a labelled star on the scatter plot.",
+        )
 
     # Optional filters (collapsed by default to keep chart front-and-center)
     with st.expander("Filter counties", expanded=False):
@@ -5128,6 +5137,58 @@ def render_county_factors_tab(
                 showlegend=True,
             )
         )
+
+    # Highlighted county: a labelled star drawn above everything else, with a
+    # diagnostic message when the county can't appear on this scatter.
+    if cf_highlight != "(none)":
+        _hl_name, _hl_state = extract_county_state(cf_highlight)
+        _hl_row = valid_df[
+            (valid_df.get("County Name") == _hl_name) & (valid_df.get("State") == _hl_state)
+        ] if "County Name" in valid_df.columns else pd.DataFrame()
+
+        if not _hl_row.empty:
+            _hl_x = float(_hl_row.iloc[0][factor_col])
+            _hl_y = float(_hl_row.iloc[0][outcome_col])
+            fig.add_trace(go.Scatter(
+                x=[_hl_x], y=[_hl_y],
+                mode="markers",
+                name=cf_highlight,
+                marker=dict(symbol="star", size=18, color=COUNTY_COLOR,
+                            line=dict(color="#0B2341", width=2)),
+                hovertemplate=(
+                    f"<b>{cf_highlight}</b><br>"
+                    f"{factor_label}: %{{x:,.2f}}<br>"
+                    f"{outcome_label}: %{{y:,.2f}}<extra></extra>"
+                ),
+            ))
+            fig.add_annotation(
+                x=_hl_x, y=_hl_y,
+                text=f"<b>{cf_highlight}</b>",
+                showarrow=True, arrowhead=2, arrowcolor="#0B2341",
+                ax=45, ay=-45,
+                font=dict(size=11, color="#0B2341"),
+                bgcolor="rgba(255,255,255,0.9)",
+                bordercolor="#0B2341", borderwidth=1, borderpad=4,
+            )
+        else:
+            # Diagnose the absence: filtered out, or missing data?
+            _in_filtered = plot_df[
+                (plot_df["County Name"] == _hl_name) & (plot_df["State"] == _hl_state)
+            ]
+            if _in_filtered.empty:
+                st.warning(
+                    f"**{cf_highlight}** is excluded by the active state/region/metro "
+                    "filters — clear them in *Filter counties* to highlight it."
+                )
+            else:
+                _missing = [lbl for lbl, c in ((factor_label, factor_col),
+                                               (outcome_label, outcome_col))
+                            if pd.isna(_in_filtered.iloc[0].get(c))]
+                st.warning(
+                    f"**{cf_highlight}** has no data for "
+                    f"{' and '.join(f'*{m}*' for m in _missing) or 'this variable pair'} "
+                    "and cannot be placed on this scatter. Try a different factor or outcome."
+                )
 
     if corr["n"] >= 10:  # correlation stats annotation
         # 95% CI for Pearson r via the Fisher z-transform
