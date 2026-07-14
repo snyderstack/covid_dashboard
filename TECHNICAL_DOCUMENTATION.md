@@ -681,6 +681,34 @@ choropleth was subsequently reverted to its original scales (cases YlOrRd,
 deaths OrRd, vaccination Blues; hotspot crimson/navy) — the palette change
 applies to the trend/scatter/analysis figures and the modeling-tab maps.
 
+### 2026-07-10 — Rate uncertainty, rolling CFR, multi-county comparison
+
+Three additions using existing data only. Tests 29 → 32.
+
+**Poisson confidence intervals** — new `tools.poisson_rate_ci()` implements
+Byar's approximation to the exact Poisson interval (the CDC/NCI standard;
+accurate to a fraction of a percent, no new dependency). County Overview
+Section 1 now reports 95% CIs for cases and deaths per 100k, making
+small-denominator uncertainty visible — a 60-person county and a 10-million
+county no longer present rates with the same implied confidence. A "95% CI
+on rates" glossary term accompanies it.
+
+**Rolling case fatality** — new `tools.rolling_cfr_from_daily()` and county
+wrapper: CFR over a trailing 8-week window with deaths compared against
+cases from 14 days earlier (deaths lag infections; an unlagged CFR dips
+artificially during surges), masked when the lagged window holds fewer than
+20 cases. Shown as a County Overview expander with a national reference
+curve — the high-early/falling-later arc is presented as a testing-and-
+variants story, not purely a treatment story.
+
+**Multi-county comparison** — the County Comparison tab gains a
+"Multi-County (up to 5)" mode: a searchable multiselect overlays 2–5
+counties on one shared axis using the categorical palette, reusing the
+existing per-county series builder so metric/view/smoothing/normalization/
+log-scale controls behave identically; per-county latest-value metrics and
+CSV export included. Vaccination metrics are supported. Dual-axis display
+is correctly unavailable in this mode.
+
 ### Change Log Policy
 
 Future changes should be appended to this section. Do not create new `*_SUMMARY.md`, `*_AUDIT.md`, `*_CHANGES.md`, `*_FIXES.md`, `*_NOTES.md`, `*_IMPLEMENTATION.md`, or similar documentation files.

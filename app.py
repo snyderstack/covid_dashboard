@@ -35,6 +35,9 @@ from tools import (
     find_data_corrections,
     monthly_snapshot_long,
     peer_median_series,
+    poisson_rate_ci,
+    rolling_cfr,
+    rolling_cfr_from_daily,
     load_county_geojson,
     GEOJSON_CDN_URL,
 )
@@ -817,6 +820,7 @@ GLOSSARY = {
     "vif":            ("VIF", "Variance Inflation Factor — flags predictors that duplicate each other. Above 5, a coefficient's sign and size become unreliable."),
     "hc3":            ("Robust (HC3) errors", "Standard errors that stay valid when outcome noise varies across counties. Trust these over classical errors for skewed data."),
     "ecological":     ("Ecological fallacy", "County-level patterns need not hold for individuals. 'Higher-income counties had fewer deaths' does not mean richer people were safer."),
+    "rate_ci":        ("95% CI on rates", "The range a county's true rate plausibly falls in, given how many events were actually observed. A county of 60 people and one of 10 million can show the same deaths-per-100k — but the small county's interval is enormous, because a single death moves its rate massively."),
     "rucc":           ("RUCC code", "USDA Rural-Urban Continuum Code, 1 (large metro) to 9 (most rural). Codes 1–3 are Metro; 4–9 Nonmetro."),
     "hpsa":           ("HPSA", "Health Professional Shortage Area — a federal designation that a county lacks adequate primary care capacity."),
     "hotspot":        ("Hotspot (Gi*)", "A county whose whole neighbourhood shows unusually high values — statistically significant spatial clustering, not just one high county."),
@@ -2021,16 +2025,21 @@ def render_comparison_tab(cases_df, deaths_df, population_df, locations, nationa
     with ctrl1:
         cmp_series = st.selectbox(
             "Comparison Mode",
-            ["County vs County", "County vs Nation", "County vs County vs Nation"],
+            ["County vs County", "County vs Nation", "County vs County vs Nation",
+             "Multi-County (up to 5)"],
             key="cmp_series",
             help=(
                 "County vs County: side-by-side county trends  |  "
                 "County vs Nation: one county against the national total  |  "
-                "County vs County vs Nation: all three simultaneously"
+                "County vs County vs Nation: all three simultaneously  |  "
+                "Multi-County: overlay up to five counties — e.g. every large "
+                "county in one state"
             ),
         )
+        is_multi = cmp_series == "Multi-County (up to 5)"
     with ctrl2:
-        county_a = st.selectbox("County A", locations, key="cmp_county_a", index=0)
+        county_a = st.selectbox("County A", locations, key="cmp_county_a", index=0,
+                                disabled=is_multi)
     with ctrl3:
         include_county_b = cmp_series in ("County vs County", "County vs County vs Nation")
         county_b = st.selectbox(
@@ -2050,9 +2059,22 @@ def render_comparison_tab(cases_df, deaths_df, population_df, locations, nationa
             key="cmp_metric",
         )
 
+    if is_multi:
+        cmp_multi = st.multiselect(
+            "Counties to compare (2–5)",
+            locations,
+            default=[county_a] if county_a else [],
+            max_selections=5,
+            key="cmp_multi",
+            help="Type to search. Two to five counties overlay on one shared axis — "
+                 "use a per-100k metric so different population sizes stay comparable.",
+        )
+    else:
+        cmp_multi = []
+
     # Chart options (secondary — in expander)
     with st.expander("Chart options", expanded=False):
-        n_series = 3 if cmp_series == "County vs County vs Nation" else 2
+        n_series = 5 if is_multi else (3 if cmp_series == "County vs County vs Nation" else 2)
         _eo1, _eo2, _eo3, _eo4 = st.columns([1, 1, 2, 1])
         with _eo1:
             dual_view = st.selectbox("View", ["Cumulative", "Daily"], key="cmp_view")
@@ -2145,6 +2167,127 @@ def render_comparison_tab(cases_df, deaths_df, population_df, locations, nationa
         return ts
 
     county_a_name, county_a_state = extract_county_state(county_a)
+
+    # Multi-county overlay: 2-5 counties on one shared axis. Reuses the same
+    # per-county series builder as the two-county modes, so metric, view,
+    # smoothing, normalization, and log-scale controls all behave identically.
+    if is_multi:
+        if len(cmp_multi) < 2:
+            st.info("Select at least two counties above to compare.")
+            return
+
+        _MULTI_COLORS = ["#1F77B4", "#D62728", "#2CA02C", "#9467BD", "#8C564B"]
+        _is_vax_multi = "Vaccination" in dual_metric or "1 Dose" in dual_metric
+        series = []          # (label, DataFrame with 'Date' + 'val')
+
+        if _is_vax_multi:
+            if vax_ts_df is None or vax_ts_df.empty:
+                st.info("Vaccination time-series data is unavailable.")
+                return
+            _vcol = ("vax_complete_pct" if "Fully Vaccinated" in dual_metric
+                     else "vax_dose1_pct")
+            y_label_m = ("% Fully Vaccinated" if "Fully Vaccinated" in dual_metric
+                         else "% At Least 1 Dose")
+            st.caption(
+                "Vaccination data covers Dec 2020 – May 2023 (CDC county dataset). "
+                "Smoothing and view controls do not apply to vaccination metrics."
+            )
+            for _loc in cmp_multi:
+                _mn, _ms = extract_county_state(_loc)
+                _prow = population_df[
+                    (population_df["County Name"] == _mn) & (population_df["State"] == _ms)
+                ]
+                if _prow.empty:
+                    continue
+                _mts = get_county_vax_timeseries(
+                    vax_ts_df, str(_prow.iloc[0]["countyFIPS"]).zfill(5)
+                )
+                if not _mts.empty and _vcol in _mts.columns:
+                    series.append((_loc, _mts[["Date", _vcol]].rename(columns={_vcol: "val"})))
+        else:
+            _is_pc_m = "per 100k" in dual_metric.lower()
+            _base_m = "Cases" if "cases" in dual_metric.lower() else "Deaths"
+            _vp_m = "Daily" if dual_view == "Daily" else "Cumulative"
+            y_label_m = (f"{_vp_m} {_base_m} per 100k" if _is_pc_m
+                         else f"{_vp_m} {_base_m}")
+            if dual_ma != "None":
+                y_label_m += f" ({dual_ma})"
+
+            def _rebase_m(s):
+                first_nz = s.replace(0, np.nan).dropna()
+                return s * np.nan if first_nz.empty else s / first_nz.iloc[0] * 100
+
+            for _loc in cmp_multi:
+                _mn, _ms = extract_county_state(_loc)
+                _mts, _mcol = _get_county_series(_mn, _ms)
+                if _mts.empty:
+                    st.caption(f"No data for {_loc} — skipped.")
+                    continue
+                _mts = _mts[["Date", _mcol]].rename(columns={_mcol: "val"})
+                if display_mode == "Normalized (Index = 100)":
+                    _mts = _mts.copy()
+                    _mts["val"] = _rebase_m(_mts["val"])
+                series.append((_loc, _mts))
+            if display_mode == "Normalized (Index = 100)":
+                y_label_m = "Index (first non-zero value = 100)"
+
+        if len(series) < 2:
+            st.warning("Fewer than two of the selected counties have data for this metric.")
+            return
+
+        fig_m = go.Figure()
+        for _i, (_loc, _mts) in enumerate(series):
+            fig_m.add_trace(go.Scatter(
+                x=_mts["Date"], y=_mts["val"],
+                name=_loc, mode="lines",
+                line=dict(color=_MULTI_COLORS[_i % len(_MULTI_COLORS)], width=2.2),
+                hovertemplate=f"<b>{_loc}</b><br>%{{x|%Y-%m-%d}}: %{{y:,.2f}}<extra></extra>",
+            ))
+        fig_m.update_layout(
+            title=(
+                f"<b>{len(series)}-County Comparison</b>"
+                f"<br><sub>{dual_metric}"
+                + ("" if _is_vax_multi else
+                   f" · {dual_view}" + (f" · {dual_ma}" if dual_ma != 'None' else "")
+                   + f" · {display_mode}")
+                + "</sub>"
+            ),
+            xaxis=dict(title="Date", showgrid=True, gridcolor="rgba(200,200,200,0.3)"),
+            yaxis=dict(title=y_label_m, showgrid=True,
+                       gridcolor="rgba(200,200,200,0.3)",
+                       type="log" if (use_log_scale and not _is_vax_multi) else "linear",
+                       range=[0, 100] if _is_vax_multi else None),
+            hovermode="x unified", height=600, template="plotly_white",
+            legend=dict(orientation="h", yanchor="bottom", y=1.02,
+                        xanchor="right", x=1, bgcolor="rgba(255,255,255,0.9)",
+                        font=dict(size=10)),
+            font=dict(family="sans-serif", size=11),
+        )
+        st.plotly_chart(fig_m, use_container_width=True)
+
+        # Latest values, one metric per county
+        _m_cols = st.columns(len(series))
+        for _i, (_loc, _mts) in enumerate(series):
+            _last = _mts["val"].dropna()
+            with _m_cols[_i]:
+                st.metric(_loc, f"{_last.iloc[-1]:,.2f}" if len(_last) else "N/A")
+
+        with st.expander("Download comparison data", expanded=False):
+            _frames = [
+                _mts.rename(columns={"val": _loc}).set_index("Date")
+                for _loc, _mts in series
+            ]
+            _m_export = pd.concat(_frames, axis=1).reset_index()
+            _safe_m = dual_metric.replace(" ", "_").replace("/", "-").replace("(", "").replace(")", "")
+            st.download_button(
+                "Download as CSV",
+                data=_m_export.to_csv(index=False).encode("utf-8"),
+                file_name=f"covid_multi_comparison_{_safe_m}.csv",
+                mime="text/csv",
+                key="cmp_multi_download",
+            )
+            st.caption(f"{len(_m_export):,} dates · {len(series)} counties · {dual_metric}")
+        return
 
     # Vaccination comparison (special path)
     _is_vax_cmp = "Vaccination" in dual_metric or "1 Dose" in dual_metric
@@ -2648,7 +2791,7 @@ def render_county_overview_tab(
         )[:6]
 
     render_learning_aids(
-        terms=("per_100k", "cfr", "rucc", "hpsa", "ecological"),
+        terms=("per_100k", "cfr", "rate_ci", "rucc", "hpsa", "ecological"),
     )
 
     county_name, state = extract_county_state(location)
@@ -2783,7 +2926,72 @@ def render_county_overview_tab(
     with c4: render_metric_card("Deaths per 100k",   _fmt(deaths_100k, ".2f"))
     with c5: render_metric_card("Case Fatality Rate", f"{_fmt(cfr, '.2f')}%" if pd.notna(cfr) else "N/A")
 
-    st.caption(f"Data as of {dates[-1] if dates else '—'}.")
+    # Poisson 95% CIs make small-county uncertainty visible: identical rates
+    # carry very different confidence at population 60 vs 10 million.
+    _ci_bits = []
+    if pd.notna(total_cases) and pd.notna(population) and population > 0:
+        _clo, _chi = poisson_rate_ci(total_cases, population)
+        if pd.notna(_clo):
+            _ci_bits.append(f"cases {_clo:,.0f}–{_chi:,.0f}")
+    if pd.notna(total_deaths) and pd.notna(population) and population > 0:
+        _dlo, _dhi = poisson_rate_ci(total_deaths, population)
+        if pd.notna(_dlo):
+            _ci_bits.append(f"deaths {_dlo:,.1f}–{_dhi:,.1f}")
+    _ci_txt = (
+        f" 95% CIs (exact Poisson, per 100k): {'; '.join(_ci_bits)} — "
+        "narrow intervals mean the rate is well determined; wide ones flag "
+        "small-count uncertainty." if _ci_bits else ""
+    )
+    st.caption(f"Data as of {dates[-1] if dates else '—'}.{_ci_txt}")
+
+    # Rolling CFR: the case-fatality story over time (testing eras, variants,
+    # vaccination) that the single cumulative CFR number hides
+    with st.expander("Case fatality rate over time", expanded=False):
+        _cfr_df = rolling_cfr(cases_df, deaths_df, county_name, state)
+        _nat_cfr = rolling_cfr_from_daily(
+            national["daily_cases"]["Value"].values,
+            national["daily_deaths"]["Value"].values,
+            national["daily_cases"]["Date"],
+        )
+        if not _cfr_df.empty and _cfr_df["cfr"].notna().any():
+            _fig_cfr = go.Figure()
+            _fig_cfr.add_trace(go.Scatter(
+                x=_nat_cfr["Date"], y=_nat_cfr["cfr"],
+                name="United States", mode="lines",
+                line=dict(color="#8A94A3", width=1.5, dash="dot"),
+                hovertemplate="US: %{y:.2f}%<extra></extra>",
+            ))
+            _fig_cfr.add_trace(go.Scatter(
+                x=_cfr_df["Date"], y=_cfr_df["cfr"],
+                name=location, mode="lines",
+                line=dict(color=COUNTY_COLOR, width=2.2),
+                hovertemplate="%{x|%Y-%m-%d}: %{y:.2f}%<extra></extra>",
+            ))
+            _fig_cfr.update_layout(
+                height=340, margin=dict(t=15, b=35, l=55, r=25),
+                template="plotly_white", hovermode="x unified",
+                yaxis=dict(title="CFR (%)", rangemode="tozero",
+                           showgrid=True, gridcolor="rgba(200,200,200,0.3)"),
+                xaxis=dict(showgrid=False),
+                legend=dict(orientation="h", y=1.05, x=0, font=dict(size=10)),
+                font=dict(family="sans-serif", size=10),
+            )
+            st.plotly_chart(_fig_cfr, use_container_width=True)
+            st.caption(
+                "CFR over a trailing 8-week window, with deaths compared against "
+                "cases from 14 days earlier (deaths lag infections). Gaps mean too "
+                "few cases in the window for a stable estimate. The typical arc — "
+                "high early CFR when testing was scarce, falling through 2021–22 as "
+                "testing broadened, vaccination rose, and Omicron's severity "
+                "profile differed — is a testing-and-variants story, not purely a "
+                "treatment story."
+            )
+        else:
+            st.info(
+                "Not enough cases in this county for a stable rolling CFR — "
+                "small counties rarely clear the minimum-cases threshold "
+                "(20 cases per 8-week window)."
+            )
 
     # SECTION 2 — WAVE ANALYSIS SUMMARY
 

@@ -15,8 +15,11 @@ from tools import (
     get_state_bounds_for_zoom,
     monthly_snapshot_long,
     peer_median_series,
+    poisson_rate_ci,
     precompute_daily_diffs,
     precompute_per_capita,
+    rolling_cfr,
+    rolling_cfr_from_daily,
 )
 from tests.conftest import DATES
 
@@ -111,6 +114,52 @@ def test_peer_median_series(cases_df, deaths_df, population_df):
     assert pm["Value"].iloc[-1] == pytest.approx(per100k[1] * 100_000)
     # fewer than 3 valid peers → empty (graceful degradation)
     assert peer_median_series(daily_c, population_df, ["01001"]).empty
+
+
+def test_poisson_rate_ci():
+    # Zero events: exact Poisson upper bound is -ln(0.025) ≈ 3.689 events
+    lo, hi = poisson_rate_ci(0, 100_000)
+    assert lo == 0.0 and hi == pytest.approx(3.689, abs=0.05)
+    # Large counts converge to the normal approximation k ± 1.96·√k
+    k, pop = 10_000, 1_000_000
+    lo, hi = poisson_rate_ci(k, pop, per=pop)
+    assert lo == pytest.approx(k - 1.96 * np.sqrt(k), rel=0.005)
+    assert hi == pytest.approx(k + 1.96 * np.sqrt(k), rel=0.005)
+    # Small counts: wide relative interval (the small-county lesson)
+    lo_s, hi_s = poisson_rate_ci(2, 1_000)
+    assert hi_s / max(lo_s, 1e-9) > 10
+    # Invalid inputs degrade to NaN, never raise
+    assert all(np.isnan(v) for v in poisson_rate_ci(5, 0))
+    assert all(np.isnan(v) for v in poisson_rate_ci(None, 1000))
+    assert all(np.isnan(v) for v in poisson_rate_ci(np.nan, 1000))
+
+
+def test_rolling_cfr():
+    # 300 days, constant 100 cases/day; deaths = 2% of cases lagged 14 days
+    n, lag, window = 300, 14, 56
+    dates = pd.date_range("2020-03-01", periods=n)
+    daily_cases = np.full(n, 100.0)
+    daily_deaths = np.zeros(n)
+    daily_deaths[lag:] = 2.0
+    out = rolling_cfr_from_daily(daily_cases, daily_deaths, dates,
+                                 window_days=window, lag_days=lag)
+    steady = out["cfr"].iloc[-50:]
+    assert steady.notna().all()
+    assert steady.iloc[-1] == pytest.approx(2.0, rel=1e-6)
+    # first window+lag days undefined (insufficient window / lag shift)
+    assert out["cfr"].iloc[: window + lag - 1].isna().all()
+
+    # min_cases mask: near-zero case windows must not print absurd CFRs
+    sparse = rolling_cfr_from_daily(np.full(n, 0.1), np.full(n, 0.05), dates,
+                                    window_days=window, lag_days=lag, min_cases=20)
+    assert sparse["cfr"].isna().all()
+
+
+def test_rolling_cfr_county_wrapper(cases_df, deaths_df):
+    out = rolling_cfr(cases_df, deaths_df, "Alpha County", "AA",
+                      window_days=3, lag_days=1, min_cases=1)
+    assert len(out) == len(DATES)
+    assert rolling_cfr(cases_df, deaths_df, "Nowhere", "ZZ").empty
 
 
 def test_find_data_corrections(cases_df):

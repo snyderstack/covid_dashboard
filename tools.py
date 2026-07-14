@@ -784,6 +784,113 @@ def filter_choropleth_by_county_type(choro_data, county_type):
     return choro_data[choro_data["County_Type"] == target].copy()
 
 
+def poisson_rate_ci(count, population, per=100_000, z=1.959964):
+    """
+    95% confidence interval for a per-capita rate via Byar's approximation.
+
+    Byar's method approximates the exact Poisson (Garwood) interval to within
+    a fraction of a percent and is the standard used in CDC/NCI rate
+    publications. The point of surfacing it here is educational as much as
+    statistical: a county of 60 people and a county of 10 million both show a
+    single "deaths per 100k" number, but the small county's interval is
+    enormous — the CI makes that uncertainty visible.
+
+        lower = k · (1 − 1/(9k) − z/(3√k))³            (0 when k = 0)
+        upper = (k+1) · (1 − 1/(9(k+1)) + z/(3√(k+1)))³
+
+    Args:
+        count:      Event count (cases or deaths). Non-negative.
+        population: Population denominator. Must be positive.
+        per:        Rate multiplier (default per 100,000).
+        z:          Normal quantile (default 1.96 for 95%).
+
+    Returns:
+        (lower, upper) rate bounds per `per` population, or (nan, nan) when
+        inputs are invalid.
+    """
+    try:
+        k = float(count)
+        pop = float(population)
+    except (TypeError, ValueError):
+        return (float("nan"), float("nan"))
+    if not np.isfinite(k) or not np.isfinite(pop) or k < 0 or pop <= 0:
+        return (float("nan"), float("nan"))
+
+    if k == 0:
+        lower = 0.0
+    else:
+        lower = k * (1.0 - 1.0 / (9.0 * k) - z / (3.0 * np.sqrt(k))) ** 3
+    kp = k + 1.0
+    upper = kp * (1.0 - 1.0 / (9.0 * kp) + z / (3.0 * np.sqrt(kp))) ** 3
+
+    return (max(lower, 0.0) / pop * per, upper / pop * per)
+
+
+def rolling_cfr_from_daily(daily_cases, daily_deaths, dates,
+                           window_days=56, lag_days=14, min_cases=20):
+    """
+    Case fatality rate over time from daily count arrays.
+
+    CFR_t = (deaths in the window ending at t)
+            / (cases in the window ending at t − lag_days) × 100
+
+    The lag acknowledges that deaths trail infections; without it, CFR dips
+    artificially during case surges. Values are masked (NaN) when the lagged
+    case window holds fewer than min_cases — a 1-death/3-case window would
+    otherwise print a meaningless 33% CFR (the small-denominator lesson again).
+
+    Args:
+        daily_cases, daily_deaths: 1-D arrays of daily new counts.
+        dates:       Matching DatetimeIndex/array.
+        window_days: Trailing window length (default 8 weeks).
+        lag_days:    Case-window offset (default 14 days).
+        min_cases:   Minimum lagged-window cases for a defined CFR.
+
+    Returns:
+        DataFrame with columns: Date, cfr (percent), window_deaths,
+        window_cases_lagged.
+    """
+    cases = pd.Series(np.nan_to_num(np.asarray(daily_cases, dtype=float), nan=0.0))
+    deaths = pd.Series(np.nan_to_num(np.asarray(daily_deaths, dtype=float), nan=0.0))
+
+    cases_roll = cases.rolling(window_days, min_periods=window_days).sum()
+    deaths_roll = deaths.rolling(window_days, min_periods=window_days).sum()
+    cases_lagged = cases_roll.shift(lag_days)
+
+    with np.errstate(divide="ignore", invalid="ignore"):
+        cfr = np.where(cases_lagged >= min_cases,
+                       deaths_roll / cases_lagged * 100.0, np.nan)
+
+    return pd.DataFrame({
+        "Date": pd.to_datetime(dates),
+        "cfr": cfr,
+        "window_deaths": deaths_roll.values,
+        "window_cases_lagged": cases_lagged.values,
+    })
+
+
+def rolling_cfr(cases_df, deaths_df, county_name, state,
+                window_days=56, lag_days=14, min_cases=20):
+    """
+    County wrapper for rolling_cfr_from_daily (see there for methodology).
+
+    Daily counts are derived from the cumulative wide tables with negative
+    revisions clipped, consistent with the rest of the pipeline. Returns an
+    empty DataFrame when the county is not found.
+    """
+    crow = cases_df[(cases_df["County Name"] == county_name) & (cases_df["State"] == state)]
+    drow = deaths_df[(deaths_df["County Name"] == county_name) & (deaths_df["State"] == state)]
+    if crow.empty or drow.empty:
+        return pd.DataFrame(columns=["Date", "cfr", "window_deaths", "window_cases_lagged"])
+
+    date_cols = get_date_columns(cases_df)
+    c = pd.to_numeric(crow.iloc[0][date_cols], errors="coerce").diff().clip(lower=0).fillna(0)
+    d = pd.to_numeric(drow.iloc[0][date_cols], errors="coerce").diff().clip(lower=0).fillna(0)
+    return rolling_cfr_from_daily(c.values, d.values, date_cols,
+                                  window_days=window_days, lag_days=lag_days,
+                                  min_cases=min_cases)
+
+
 def peer_median_series(daily_ma_df, population_df, fips_list):
     """
     Median daily-per-100k trajectory across a set of counties.
