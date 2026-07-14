@@ -669,14 +669,17 @@ All chart colors moved off the navy/orange branding onto a classic
 data-visualization palette (blue #1F77B4 / red #D62728 / green #2CA02C plus
 the standard categorical set), so figures read as neutral scientific
 graphics: County A / peaks / highlights are red, secondary series and case
-curves blue, national aggregate and vaccination series green (vaccination
-map scale is now Greens; cases Blues; deaths Reds). Wave spans shade light
-red; the lag matched-pair bands are neutral gray; wave, archetype, and
+curves blue, national aggregate and vaccination series green. Wave spans
+shade light red; the lag matched-pair bands are neutral gray; wave,
+archetype, and
 region palettes use the standard categorical ordering; correlation-sign
 table styling is red-positive/blue-negative. Site chrome (header, tabs,
 cards, sidebar) intentionally retains the Gettysburg branding — this change
 covers figures and data-driven styling only. Verified via the headless
-render harness on two configurations.
+render harness on two configurations. At the user's request the Geographic Map
+choropleth was subsequently reverted to its original scales (cases YlOrRd,
+deaths OrRd, vaccination Blues; hotspot crimson/navy) — the palette change
+applies to the trend/scatter/analysis figures and the modeling-tab maps.
 
 ### Change Log Policy
 

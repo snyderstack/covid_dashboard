@@ -1755,8 +1755,8 @@ def render_map_tab(transforms, cases_df, deaths_df, population_df, dates, unique
         _hover_data[color_col] = False
 
     color_scale = (
-        "Greens" if _is_vax_metric else
-        ("Reds" if "Deaths" in metric_name else "Blues")
+        "Blues" if _is_vax_metric else
+        ("OrRd" if "Deaths" in metric_name else "YlOrRd")
     )
     if cb_safe:
         color_scale = "Viridis"
@@ -1931,8 +1931,8 @@ def render_map_tab(transforms, cases_df, deaths_df, population_df, dates, unique
                             featureidkey="id",
                             category_orders={"gi_category": ["Hotspot", "Not significant", "Coldspot"]},
                             color_discrete_map={
-                                "Hotspot": "#D62728",
-                                "Coldspot": "#1F77B4",
+                                "Hotspot": "#c41e3a",
+                                "Coldspot": "#1E4D87",
                                 "Not significant": "#E3E8F0",
                             },
                             hover_name="Location",
