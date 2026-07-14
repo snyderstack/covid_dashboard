@@ -1290,9 +1290,9 @@ def _cached_overview_lag(county_name, state):
         max_lag_days=90, min_peak_distance_days=14,
     )
 
-COUNTY_COLOR      = "#F26A21"  # Gettysburg Orange — County A
-NATIONAL_COLOR    = "#153A66"  # Gettysburg Navy   — County B / trend lines
-NATION_LINE_COLOR = "#059669"  # Emerald green     — national aggregate
+COUNTY_COLOR      = "#D62728"  # emphasis red — County A / peaks / highlight
+NATIONAL_COLOR    = "#1F77B4"  # series blue — County B / case curves
+NATION_LINE_COLOR = "#2CA02C"  # green — national aggregate
 
 # Header
 
@@ -1755,8 +1755,8 @@ def render_map_tab(transforms, cases_df, deaths_df, population_df, dates, unique
         _hover_data[color_col] = False
 
     color_scale = (
-        "Blues" if _is_vax_metric else
-        ("OrRd" if "Deaths" in metric_name else "YlOrRd")
+        "Greens" if _is_vax_metric else
+        ("Reds" if "Deaths" in metric_name else "Blues")
     )
     if cb_safe:
         color_scale = "Viridis"
@@ -1931,8 +1931,8 @@ def render_map_tab(transforms, cases_df, deaths_df, population_df, dates, unique
                             featureidkey="id",
                             category_orders={"gi_category": ["Hotspot", "Not significant", "Coldspot"]},
                             color_discrete_map={
-                                "Hotspot": "#c41e3a",
-                                "Coldspot": "#1E4D87",
+                                "Hotspot": "#D62728",
+                                "Coldspot": "#1F77B4",
                                 "Not significant": "#E3E8F0",
                             },
                             hover_name="Location",
@@ -2883,7 +2883,7 @@ def render_county_overview_tab(
                 _tl.add_trace(go.Scatter(
                     x=_dts["Date"], y=_dts["Per100k MA"],
                     name="Deaths /100k (7d MA)", mode="lines",
-                    line=dict(color="rgba(196,30,58,0.65)", width=1.5),
+                    line=dict(color="rgba(214,39,40,0.65)", width=1.5),
                     hovertemplate="%{x|%Y-%m-%d}: %{y:.3f} deaths/100k<extra></extra>",
                 ), row=1, col=1, secondary_y=True)
 
@@ -2907,7 +2907,7 @@ def render_county_overview_tab(
                 for _w in _wc["waves"]:
                     _tl.add_vrect(
                         x0=_w["start_date"], x1=_w["end_date"],
-                        fillcolor="rgba(242,106,33,0.06)", line_width=0,
+                        fillcolor="rgba(214,39,40,0.05)", line_width=0,
                         layer="below", row=1, col=1,
                     )
                 _pk_x = [pd.Timestamp(_w["peak_date"]) for _w in _wc["waves"]]
@@ -2930,8 +2930,8 @@ def render_county_overview_tab(
                         _tl.add_trace(go.Scatter(
                             x=_tl_vax["Date"], y=_tl_vax["vax_complete_pct"],
                             name="Fully vaccinated (%)", mode="lines",
-                            line=dict(color="#059669", width=1.8),
-                            fill="tozeroy", fillcolor="rgba(5,150,105,0.10)",
+                            line=dict(color="#2CA02C", width=1.8),
+                            fill="tozeroy", fillcolor="rgba(44,160,44,0.10)",
                             hovertemplate="%{x|%Y-%m-%d}: %{y:.1f}% fully vaccinated<extra></extra>",
                         ), row=2, col=1)
 
@@ -2961,13 +2961,13 @@ def render_county_overview_tab(
                 )
                 _tl.update_yaxes(
                     title_text="Deaths /100k", row=1, col=1, secondary_y=True,
-                    title_font=dict(color="#c41e3a", size=10),
-                    tickfont=dict(color="#c41e3a", size=9), showgrid=False,
+                    title_font=dict(color="#D62728", size=10),
+                    tickfont=dict(color="#D62728", size=9), showgrid=False,
                 )
                 _tl.update_yaxes(
                     title_text="Vacc. %", range=[0, 100], row=2, col=1,
-                    title_font=dict(color="#059669", size=10),
-                    tickfont=dict(color="#059669", size=9),
+                    title_font=dict(color="#2CA02C", size=10),
+                    tickfont=dict(color="#2CA02C", size=9),
                     showgrid=True, gridcolor="rgba(200,200,200,0.2)",
                 )
                 st.plotly_chart(_tl, use_container_width=True)
@@ -3117,7 +3117,7 @@ def render_county_overview_tab(
         if pd.notna(_nat_vax_complete):
             _vdiff = _vax_complete - _nat_vax_complete if pd.notna(_vax_complete) else np.nan
             if pd.notna(_vdiff):
-                _vdiff_color = "#059669" if _vdiff > 0 else "#c41e3a"
+                _vdiff_color = "#2CA02C" if _vdiff > 0 else "#D62728"
                 st.markdown(
                     f"Fully vaccinated rate: **{_fmt(_vax_complete, '.1f')}%** county vs "
                     f"**{_fmt(_nat_vax_complete, '.1f')}%** national median "
@@ -3144,8 +3144,8 @@ def render_county_overview_tab(
                         x=_cv_ts["Date"], y=_cv_ts["vax_complete_pct"],
                         name="Fully Vaccinated",
                         mode="lines",
-                        line=dict(color=COUNTY_COLOR, width=2.5),
-                        fill="tozeroy", fillcolor="rgba(242,106,33,0.12)",
+                        line=dict(color="#2CA02C", width=2.5),
+                        fill="tozeroy", fillcolor="rgba(44,160,44,0.12)",
                         hovertemplate="Date: %{x|%Y-%m-%d}<br>Fully Vacc: %{y:.1f}%<extra></extra>",
                     ))
                     if "vax_booster_pct" in _cv_ts.columns:
@@ -3242,9 +3242,9 @@ def render_county_overview_tab(
 
         def _style_vs(v):
             if "Above avg" in str(v):
-                return "color: #059669; font-weight: 600"
+                return "color: #2CA02C; font-weight: 600"
             if "Below avg" in str(v):
-                return "color: #c41e3a; font-weight: 600"
+                return "color: #D62728; font-weight: 600"
             return ""
 
         st.dataframe(
@@ -3673,7 +3673,7 @@ def _render_lag_chart(location_label, results, summary, lag_ma_window):
     fig.add_trace(go.Scatter(
         x=deaths_ts["Date"], y=deaths_ts["Per100k MA"],
         name="New Deaths /100k", mode="lines",
-        line=dict(color="rgba(196,30,58,0.6)", width=1.4), yaxis="y2",
+        line=dict(color="rgba(214,39,40,0.6)", width=1.4), yaxis="y2",
         hovertemplate="Date: %{x|%Y-%m-%d}<br>Deaths/100k: %{y:.3f}<extra></extra>",
     ))
 
@@ -3736,7 +3736,7 @@ def _render_lag_chart(location_label, results, summary, lag_ma_window):
             shapes.append(dict(
                 type="rect", xref="x", yref="paper",
                 x0=c_date, x1=d_date, y0=0, y1=1,
-                fillcolor="rgba(242,106,33,0.06)", line_width=0, layer="below",
+                fillcolor="rgba(127,127,127,0.12)", line_width=0, layer="below",
             ))
             mid_date = c_date + (d_date - c_date) / 2
             annotations.append(dict(
@@ -3782,15 +3782,15 @@ def _render_lag_chart(location_label, results, summary, lag_ma_window):
                 ],
                 x=0, xanchor="left", y=1.06, yanchor="bottom",
                 bgcolor="rgba(255,255,255,0.9)",
-                activecolor="rgba(242,106,33,0.25)",
+                activecolor="rgba(127,127,127,0.25)",
                 font=dict(size=11),
             ),
         ),
         yaxis=dict(title=dict(text="New Cases per 100k",   font=dict(color=NATIONAL_COLOR)),
                    side="left",  tickfont=dict(color=NATIONAL_COLOR),
                    showgrid=True, gridcolor="rgba(200,200,200,0.3)", rangemode="tozero"),
-        yaxis2=dict(title=dict(text="New Deaths per 100k", font=dict(color="#c41e3a")),
-                    side="right", overlaying="y", tickfont=dict(color="#c41e3a"),
+        yaxis2=dict(title=dict(text="New Deaths per 100k", font=dict(color="#D62728")),
+                    side="right", overlaying="y", tickfont=dict(color="#D62728"),
                     showgrid=False, rangemode="tozero"),
         shapes=shapes, annotations=annotations,
         hovermode="closest", height=720,
@@ -4438,8 +4438,8 @@ def render_wave_tab(cases_df, deaths_df, transforms, locations, population_df, v
         ))
 
     WAVE_COLORS = [
-        "#F26A21", "#c41e3a", "#153A66", "#5b4fcf",
-        "#1a7f5b", "#b5651d", "#6b3a8b", "#1f6b9a",
+        "#1F77B4", "#D62728", "#2CA02C", "#9467BD",
+        "#8C564B", "#E377C2", "#17BECF", "#7F7F7F",
     ]
 
     for i, wave in enumerate(wave_list):
@@ -5145,7 +5145,7 @@ def render_county_factors_tab(
         x=factor_col,
         y=outcome_col,
         color=color_col,
-        color_discrete_map={"Metro": "#153A66", "Nonmetro": "#F26A21"},
+        color_discrete_map={"Metro": "#1F77B4", "Nonmetro": "#D62728"},
         hover_name="County Name" if "County Name" in valid_df.columns else None,
         hover_data={"State": True, factor_col: ":.2f", outcome_col: ":.2f",
                     color_col: False} if color_col else {"State": True},
@@ -5165,7 +5165,7 @@ def render_county_factors_tab(
                 y=[ols["y_pred_min"], ols["y_pred_max"]],
                 mode="lines",
                 name=f"OLS trend  R²={ols['r_squared']:.3f}",
-                line=dict(color="#c0392b", width=2.5),
+                line=dict(color="#D62728", width=2.5),
                 showlegend=True,
             )
         )
@@ -5334,7 +5334,7 @@ def render_county_factors_tab(
         def _style_r(v):
             if pd.isna(v):
                 return ""
-            c = "#c41e3a" if v > 0 else "#153A66"
+            c = "#D62728" if v > 0 else "#1F77B4"
             return f"color: {c}; font-weight: bold"
 
         st.dataframe(
@@ -5555,7 +5555,7 @@ def render_modeling_tab(master_county_df, locations) -> None:
     def _color_r(v):
         if pd.isna(v):
             return ""
-        return f"color: {'#c41e3a' if v > 0 else '#153A66'}; font-weight: 600"
+        return f"color: {'#D62728' if v > 0 else '#1F77B4'}; font-weight: 600"
 
     # Global dataset filter (collapsed — models work on all counties by default)
     with st.expander("Filter dataset", expanded=False):
@@ -5751,7 +5751,7 @@ def render_modeling_tab(master_county_df, locations) -> None:
                 orientation="h",
                 marker=dict(
                     color=fi_df["Importance"],
-                    colorscale=[[0, "#d4e6f1"], [1, "#0B2341"]],
+                    colorscale=[[0, "#DEEBF7"], [1, "#08519C"]],
                     showscale=False,
                 ),
                 hovertemplate="<b>%{y}</b><br>Importance: %{x:.4f}<extra></extra>",
@@ -5908,7 +5908,7 @@ def render_modeling_tab(master_county_df, locations) -> None:
                 with st.expander("Multicollinearity check (VIF)", expanded=False):
                     st.dataframe(
                         vif_df.style.format({"VIF": "{:.2f}"}).map(
-                            lambda v: ("color: #c41e3a; font-weight: 600"
+                            lambda v: ("color: #D62728; font-weight: 600"
                                        if isinstance(v, float) and v > 5 else ""),
                             subset=["VIF"],
                         ),
@@ -6184,8 +6184,8 @@ def render_modeling_tab(master_county_df, locations) -> None:
 
             if _ve_color_col:
                 _ve_groups = sorted(_ve_df[_ve_color_col].dropna().unique())
-                _palette = ["#153A66", "#F26A21", "#059669", "#8B5CF6", "#DC2626",
-                            "#0891B2", "#D97706", "#16A34A"]
+                _palette = ["#1F77B4", "#D62728", "#2CA02C", "#9467BD", "#8C564B",
+                            "#17BECF", "#E377C2", "#7F7F7F"]
                 for _gi, _grp in enumerate(_ve_groups):
                     _gdf = _ve_df[_ve_df[_ve_color_col] == _grp]
                     _ve_fig.add_trace(go.Scatter(
@@ -6210,7 +6210,7 @@ def render_modeling_tab(master_county_df, locations) -> None:
             _ve_fig.add_trace(go.Scatter(
                 x=_ve_x_line, y=_ve_y_line,
                 mode="lines", name=f"OLS trend (r={_ve_r:+.2f})",
-                line=dict(color="#c41e3a", width=2, dash="dash"),
+                line=dict(color="#D62728", width=2, dash="dash"),
                 hoverinfo="skip",
             ))
 
@@ -6360,9 +6360,9 @@ def render_modeling_tab(master_county_df, locations) -> None:
             try:
                 v = float(v)
                 if v >= 75:
-                    return "color: #c41e3a; font-weight:600"
+                    return "color: #D62728; font-weight:600"
                 if v <= 25:
-                    return "color: #059669; font-weight:600"
+                    return "color: #2CA02C; font-weight:600"
             except (TypeError, ValueError):
                 pass
             return ""
@@ -6421,7 +6421,7 @@ def render_modeling_tab(master_county_df, locations) -> None:
         if arch_err:
             st.error(arch_err)
         elif arch_assign is not None:
-            _ARCH_COLORS = ["#153A66", "#F26A21", "#059669", "#8B5CF6", "#DC2626", "#0891B2"]
+            _ARCH_COLORS = ["#1F77B4", "#D62728", "#2CA02C", "#9467BD", "#8C564B", "#17BECF"]
             arch_map_df = arch_assign.copy()
             arch_map_df["countyFIPS"] = arch_map_df["countyFIPS"].astype(str).str.zfill(5)
             arch_map_df["Archetype"] = "Archetype " + (arch_map_df["cluster"] + 1).astype(str)

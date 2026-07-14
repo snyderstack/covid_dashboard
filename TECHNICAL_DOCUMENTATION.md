@@ -663,6 +663,21 @@ available on every chart in the dashboard.
 Verified with the headless render harness (default + highlight-zoom
 configurations, all tabs, real data): no exceptions, no stray warnings.
 
+### 2026-07-10 — Chart palette: classic data-viz colors
+
+All chart colors moved off the navy/orange branding onto a classic
+data-visualization palette (blue #1F77B4 / red #D62728 / green #2CA02C plus
+the standard categorical set), so figures read as neutral scientific
+graphics: County A / peaks / highlights are red, secondary series and case
+curves blue, national aggregate and vaccination series green (vaccination
+map scale is now Greens; cases Blues; deaths Reds). Wave spans shade light
+red; the lag matched-pair bands are neutral gray; wave, archetype, and
+region palettes use the standard categorical ordering; correlation-sign
+table styling is red-positive/blue-negative. Site chrome (header, tabs,
+cards, sidebar) intentionally retains the Gettysburg branding — this change
+covers figures and data-driven styling only. Verified via the headless
+render harness on two configurations.
+
 ### Change Log Policy
 
 Future changes should be appended to this section. Do not create new `*_SUMMARY.md`, `*_AUDIT.md`, `*_CHANGES.md`, `*_FIXES.md`, `*_NOTES.md`, `*_IMPLEMENTATION.md`, or similar documentation files.
