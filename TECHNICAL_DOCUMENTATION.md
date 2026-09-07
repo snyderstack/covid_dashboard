@@ -94,6 +94,27 @@ Invalid geographic rows are removed before plotting. Rows with null FIPS, empty 
 
 State filtering is applied after the single-date choropleth dataframe is prepared. `filter_choropleth_by_state()` limits the dataframe to the selected state, while `get_state_bounds_for_zoom()` provides approximate state framing for the map.
 
+### Hover contract (`customdata` ordering)
+
+The Map tab replaces Plotly Express's auto-generated hover box with a hand-written `hovertemplate`, which addresses values by numeric position in the trace's `customdata` array. That ordering is pinned explicitly by passing `custom_data=_custom_cols` to `px.choropleth`:
+
+| index | column | shown as |
+|---|---|---|
+| 0 | `Location` | county name (header) |
+| 1 | `population` | Population |
+| 2 | `cases` | Cases |
+| 3 | `deaths` | Deaths |
+| 4 | `cases_pc` | Cases/100k |
+| 5 | `deaths_pc` | Deaths/100k |
+| 6 | `value` | the selected metric |
+| 7 | `County_Type` | Metro/Nonmetro |
+
+**The ordering must never be inferred from `hover_data`.** Plotly Express appends *every* `hover_data` key to `customdata`, including keys mapped to `False` — `False` suppresses the auto-generated hover *line* but does not remove the column. (In `plotly/express/_core.py` the guard is `if hover_is_dict and not attr_value[col]`, but each `hover_data` value has by then been normalized to a tuple, and a non-empty tuple is always truthy, so the skip never fires.) With `custom_data` set, Plotly reuses those positions for any shared column and appends the rest — `countyFIPS`, and `log_value` in Log Scale mode — after index 7, so the table above holds under every metric, filter, and color-scale combination.
+
+The template is built from `_cd = {col: idx for idx, col in enumerate(_custom_cols)}` rather than from literal integers, so labels and columns cannot drift apart. The click-to-profile handler resolves the clicked county through the same map (`_pt_cd[_cd["Location"]]`).
+
+Note that `validation.validate_tooltip_consistency()` audits the *dataframe* returned by `prepare_choropleth_for_date()` against source data. It does not inspect the assembled figure, so it cannot detect a `customdata`/template mismatch — the ordering contract above is what guards that step.
+
 ## 5. Per-Capita Calculations
 
 Per-capita rates use:
@@ -708,6 +729,44 @@ existing per-county series builder so metric/view/smoothing/normalization/
 log-scale controls behave identically; per-county latest-value metrics and
 CSV export included. Vaccination metrics are supported. Dual-axis display
 is correctly unavailable in this mode.
+
+### 2026-09-07 — Geographic Map tooltip read the wrong columns
+
+Reported from outside: hovering Maricopa County showed a "Cases" figure that
+stayed constant across most of the timeline.
+
+**Cause.** The Map tab's hand-written `hovertemplate` indexes into
+`customdata` by position, and the index map assumed the nine-key `hover_data`
+dict contributed only eight columns — that `"countyFIPS": False` was excluded.
+Plotly Express includes it anyway (`False` hides the auto-generated hover line
+but keeps the column), so `customdata` was nine wide with `countyFIPS` at
+index 0 and every field shifted down one slot. "Cases" was rendering
+`population` — constant by construction — and the selected-metric line was
+rendering `deaths_pc`, which plateaus after mid-2022 and so also looked
+frozen. The same off-by-one broke click-to-profile, which read
+`customdata[0]` expecting a `Location` string and got a FIPS code.
+
+Only the hover box was affected. The data pipeline was correct throughout, and
+choropleth colors read the trace's `z` rather than `customdata`, so the map
+itself was never wrong.
+
+**Fix.** `custom_data=_custom_cols` is now passed to `px.choropleth` to pin
+positions 0–7 regardless of `hover_data` contents, and both the
+`hovertemplate` and the click handler derive their indices from that same
+list. Thousands separators intended by `hover_data` but discarded when the
+template was overwritten are restored on Population, Cases, and Deaths. See
+Section 4 for the ordering contract.
+
+**Verification.** 10,010 tooltip-vs-source field comparisons with zero
+mismatches, rendered by substituting the figure's actual `customdata` into its
+actual `hovertemplate` (10 metrics × 13 counties × 11 dates, spanning
+Loving County TX at 169 people through Los Angeles, and 2020-03-15 through
+2023-07-23 including the first-wave, Delta, and Omicron peaks). A further 721
+checks covered national and state-filtered views, All/Metro/Nonmetro under the
+real RUCC classification, all three color-scale modes, and the vaccination
+snapshot branch. Regression: `z == value` confirmed for all 3,142 counties
+(`z == log1p(value)` in Log Scale), no filter leakage, and `tests/test_tools.py`
+passing.
 
 ### Change Log Policy
 

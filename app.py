@@ -1744,6 +1744,28 @@ def render_map_tab(transforms, cases_df, deaths_df, population_df, dates, unique
             )
         )
 
+    # Pin the customdata column order explicitly.
+    #
+    # The hovertemplate below (and the click-to-profile handler) address hover
+    # fields by numeric customdata index, so that order has to be guaranteed.
+    # It cannot be inferred from hover_data: Plotly Express appends *every*
+    # hover_data key to customdata, including keys mapped to False — False only
+    # suppresses the auto-generated hover line, it does not remove the column.
+    # Passing custom_data makes positions 0..7 fixed no matter what hover_data
+    # contains (px reuses the custom_data position for any shared column and
+    # appends the rest after it).
+    _custom_cols = [
+        "Location",    # 0
+        "population",  # 1
+        "cases",       # 2
+        "deaths",      # 3
+        "cases_pc",    # 4
+        "deaths_pc",   # 5
+        "value",       # 6
+        "County_Type", # 7
+    ]
+    _cd = {col: idx for idx, col in enumerate(_custom_cols)}
+
     _hover_data: dict = {
         "countyFIPS":  False,
         "Location":    True,
@@ -1774,6 +1796,7 @@ def render_map_tab(transforms, cases_df, deaths_df, population_df, dates, unique
         color_continuous_scale=color_scale,
         range_color=[_zmin, _zmax],
         hover_data=_hover_data,
+        custom_data=_custom_cols,
         labels={color_col: metric_name},
     )
 
@@ -1799,18 +1822,18 @@ def render_map_tab(transforms, cases_df, deaths_df, population_df, dates, unique
     )
     if _colorbar_kw:
         fig_map.update_layout(**_colorbar_kw)
-    # customdata order: [0]=Location [1]=population [2]=cases [3]=deaths
-    #                   [4]=cases_pc [5]=deaths_pc  [6]=value [7]=County_Type
+    # Indices come from _custom_cols above, so the template can never drift out
+    # of sync with the columns actually placed in customdata.
     fig_map.update_traces(
         hovertemplate=(
-            "<b>%{customdata[0]}</b><br>"
-            "Population: %{customdata[1]}<br>"
-            "Cases: %{customdata[2]}<br>"
-            "Deaths: %{customdata[3]}<br>"
-            "Cases/100k: %{customdata[4]:.1f}<br>"
-            "Deaths/100k: %{customdata[5]:.1f}<br>"
-            f"{metric_name}: %{{customdata[6]:.1f}}<br>"
-            "Metro/Nonmetro: %{customdata[7]}<extra></extra>"
+            f"<b>%{{customdata[{_cd['Location']}]}}</b><br>"
+            f"Population: %{{customdata[{_cd['population']}]:,}}<br>"
+            f"Cases: %{{customdata[{_cd['cases']}]:,}}<br>"
+            f"Deaths: %{{customdata[{_cd['deaths']}]:,}}<br>"
+            f"Cases/100k: %{{customdata[{_cd['cases_pc']}]:.1f}}<br>"
+            f"Deaths/100k: %{{customdata[{_cd['deaths_pc']}]:.1f}}<br>"
+            f"{metric_name}: %{{customdata[{_cd['value']}]:.1f}}<br>"
+            f"Metro/Nonmetro: %{{customdata[{_cd['County_Type']}]}}<extra></extra>"
         )
     )
 
@@ -1838,9 +1861,9 @@ def render_map_tab(transforms, cases_df, deaths_df, population_df, dates, unique
         if _sel_points:
             _clicked_loc = None
             _pt = _sel_points[0]
-            _cd = _pt.get("customdata")
-            if _cd:
-                _clicked_loc = _cd[0]  # customdata[0] = Location (see hover map)
+            _pt_cd = _pt.get("customdata")
+            if _pt_cd and len(_pt_cd) > _cd["Location"]:
+                _clicked_loc = _pt_cd[_cd["Location"]]
             elif _pt.get("location"):
                 _match = filtered_choro_data[
                     filtered_choro_data["countyFIPS"] == str(_pt["location"]).zfill(5)
