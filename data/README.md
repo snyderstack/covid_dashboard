@@ -1,26 +1,36 @@
 # Data Directory
 
-The dashboard reads all datasets from this directory. Files small enough for GitHub are included in the repository; the rest must be downloaded separately. The app degrades gracefully — anything listed as *optional* simply disables its associated features when absent.
+The dashboard reads every dataset from this `data/` directory, at the exact paths below — the loaders look for these filenames and nothing else. Files small enough for GitHub are in the repository; the large ones are in the data supplement release. The app degrades gracefully: any *optional* file that is missing just disables its features.
 
-## Included in the repository (no action needed)
+## Quick setup — data supplement
 
-| File | Source | Enables |
-|---|---|---|
-| `covid_confirmed_usafacts.csv` | USAFacts | Core — required |
-| `covid_deaths_usafacts.csv` | USAFacts | Core — required |
-| `covid_county_population_usafacts.csv` | USAFacts | Core — required |
-| `ahrf2023.csv` | HRSA AHRF 2022–2023 (CSV release) | County Factors, Statistical Modeling, RUCC Metro/Nonmetro classification |
-| `AHRF_2019-2020/DOC/` | HRSA | SAS layout used to parse `AHRF2020.asc` (if downloaded) |
-| `geojson-counties-fips.json` | Plotly datasets (auto-downloaded on first launch if missing) | County map rendering, hotspot analysis, archetype maps |
+Download **[covid_data_supplement.zip](https://github.com/snyderstack/covid_dashboard/releases/download/v1.0/covid_data_supplement.zip)** (277 MB, from release [v1.0 — data supplement](https://github.com/snyderstack/covid_dashboard/releases/tag/v1.0)) and unzip it **in the repository root** (the folder containing `app.py`). The archive already contains the `data/…` paths, so every file lands where the loaders expect it.
 
-## Optional downloads (excluded — GitHub size limits)
+```bash
+unzip covid_data_supplement.zip   # run from the repository root
+```
 
-| File | Size | Source | Enables |
-|---|---|---|---|
-| `COVID-19_Vaccinations_in_the_United_States,County_20260623.csv` | ~636 MB | [CDC COVID Data Tracker](https://data.cdc.gov/Vaccinations/COVID-19-Vaccinations-in-the-United-States-County/8xkx-amqh) — export as CSV | All vaccination features (map metrics, rollout charts, vaccination factors and modeling columns) |
-| `AHRF_2020-2021_SAS/AHRF2021.sas7bdat` | ~184 MB | [HRSA AHRF downloads](https://data.hrsa.gov/data/download) — 2020–2021 SAS release | Supplementary 2019–2021 AHRF validation columns |
-| `AHRF2020.asc` | ~99 MB | HRSA AHRF downloads — 2019–2020 ASCII release | Supplementary 2018–2020 pandemic-era variables (HPSA 2019/2020, 2018 physician counts) |
+## All data files
 
-Place downloaded files at the exact paths shown above (the vaccination CSV filename must match, including the date suffix — or update `VAX_FILE` in `vaccination_loader.py`).
+| File | Saved to (exact path) | Size | In repo? | Source / download | Used by | Enables |
+|---|---|---|---|---|---|---|
+| USAFacts confirmed cases | `data/covid_confirmed_usafacts.csv` | 18 MB | Yes | USAFacts — ⟨paste link⟩ | `tools.load_data` | **Required** — everything |
+| USAFacts deaths | `data/covid_deaths_usafacts.csv` | 12 MB | Yes | USAFacts — ⟨paste link⟩ | `tools.load_data` | **Required** — everything |
+| USAFacts county population | `data/covid_county_population_usafacts.csv` | 100 KB | Yes | USAFacts — ⟨paste link⟩ | `tools.load_data` | **Required** — per-100k rates |
+| AHRF 2022–2023 (CSV) | `data/ahrf2023.csv` | 38 MB | Yes | HRSA AHRF — ⟨paste link⟩ | `ahrf_loader` | County Factors, Statistical Modeling, Metro/Nonmetro (RUCC) |
+| AHRF 2019–2020 SAS layout | `data/AHRF_2019-2020/DOC/AHRF2019-2020.sas` | 1.1 MB | Yes | HRSA AHRF 2019–2020 release — ⟨paste link⟩ | `ahrf_loader` | Parsing `AHRF2020.asc` (below) |
+| County boundaries (GeoJSON) | `data/geojson-counties-fips.json` | 3.1 MB | Yes | [Plotly datasets](https://raw.githubusercontent.com/plotly/datasets/master/geojson-counties-fips.json) — auto-downloaded on first launch if missing | `tools.load_county_geojson` | Offline maps, hotspot analysis, bordering counties |
+| State political context (Jan 2021) | `data/state_political.csv` | 8 KB | Yes | ⟨paste link / source⟩ | `tools.load_state_political` | Overview political section, map political metrics, margin predictor |
+| CDC county vaccinations | `data/COVID-19_Vaccinations_in_the_United_States,County_20260623.csv` | 635 MB | No — supplement zip | [CDC data.cdc.gov](https://data.cdc.gov/Vaccinations/COVID-19-Vaccinations-in-the-United-States-County/8xkx-amqh) (export as CSV) — ⟨paste link⟩ | `vaccination_loader` | All vaccination features |
+| AHRF 2020–2021 (SAS) | `data/AHRF_2020-2021_SAS/AHRF2021.sas7bdat` | 184 MB | No — supplement zip | HRSA AHRF 2020–2021 SAS release — ⟨paste link⟩ | `ahrf_loader` | Supplementary 2019–2021 AHRF columns |
+| AHRF 2019–2020 (ASCII) | `data/AHRF2020.asc` | 98 MB | No — supplement zip | HRSA AHRF 2019–2020 ASCII release — ⟨paste link⟩ | `ahrf_loader` | Supplementary 2018–2020 variables (HPSA, physician counts) |
 
-`ahrf2021.asc` and `ahrf2022.asc` are intentionally unused: HRSA published no fixed-width layout files for those release years, and `ahrf2023.csv` already covers the same variable vintages.
+**Filenames must match exactly.** The vaccination CSV name includes the export date (`_20260623`); if you download a newer export, either rename it to the name above or update `VAX_FILE` in `vaccination_loader.py`.
+
+## Not used
+
+`ahrf2021.asc` and `ahrf2022.asc` are intentionally unused — HRSA published no fixed-width layout files for those release years, and `ahrf2023.csv` already covers the same variable vintages. `data/AHRF_CSV_2022-2023-2/` (the full HRSA CSV download) is also unused; only `ahrf2023.csv` is read.
+
+## Git
+
+Large files are excluded by `.gitignore` (`data/COVID-19_Vaccinations_in_the_United_States*.csv`, `*.sas7bdat`, `*.asc`, `*.zip`, `data/AHRF_2020-2021_SAS/`, `data/AHRF_CSV_2022-2023-2/`) and must never be committed — GitHub rejects files over 100 MB.
