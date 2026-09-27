@@ -18,6 +18,8 @@ covid_dashboard/
 ├── county_features.py          # Master county feature table, correlations, similarity
 ├── modeling.py                 # Correlations, RF importance, OLS (HC3), VIF, clustering
 ├── spatial_analysis.py         # County adjacency and Getis-Ord Gi* hotspots
+├── map_component.py            # Zoom-preserving map (Streamlit v2 custom component)
+├── .streamlit/config.toml      # enableStaticServing = true (serves ./static)
 ├── tests/                      # Deterministic pytest suite (synthetic fixtures)
 ├── assets/                     # Logos
 ├── README.md                   # User-facing documentation
@@ -26,7 +28,7 @@ covid_dashboard/
 └── data/                       # Local USAFacts, AHRF, and CDC vaccination inputs
 ```
 
-`app.py` should remain focused on Streamlit layout, user controls, and Plotly visualization. Data preparation belongs in `tools.py`; data validation belongs in `validation.py`; analysis logic belongs in the purpose-specific modules (`wave_analysis.py`, `lag_analysis.py`, `county_features.py`, `modeling.py`, `ahrf_loader.py`, `vaccination_loader.py`), all of which are pure data modules with no Streamlit dependency.
+`app.py` should remain focused on Streamlit layout, user controls, and Plotly visualization. Data preparation belongs in `tools.py`; data validation belongs in `validation.py`; analysis logic belongs in the purpose-specific modules (`wave_analysis.py`, `lag_analysis.py`, `county_features.py`, `modeling.py`, `ahrf_loader.py`, `vaccination_loader.py`), all of which are pure data modules with no Streamlit dependency. `map_component.py` is the one other UI module: it renders the Geographic Map (Section 4).
 
 The app uses Streamlit caching for raw data loading and expensive transform precomputation. The raw USAFacts tables remain in wide format, with one row per county and date columns across the timeline. Visualization functions extract only the selected county, metric, or date slice when needed.
 
@@ -40,7 +42,11 @@ The dashboard expects three local USAFacts datasets:
 
 The case and death datasets use a wide schema: `countyFIPS`, `County Name`, `State`, `StateFIPS`, followed by daily date columns in `YYYY-MM-DD` format. The population file contains county metadata and a `population` column.
 
-Data is loaded from the local `data/` directory. Runtime network download of datasets is intentionally not part of the application; the single exception is the county boundary GeoJSON, which `tools.load_county_geojson()` fetches once and saves into `data/` if the bundled copy is missing, then reuses offline.
+Data is loaded from the local `data/` directory. Runtime network download of datasets is intentionally not part of the application; the single exception is the county boundary GeoJSON, which `tools.load_county_geojson()` fetches once and saves into `data/` if the bundled copy is missing, then reuses offline. The download verifies TLS against the `certifi` CA bundle, because python.org macOS builds have no system certificate store until "Install Certificates" is run.
+
+`state_political.csv` holds state-level political context as of January 2021, one row per state plus DC: governor, both U.S. senators, state legislature control, the 2020 presidential winner, and `pres_2020_margin_d` (Biden minus Trump, percentage points). `tools.load_state_political()` reads it, renames the file's full-name `state` column to `state_name`, and returns an empty frame if the file is missing. It joins to county data on `state_abbr` = `State` (2-letter codes; all 51 match). DC has no governor, senators, or legislature; those fields are empty and its `notes` field explains why.
+
+The large optional files (CDC vaccination CSV, `AHRF2021.sas7bdat`, `AHRF2020.asc`) are distributed as `covid_data_supplement.zip` in the v1.0 GitHub release and are git-ignored by pattern. `data/README.md` lists every file with its source and exact path.
 
 ## 3. Data Processing Pipeline
 
@@ -66,17 +72,13 @@ These precomputed tables remain wide-format. UI interactions generally select th
 
 ## 4. Choropleth Implementation
 
-The Map tab uses Plotly's county choropleth support with the public Plotly county GeoJSON:
+The Map tab builds a Plotly Express county choropleth (`px.choropleth`, `featureidkey="id"`, `scope="usa"`) from the bundled county GeoJSON, falling back to the public Plotly GeoJSON URL when the bundled copy is unavailable.
 
-```python
-px.choropleth(
-    data_frame,
-    locations="countyFIPS",
-    geojson="https://raw.githubusercontent.com/plotly/datasets/master/geojson-counties-fips.json",
-    featureidkey="id",
-    scope="usa",
-)
-```
+**Rendering and zoom persistence.** The figure is not drawn with `st.plotly_chart`, which hashes the whole figure into its element ID and remounts the chart on every data change, discarding the user's pan/zoom. `map_component.render_geo_map()` is a Streamlit v2 custom component that keeps one Plotly div alive and updates it with `Plotly.react`. It records the user's `geo.*` relayout edits and reapplies them to each new frame. The edits are keyed on a view key built from metric, state filter, county-type filter, and color scale: changing any of those resets the view, while date changes and playback keep it. `geo.uirevision` and layout `uirevision` are set to the same key. County clicks return to Python as a one-shot trigger. plotly.js and the GeoJSON are copied once per server process into `./static` (served via `enableStaticServing`), with the plotly.js CDN as a fallback.
+
+**Auto-play.** `render_map_tab()` runs as an `st.fragment`. While playing, the end of the function queues the date seven days ahead, sleeps for the selected speed (1.2 / 0.6 / 0.3 / 0.15 s), and reruns the fragment; the top of the function applies the queued date before the date slider is created. Playback stops at the last date, on any full-app rerun, and on snapshot metrics. A Pause button stays available when the control panel is hidden.
+
+**Snapshot metrics.** Vaccination metrics (latest CDC snapshot) and the two political metrics ignore the date slider and disable playback. "2020 Presidential Margin" uses `RdBu` on a scale symmetric around 0, clipped at the 99th percentile of |margin| so DC (+86.8) does not wash out the states; "Governor Party" is categorical (Democrat, Republican, N/A for DC). Political metrics ignore the Color Scale setting and hide the monthly animation and hotspot analysis, since Gi* on a state-constant value would only outline state borders.
 
 `prepare_choropleth_for_date()` builds the map dataframe for one selected date and metric. It returns only the fields needed for map rendering and hover display:
 
@@ -106,7 +108,7 @@ The Map tab replaces Plotly Express's auto-generated hover box with a hand-writt
 | 3 | `deaths` | Deaths |
 | 4 | `cases_pc` | Cases/100k |
 | 5 | `deaths_pc` | Deaths/100k |
-| 6 | `value` | the selected metric |
+| 6 | `value` | the selected metric (`:+.1f pts` for the margin, unformatted for governor party) |
 | 7 | `County_Type` | Metro/Nonmetro |
 
 **The ordering must never be inferred from `hover_data`.** Plotly Express appends *every* `hover_data` key to `customdata`, including keys mapped to `False` — `False` suppresses the auto-generated hover *line* but does not remove the column. (In `plotly/express/_core.py` the guard is `if hover_is_dict and not attr_value[col]`, but each `hover_data` value has by then been normalized to a tuple, and a non-empty tuple is always truthy, so the skip never fires.) With `custom_data` set, Plotly reuses those positions for any shared column and appends the rest — `countyFIPS`, and `log_value` in Log Scale mode — after index 7, so the table above holds under every metric, filter, and color-scale combination.
@@ -128,6 +130,8 @@ Per-capita rates use:
 Rows with `countyFIPS == "00000"` or non-positive population are excluded from population lookup. Counties without valid population receive `NaN` per-capita values instead of misleading zeroes or inflated rates.
 
 `calculate_per_capita()` is used for single-county time series in the County Comparison tab. It follows the same population guardrails.
+
+**County identity across files.** The USAFacts cases file names 57 counties differently from the population file and the master table (for example "City and County of San Francisco" vs "San Francisco County", and "City of Richmond" vs "Richmond City"). County pickers use the cases file's `Location` strings, so every lookup into population or master data goes through `LOCATION_FIPS` (Location → FIPS, built from the cases file) and matches on `(countyFIPS, State)` via `_location_mask()`. `calculate_per_capita()`, `lag_analysis.get_county_population()`, `prepare_daily_per_capita()`, and `analyze_county_lag()` accept an optional `fips=` argument for the same reason. Name matching remains their default for callers that do not pass it.
 
 ## 6. Moving Average Calculations
 
@@ -181,7 +185,7 @@ Wave detail dictionaries use the key `"peak_value"` for the peak count (accurate
 
 ## 9. County Feature Table
 
-`county_features.py` creates a one-row-per-county feature table for downstream research. `create_county_feature_table()` merges county metadata, population, latest total cases, latest total deaths, cases per 100k, deaths per 100k, and optional wave metrics. `create_master_county_table()` extends this with AHRF healthcare/socioeconomic variables and CDC vaccination columns, joined on countyFIPS; this master table backs the County Overview, County Factors, and Statistical Modeling tabs.
+`county_features.py` creates a one-row-per-county feature table for downstream research. `create_county_feature_table()` merges county metadata, population, latest total cases, latest total deaths, cases per 100k, deaths per 100k, and optional wave metrics. `create_master_county_table()` extends this with AHRF healthcare/socioeconomic variables and CDC vaccination columns, joined on countyFIPS; this master table backs the County Overview, County Factors, and Statistical Modeling tabs. When `state_political.csv` is present, `app.py` adds `pres_2020_margin_d` and `governor_party` to the master table by `State` after it is built.
 
 `add_external_dataset()` supports merging additional county-level datasets by FIPS, optionally also requiring state matching. The module also provides `compute_bivariate_correlation()` (Pearson + Spearman with p-values), `compute_ols_trend()`, min-max normalization, z-score standardization, and `prepare_for_regression()` / `prepare_for_clustering()` helpers for external analysis workflows.
 
@@ -191,9 +195,9 @@ Two peer-analysis functions power the County Overview: `find_similar_counties()`
 
 These are the current, deliberate limitations of the platform. Each is either disclosed in the UI where it matters or inherent to county-level surveillance data. (Historical findings and their resolution status are catalogued in Section 13.0.)
 
-**Data handling.** Statewide unallocated records and zero-population rows are retained in raw loaded data for traceability but excluded from maps, per-capita math, and national totals. Negative daily diffs (source-data corrections) are clipped to zero for analysis, but correction events are flagged with markers on the wave and daily comparison charts so they are visible rather than hidden; cumulative analyses are unaffected. Per-capita rates use a single static population per county for the entire 2020–2023 period — a small systematic bias for high-growth counties.
+**Data handling.** Statewide unallocated records and zero-population rows are retained in raw loaded data for traceability but excluded from maps, per-capita math, national totals, and every county picker. Negative daily diffs (source-data corrections) are clipped to zero for analysis, but correction events are flagged with markers on the wave and daily comparison charts so they are visible rather than hidden; cumulative analyses are unaffected. Per-capita rates use a single static population per county for the entire 2020–2023 period — a small systematic bias for high-growth counties.
 
-**Statistical methods.** Moving averages use `min_periods=1`, so the first window−1 values of any smoothed series draw on fewer points (disclosed in the lag and wave methodology expanders). Lag analysis matches peaks greedily in chronological order (not globally optimal) and treats missing days as zero before peak detection. The Index=100 comparison rebases each series at its own first non-zero value, so curves can start from different epidemic moments. All associations everywhere are county-level (ecological); individual-level inference is invalid.
+**Statistical methods.** Moving averages use `min_periods=1`, so the first window−1 values of any smoothed series draw on fewer points (disclosed in the lag and wave methodology expanders). Lag analysis matches peaks greedily in chronological order (not globally optimal) and treats missing days as zero before peak detection. The Index=100 comparison rebases each series at its own first non-zero value, so curves can start from different epidemic moments. All associations everywhere are county-level (ecological); individual-level inference is invalid. Political variables are state-level: counties within a state share one value (51 distinct values for the 2020 margin), so correlation and regression p-values for that predictor treat non-independent observations as independent and overstate the evidence. This is stated in the County Factors and Modeling captions.
 
 **Legacy wave path.** When the prominence-based detector is manually selected via Advanced controls, wave boundaries use the 10%-of-peak rule and can degenerate on short series (duration is floored at one day). The default region-based detector does not have this issue.
 
@@ -767,6 +771,40 @@ real RUCC classification, all three color-scale modes, and the vaccination
 snapshot branch. Regression: `z == value` confirmed for all 3,142 counties
 (`z == log1p(value)` in Log Scale), no filter leakage, and `tests/test_tools.py`
 passing.
+
+### 2026-09-27 — Map rendering, audit fixes, state political data
+
+**Map.** The Geographic Map is rendered by `map_component.py` so pan/zoom survives date changes and auto-play (Section 4). Added Play/Pause with four speeds. A map click also sets the map's own County dropdown. Playback speed is kept when the control panel is hidden.
+
+**County Overview.** The CFR expander is a two-row shared-x subplot (CFR on top, daily deaths per 100k below). The pandemic timeline is split into stacked panels on one time axis: cases with wave spans, peaks, and the peer median; deaths; and vaccination when available. Added a "What do these terms mean?" expander under Healthcare Capacity.
+
+**Crash fixes.**
+- Modeling → County Explorer raised `ValueError` for counties missing income or RUCC: the lookup helper returned the string `"N/A"`, which passed `pd.notna()` and reached `int()`.
+- Choosing a wave outcome in County Factors called `st.stop()`, which halted the whole script, so the Modeling tab and footer never rendered. It now returns from the function, and a session flag keeps the computed wave metrics.
+- Comparison with a vaccination metric raised `IndexError` for counties with no vaccination values (the Hawaii counties).
+- Time Lag in County vs County mode crashed when the same county was chosen twice (duplicate chart element IDs and duplicate table columns).
+
+**Correctness fixes.**
+- 57 counties were looked up by name in population and master data and not found, because the cases file names them differently. For these counties the Overview showed no AHRF, vaccination, peer, or lag data, and Comparison plotted raw counts under a "per 100k" axis. Lookups now use FIPS (Section 5).
+- Overview Section 7 colored "Above" green for every metric, including deaths, CFR, and poverty. Colors now show whether the difference is favorable; cases per 100k count as lower-is-better and age rows are uncolored. A zero national median now still gets a direction.
+- Wave tab "Peak Death Lag" subtracted the dates of the most significant case wave and the most significant death wave, which are often different waves; about 7% of sampled counties showed negative lags (down to −360 days). Case and death waves are now matched by time: nearest death peak 0–89 days after the case peak, each used once. The comparison table pairs waves the same way instead of by list position.
+- `largest_wave` is the peak of the most significant wave, not the maximum peak (deliberate in `wave_analysis.py`). Labels now say "Peak of Most Significant Wave" in the Overview, Wave tab, County Factors, and the HTML report.
+- Overview wave table "Peak Deaths /100k" was blank for most counties because it required a detected death wave. It is now the highest 7-day-average daily deaths per 100k from the wave's start to 28 days after its end.
+
+**Behavior and wording.**
+- Modeling results (feature importance, OLS, resilience, archetypes) stay on screen until their own settings change.
+- The KPI row labels show the Metro/Nonmetro filter and refresh when the filter changes on the map. The KPI CFR shows two decimals.
+- The Overview says why the pandemic timeline is not drawn, when it is not.
+- "Above avg" became "Above median", Spearman is labeled ρ throughout, and the Time Lag intro no longer attributes lag length to specific causes.
+- Raw counts show without decimals; Wave tab cards show units.
+- Statewide Unallocated rows were removed from county pickers.
+- County Factors lists the X-axis selector before the Y-axis selector.
+
+**Startup and environment.** The GeoJSON download uses the `certifi` CA bundle. The pandas "column count mismatch" message printed while reading `AHRF2021.sas7bdat` is suppressed; the file loads all 3,230 counties. The Overview navigation cards use `st.html` instead of the deprecated `components.v1.html`. Sidebar button labels no longer inherit the sidebar's white text.
+
+**State political context.** Added `data/state_political.csv` and `tools.load_state_political()` (Section 2). Raw values appear only in a County Overview section. Elsewhere they are analysis dimensions: two map metrics, the 2020 margin as a County Factors factor and Modeling predictor (excluded from resilience scores and the County Explorer), and governor party as a color grouping on the vaccination scatter. All of it is hidden when the file is missing.
+
+**Verification.** `pytest` 32/32. Streamlit `AppTest` runs covered each fix, 19 edge-case scenarios (tiny counties, renamed counties, no-vaccination counties, same-county comparisons), and the app with `state_political.csv` removed.
 
 ### Change Log Policy
 
@@ -1586,10 +1624,10 @@ t-stat  = βᵢ / SE(βᵢ)
 p-value = 2 · Pr(|T| > |t-stat|)   with T ~ t(n−p)
 ```
 
-No statsmodels dependency. Standard errors assume **homoscedastic residuals** (OLS SE). Heteroscedasticity-robust (HC3) standard errors are not implemented; caution is warranted when residual variance is clearly non-constant.
+No statsmodels dependency. The table reports classical standard errors (which assume homoscedastic residuals) alongside HC3 heteroscedasticity-robust standard errors and p-values (MacKinnon & White 1985), computed in `run_ols_regression()`. `compute_vif()` reports variance inflation factors for the selected predictors.
 
 **Output:**
-- Regression table: Variable | Coefficient | Std Error | t-stat | p-value | 95% CI
+- Regression table: Variable | Coefficient | Std Error | t-stat | p-value | Robust SE (HC3) | Robust p | 95% CI
 - Model summary: R², adjusted R², N, F-statistic, F p-value
 - Rule-based interpretation bullets from `modeling.generate_ols_interpretation()`
 
@@ -1630,6 +1668,8 @@ Each county's prediction comes from a model trained on all *other* counties in i
 
 **Missing feature imputation:** Column-wise medians (before splitting folds).
 
+**Features:** all available factors except `pres_2020_margin_d`, which is state-level context rather than a structural county characteristic.
+
 **Map:** Plotly `px.choropleth` using county FIPS codes. Color scale: `RdBu` diverging at 0, clipped to the 98th percentile of absolute scores to prevent extreme outliers from compressing the colour range.
 
 **Limitations:**
@@ -1639,11 +1679,13 @@ Each county's prediction comes from a model trained on all *other* counties in i
 
 ---
 
-### 15.6 Section 5 — County Explorer
+### 15.6 Section 6 — County Explorer
 
 **Purpose:** Per-county summary combining COVID outcomes, healthcare capacity, socioeconomic conditions, and national percentile context.
 
 **National percentile:** Computed with `scipy.stats.percentileofscore(national_series, county_value, kind="rank")` across all counties in the master table (not the filtered subset, so the reference population is always the full national dataset).
+
+The state-level `pres_2020_margin_d` is not listed; its value is shown only in the County Overview.
 
 **Color coding:** ≥ 75th percentile → red; ≤ 25th percentile → green. Note that high percentile is *unfavorable* for outcome metrics (cases, deaths) and *favorable* for resource metrics (PCPs, hospital beds).
 
