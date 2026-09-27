@@ -4,10 +4,10 @@ The dashboard reads every dataset from this `data/` directory, at the exact path
 
 ## Quick setup — data supplement
 
-Download **[covid_data_supplement.zip](https://github.com/snyderstack/covid_dashboard/releases/download/v1.0/covid_data_supplement.zip)** (277 MB, from release [v1.0 — data supplement](https://github.com/snyderstack/covid_dashboard/releases/tag/v1.0)) and unzip it **in the repository root** (the folder containing `app.py`). The archive already contains the `data/…` paths, so every file lands where the loaders expect it.
+Download **[covid_data_supplement_v2.zip](https://github.com/snyderstack/covid_dashboard/releases/download/v2.0-data/covid_data_supplement_v2.zip)** (220 MB, from release [Data supplement v2.0](https://github.com/snyderstack/covid_dashboard/releases/tag/v2.0-data)) and unzip it **in the repository root** (the folder containing `app.py`). The archive already contains the `data/…` paths, so every file lands where the loaders expect it. It also includes `DATA_SUPPLEMENT_README.txt` (the same file list as a text file) and the HRSA data use agreement for the AHRF files.
 
 ```bash
-unzip covid_data_supplement.zip   # run from the repository root
+unzip covid_data_supplement_v2.zip   # run from the repository root
 ```
 
 ## All data files

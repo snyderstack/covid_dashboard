@@ -46,7 +46,7 @@ Data is loaded from the local `data/` directory. Runtime network download of dat
 
 `state_political.csv` holds state-level political context as of January 2021, one row per state plus DC: governor, both U.S. senators, state legislature control, the 2020 presidential winner, and `pres_2020_margin_d` (Biden minus Trump, percentage points). `tools.load_state_political()` reads it, renames the file's full-name `state` column to `state_name`, and returns an empty frame if the file is missing. It joins to county data on `state_abbr` = `State` (2-letter codes; all 51 match). DC has no governor, senators, or legislature; those fields are empty and its `notes` field explains why.
 
-The large optional files (CDC vaccination CSV, `AHRF2021.sas7bdat`, `AHRF2020.asc`) are distributed as `covid_data_supplement.zip` in the v1.0 GitHub release and are git-ignored by pattern. `data/README.md` lists every file with its source and exact path.
+The large optional files (CDC vaccination CSV, `AHRF2021.sas7bdat`, `AHRF2020.asc`) are distributed as `covid_data_supplement_v2.zip` in the `v2.0-data` GitHub release (with `DATA_SUPPLEMENT_README.txt` and the HRSA data use agreement) and are git-ignored by pattern. The older `v1.0` release holds the same three data files. `data/README.md` lists every file with its source and exact path.
 
 ## 3. Data Processing Pipeline
 
