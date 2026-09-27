@@ -68,6 +68,10 @@ FACTOR_COLS: Dict[str, str] = {
     "Median Age":                    "median_age",
     "% Urban Population":            "pct_urban_pop",
     "RUCC Code (1-9)":               "rucc_code",
+    # Political context (state-level, Jan 2021; present only when
+    # data/state_political.csv is loaded). Kept last so default predictor
+    # selections are unchanged.
+    "2020 Presidential Margin (D−R pts, state-level)": "pres_2020_margin_d",
 }
 
 OUTCOME_COLS: Dict[str, str] = {

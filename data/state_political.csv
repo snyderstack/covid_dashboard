@@ -1,0 +1,52 @@
+state_abbr,state,governor_name,governor_party,senator1_name,senator1_party,senator2_name,senator2_party,senate_delegation,state_senate_control,state_house_control,legislature_control,pres_2020_winner,pres_2020_margin_d,notes
+AL,Alabama,Kay Ivey,R,Richard Shelby,R,Tommy Tuberville,R,2 R,R,R,R,R,-25.5,
+AK,Alaska,Mike Dunleavy,R,Lisa Murkowski,R,Dan Sullivan,R,2 R,R,Coalition,Split,R,-10.1,State House organized under a bipartisan coalition; Senate Republican.
+AZ,Arizona,Doug Ducey,R,Kyrsten Sinema,D,Mark Kelly,D,2 D,R,R,R,D,0.3,
+AR,Arkansas,Asa Hutchinson,R,John Boozman,R,Tom Cotton,R,2 R,R,R,R,R,-27.6,
+CA,California,Gavin Newsom,D,Dianne Feinstein,D,Alex Padilla,D,2 D,D,D,D,D,29.2,
+CO,Colorado,Jared Polis,D,Michael Bennet,D,John Hickenlooper,D,2 D,D,D,D,D,13.5,
+CT,Connecticut,Ned Lamont,D,Richard Blumenthal,D,Chris Murphy,D,2 D,D,D,D,D,20.0,
+DE,Delaware,John Carney,D,Tom Carper,D,Chris Coons,D,2 D,D,D,D,D,18.9,
+DC,District of Columbia,N/A,N/A,N/A,N/A,N/A,N/A,N/A,N/A,N/A,N/A,D,86.8,"Federal district: no governor, U.S. senators, or state legislature. Mayor Muriel Bowser (D)."
+FL,Florida,Ron DeSantis,R,Marco Rubio,R,Rick Scott,R,2 R,R,R,R,R,-3.4,
+GA,Georgia,Brian Kemp,R,Jon Ossoff,D,Raphael Warnock,D,2 D,R,R,R,D,0.2,"Both U.S. Senate seats flipped Democratic in the Jan 5, 2021 runoffs (seated Jan 20, 2021)."
+HI,Hawaii,David Ige,D,Brian Schatz,D,Mazie Hirono,D,2 D,D,D,D,D,29.5,
+ID,Idaho,Brad Little,R,Mike Crapo,R,Jim Risch,R,2 R,R,R,R,R,-30.8,
+IL,Illinois,J.B. Pritzker,D,Dick Durbin,D,Tammy Duckworth,D,2 D,D,D,D,D,17.0,
+IN,Indiana,Eric Holcomb,R,Todd Young,R,Mike Braun,R,2 R,R,R,R,R,-16.1,
+IA,Iowa,Kim Reynolds,R,Chuck Grassley,R,Joni Ernst,R,2 R,R,R,R,R,-8.2,
+KS,Kansas,Laura Kelly,D,Jerry Moran,R,Roger Marshall,R,2 R,R,R,R,R,-14.6,
+KY,Kentucky,Andy Beshear,D,Mitch McConnell,R,Rand Paul,R,2 R,R,R,R,R,-25.9,
+LA,Louisiana,John Bel Edwards,D,Bill Cassidy,R,John Kennedy,R,2 R,R,R,R,R,-18.6,
+ME,Maine,Janet Mills,D,Susan Collins,R,Angus King,I,"1 R, 1 I",D,D,D,D,9.1,Sen. King is an independent who caucuses with the Democrats.
+MD,Maryland,Larry Hogan,R,Ben Cardin,D,Chris Van Hollen,D,2 D,D,D,D,D,33.2,
+MA,Massachusetts,Charlie Baker,R,Elizabeth Warren,D,Ed Markey,D,2 D,D,D,D,D,33.5,
+MI,Michigan,Gretchen Whitmer,D,Debbie Stabenow,D,Gary Peters,D,2 D,R,R,R,D,2.8,
+MN,Minnesota,Tim Walz,D,Amy Klobuchar,D,Tina Smith,D,2 D,R,D,Split,D,7.1,"Divided legislature: Republican Senate, Democratic House."
+MS,Mississippi,Tate Reeves,R,Roger Wicker,R,Cindy Hyde-Smith,R,2 R,R,R,R,R,-16.5,
+MO,Missouri,Mike Parson,R,Roy Blunt,R,Josh Hawley,R,2 R,R,R,R,R,-15.4,
+MT,Montana,Greg Gianforte,R,Jon Tester,D,Steve Daines,R,"1 D, 1 R",R,R,R,R,-16.4,"Gov. Gianforte took office Jan 4, 2021 (new Republican trifecta)."
+NE,Nebraska,Pete Ricketts,R,Deb Fischer,R,Ben Sasse,R,2 R,Unicameral (nonpartisan),Unicameral (nonpartisan),Nonpartisan (unicameral),R,-19.1,"Unicameral, officially nonpartisan legislature with a de facto Republican majority."
+NV,Nevada,Steve Sisolak,D,Catherine Cortez Masto,D,Jacky Rosen,D,2 D,D,D,D,D,2.4,
+NH,New Hampshire,Chris Sununu,R,Jeanne Shaheen,D,Maggie Hassan,D,2 D,R,R,R,D,7.4,Republicans flipped both legislative chambers in 2020 (new Republican trifecta).
+NJ,New Jersey,Phil Murphy,D,Bob Menendez,D,Cory Booker,D,2 D,D,D,D,D,15.9,
+NM,New Mexico,Michelle Lujan Grisham,D,Martin Heinrich,D,Ben Ray Lujan,D,2 D,D,D,D,D,10.8,
+NY,New York,Andrew Cuomo,D,Chuck Schumer,D,Kirsten Gillibrand,D,2 D,D,D,D,D,23.1,
+NC,North Carolina,Roy Cooper,D,Richard Burr,R,Thom Tillis,R,2 R,R,R,R,R,-1.3,
+ND,North Dakota,Doug Burgum,R,John Hoeven,R,Kevin Cramer,R,2 R,R,R,R,R,-33.4,
+OH,Ohio,Mike DeWine,R,Sherrod Brown,D,Rob Portman,R,"1 D, 1 R",R,R,R,R,-8.0,
+OK,Oklahoma,Kevin Stitt,R,Jim Inhofe,R,James Lankford,R,2 R,R,R,R,R,-33.1,
+OR,Oregon,Kate Brown,D,Ron Wyden,D,Jeff Merkley,D,2 D,D,D,D,D,16.1,
+PA,Pennsylvania,Tom Wolf,D,Bob Casey,D,Pat Toomey,R,"1 D, 1 R",R,R,R,D,1.2,
+RI,Rhode Island,Gina Raimondo,D,Jack Reed,D,Sheldon Whitehouse,D,2 D,D,D,D,D,20.8,Gov. Raimondo resigned March 2021 to become U.S. Commerce Secretary; snapshot is Jan 2021.
+SC,South Carolina,Henry McMaster,R,Lindsey Graham,R,Tim Scott,R,2 R,R,R,R,R,-11.7,
+SD,South Dakota,Kristi Noem,R,John Thune,R,Mike Rounds,R,2 R,R,R,R,R,-26.2,
+TN,Tennessee,Bill Lee,R,Marsha Blackburn,R,Bill Hagerty,R,2 R,R,R,R,R,-23.2,
+TX,Texas,Greg Abbott,R,John Cornyn,R,Ted Cruz,R,2 R,R,R,R,R,-5.6,
+UT,Utah,Spencer Cox,R,Mike Lee,R,Mitt Romney,R,2 R,R,R,R,R,-20.5,"Gov. Cox took office Jan 4, 2021."
+VT,Vermont,Phil Scott,R,Patrick Leahy,D,Bernie Sanders,I,"1 D, 1 I",D,D,D,D,35.4,Sen. Sanders is an independent who caucuses with the Democrats.
+VA,Virginia,Ralph Northam,D,Mark Warner,D,Tim Kaine,D,2 D,D,D,D,D,10.1,
+WA,Washington,Jay Inslee,D,Patty Murray,D,Maria Cantwell,D,2 D,D,D,D,D,19.2,
+WV,West Virginia,Jim Justice,R,Joe Manchin,D,Shelley Moore Capito,R,"1 D, 1 R",R,R,R,R,-38.9,
+WI,Wisconsin,Tony Evers,D,Ron Johnson,R,Tammy Baldwin,D,"1 D, 1 R",R,R,R,D,0.6,
+WY,Wyoming,Mark Gordon,R,John Barrasso,R,Cynthia Lummis,R,2 R,R,R,R,R,-43.4,

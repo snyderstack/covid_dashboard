@@ -1,0 +1,4 @@
+[server]
+# Serves ./static at app/static/ — the Geographic Map loads plotly.js and the
+# county GeoJSON from there once instead of resending them on every update.
+enableStaticServing = true

@@ -22,12 +22,23 @@ from tools import (
 )
 
 
-def get_county_population(population_df, county_name, state):
-    """Look up a county's population, returning NaN if not found or invalid."""
-    pop_row = population_df[
-        (population_df["County Name"] == county_name) &
-        (population_df["State"] == state)
-    ]
+def get_county_population(population_df, county_name, state, fips=None):
+    """
+    Look up a county's population, returning NaN if not found or invalid.
+
+    When fips is given the row is matched on (countyFIPS, State): county names
+    differ between the USAFacts cases and population files for some counties.
+    """
+    if fips is not None:
+        pop_row = population_df[
+            (population_df["countyFIPS"] == fips) &
+            (population_df["State"] == state)
+        ]
+    else:
+        pop_row = population_df[
+            (population_df["County Name"] == county_name) &
+            (population_df["State"] == state)
+        ]
     if pop_row.empty:
         return np.nan
 
@@ -42,7 +53,8 @@ def get_county_population(population_df, county_name, state):
     return population
 
 
-def prepare_daily_per_capita(df_wide, population_df, county_name, state, metric_name, ma_window=7):
+def prepare_daily_per_capita(df_wide, population_df, county_name, state, metric_name, ma_window=7,
+                             fips=None):
     """
     Build a daily, per-100k, moving-average-smoothed series for one county.
 
@@ -67,7 +79,7 @@ def prepare_daily_per_capita(df_wide, population_df, county_name, state, metric_
     # explicit here to guard against future changes to that function)
     ts[daily_col] = ts[daily_col].clip(lower=0)
 
-    population = get_county_population(population_df, county_name, state)
+    population = get_county_population(population_df, county_name, state, fips=fips)
 
     if pd.isna(population):
         ts["Per100k"] = np.nan
@@ -200,6 +212,7 @@ def analyze_county_lag(
     death_prominence=0.05,
     max_lag_days=90,
     min_peak_distance_days=14,
+    fips=None,
 ):
     """
     Run the full case-to-death lag analysis pipeline for a single county.
@@ -214,6 +227,8 @@ def analyze_county_lag(
         max_lag_days: maximum days between a case peak and its matched death peak
         min_peak_distance_days: minimum spacing between consecutive peaks
                                  in the same series (suppresses noisy peaks)
+        fips: optional 5-char FIPS for the population lookup (see
+              get_county_population)
 
     Returns:
         Dict with keys:
@@ -224,16 +239,18 @@ def analyze_county_lag(
         or {"error": "..."} if data is unavailable.
     """
     cases_ts = prepare_daily_per_capita(
-        cases_df, population_df, county_name, state, "Cases", ma_window=ma_window
+        cases_df, population_df, county_name, state, "Cases", ma_window=ma_window,
+        fips=fips,
     )
     deaths_ts = prepare_daily_per_capita(
-        deaths_df, population_df, county_name, state, "Deaths", ma_window=ma_window
+        deaths_df, population_df, county_name, state, "Deaths", ma_window=ma_window,
+        fips=fips,
     )
 
     if cases_ts.empty or deaths_ts.empty:
         return {"error": "No case/death timeseries available for this county."}
 
-    population = get_county_population(population_df, county_name, state)
+    population = get_county_population(population_df, county_name, state, fips=fips)
     if pd.isna(population):
         return {"error": "No valid population data available for this county."}
 

@@ -2,10 +2,10 @@ import base64
 import math
 import os
 import random
+import time
 from contextlib import nullcontext
 
 import streamlit as st
-import streamlit.components.v1 as components
 import pandas as pd
 import numpy as np
 import plotly.express as px
@@ -39,6 +39,7 @@ from tools import (
     rolling_cfr,
     rolling_cfr_from_daily,
     load_county_geojson,
+    load_state_political,
     GEOJSON_CDN_URL,
 )
 from wave_analysis import (
@@ -82,6 +83,8 @@ from spatial_analysis import (
     compute_getis_ord_gi_star,
     compute_morans_i,
 )
+from map_component import render_geo_map
+from streamlit.runtime.scriptrunner import get_script_run_ctx
 
 # Page config and global CSS
 
@@ -615,6 +618,17 @@ st.markdown("""
     color: rgba(255,255,255,0.82) !important;
 }
 [data-testid="stSidebar"] hr { border-color: rgba(255,255,255,0.12) !important; }
+/* Sidebar buttons (Surprise me, Recently Viewed) keep a white face, so their
+   labels must not inherit the sidebar's white text. Descendant selectors:
+   a help= tooltip wraps the <button>, so it is not a direct child. */
+[data-testid="stSidebar"] [data-testid="stButton"] button {
+    background: #FFFFFF !important;
+    border: 1px solid #C8D4E4 !important;
+}
+[data-testid="stSidebar"] [data-testid="stButton"] button,
+[data-testid="stSidebar"] [data-testid="stButton"] button * {
+    color: #0B2341 !important;
+}
 [data-testid="stSidebar"] .stCaption p {
     color: rgba(255,255,255,0.45) !important;
     font-size: 0.75rem !important;
@@ -1089,6 +1103,14 @@ def _get_vaccination_latest(_data_dir: str) -> pd.DataFrame:
         return load_vaccination_latest(_data_dir)
 
 @st.cache_data
+def _get_state_political(_data_dir: str) -> pd.DataFrame:
+    """
+    Cached wrapper for load_state_political() — state-level political
+    context (Jan 2021). Returns an empty DataFrame if the file is not found.
+    """
+    return load_state_political(_data_dir)
+
+@st.cache_data
 def _get_vaccination_timeseries(_data_dir: str) -> pd.DataFrame:
     """
     Cached wrapper for load_vaccination_timeseries().
@@ -1198,8 +1220,16 @@ with _boot:
     transforms = precompute_all_transforms(cases_df, deaths_df, population_df)
     dates = transforms["dates"]
 
-    locations     = sorted(cases_df["Location"].unique())
+    # "Statewide Unallocated" rows (FIPS 00000) are not counties — keep them
+    # out of every county picker.
+    locations     = sorted(cases_df.loc[cases_df["countyFIPS"] != "00000", "Location"].unique())
     unique_states = sorted(cases_df["State"].unique())
+
+    # Location -> 5-char FIPS. The cases file names some counties differently
+    # from the population file / master table (e.g. "City and County of San
+    # Francisco" vs "San Francisco County"), so cross-dataset lookups key on
+    # (countyFIPS, State) rather than the county name.
+    LOCATION_FIPS = dict(zip(cases_df["Location"], cases_df["countyFIPS"].astype(str).str.zfill(5)))
 
     # County boundaries: bundled GeoJSON dict when available (offline-capable,
     # also powers spatial analysis); CDN URL string as the Plotly fallback.
@@ -1234,6 +1264,19 @@ with _boot:
         cases_df, deaths_df, population_df, ahrf_df, vax_latest_df
     )
 
+    # State political context (Jan 2021) — optional, like vaccination. The
+    # 2020 margin (numeric) and governor party (categorical) are attached to
+    # every county by State so they can serve as analytical dimensions; the
+    # literal values are displayed only in the County Overview.
+    state_political_df = _get_state_political(_VAX_DATA_DIR)
+    _has_political = not state_political_df.empty
+    if _has_political and master_county_df is not None and not master_county_df.empty:
+        master_county_df = master_county_df.merge(
+            state_political_df[["state_abbr", "pres_2020_margin_d", "governor_party"]]
+            .rename(columns={"state_abbr": "State"}),
+            on="State", how="left",
+        )
+
     # Metro/Nonmetro via USDA RUCC codes; falls back to Urban/Rural by
     # population threshold when AHRF is unavailable.
     county_type_df = get_county_classifications(population_df, ahrf_df)
@@ -1256,6 +1299,8 @@ if "_pending_overview_county" in st.session_state:
     _pending_county = st.session_state.pop("_pending_overview_county")
     if _pending_county in set(locations):
         st.session_state["overview_county"] = _pending_county
+        # Keep the Geographic Map's own County dropdown in sync with the click.
+        st.session_state["map_county_for_overview"] = _pending_county
         st.toast(
             f"**{_pending_county}** loaded — open the County Overview tab "
             "for its full profile."
@@ -1292,7 +1337,14 @@ def _cached_overview_lag(county_name, state):
         cases_df, deaths_df, population_df, county_name, state,
         ma_window=7, case_prominence=1.0, death_prominence=0.05,
         max_lag_days=90, min_peak_distance_days=14,
+        fips=LOCATION_FIPS.get(f"{county_name}, {state}"),
     )
+
+
+def _location_mask(df, location):
+    """Boolean mask selecting `location`'s row in df by (countyFIPS, State)."""
+    _, _state = extract_county_state(location)
+    return (df["countyFIPS"] == LOCATION_FIPS.get(location)) & (df["State"] == _state)
 
 COUNTY_COLOR      = "#D62728"  # emphasis red — County A / peaks / highlight
 NATIONAL_COLOR    = "#1F77B4"  # series blue — County B / case curves
@@ -1308,12 +1360,16 @@ render_header(latest_date)
 # Read the county-type filter from session state so KPIs reflect any active
 # map filter. Defaults to "All Counties" before the map tab has been visited.
 _kpi_county_type = st.session_state.get("county_type_filter", "All Counties")
+# Remembered so the map fragment can tell when its filter changed (see
+# render_map_tab) and rerun the full app to refresh these cards.
+st.session_state["_kpi_county_type_rendered"] = _kpi_county_type
 
 if _kpi_county_type == "All Counties":
     _kpi_cases_df    = cases_df
     _kpi_deaths_df   = deaths_df
     _kpi_label       = "Counties Tracked"
     _kpi_count       = int((cases_df["countyFIPS"] != "00000").sum())
+    _kpi_scope       = ""
 else:
     # Support both RUCC-based (Metro/Nonmetro) and legacy (Urban/Rural) labels
     _type_label_map = {
@@ -1328,6 +1384,7 @@ else:
     _kpi_deaths_df = deaths_df.merge(_type_pairs, on=["countyFIPS", "State"], how="inner")
     _kpi_label     = f"{_target_type} Counties Tracked"
     _kpi_count     = len(_kpi_cases_df)
+    _kpi_scope     = f" ({_target_type})"
 
 st.markdown(
     '<p class="kpi-section-label" style="margin-top:1.75rem;">Cumulative National Totals</p>',
@@ -1337,16 +1394,16 @@ st.markdown(
 kpi_col1, kpi_col2, kpi_col3, kpi_col4 = st.columns(4)
 with kpi_col1:
     _kpi_county_cases  = _kpi_cases_df[_kpi_cases_df["countyFIPS"] != "00000"][dates[-1]].sum() if dates else 0
-    render_metric_card("Total US Cases",  int(_kpi_county_cases))
+    render_metric_card(f"Total US Cases{_kpi_scope}",  int(_kpi_county_cases))
 with kpi_col2:
     _kpi_county_deaths = _kpi_deaths_df[_kpi_deaths_df["countyFIPS"] != "00000"][dates[-1]].sum() if dates else 0
-    render_metric_card("Total US Deaths", int(_kpi_county_deaths))
+    render_metric_card(f"Total US Deaths{_kpi_scope}", int(_kpi_county_deaths))
 with kpi_col3:
     _kpi_cfr = (
         round(_kpi_county_deaths / _kpi_county_cases * 100, 2)
         if _kpi_county_cases > 0 else None
     )
-    render_metric_card("Case Fatality Rate", _kpi_cfr if _kpi_cfr else "N/A", suffix="%" if _kpi_cfr else "")
+    render_metric_card(f"Case Fatality Rate{_kpi_scope}", f"{_kpi_cfr:.2f}" if _kpi_cfr else "N/A", suffix="%" if _kpi_cfr else "")
 with kpi_col4:
     render_metric_card(_kpi_label, _kpi_count)
 
@@ -1379,11 +1436,7 @@ with st.sidebar:
     if _sb_county:
         _sb_row = pd.Series(dtype=object)
         if master_county_df is not None and not master_county_df.empty:
-            _sb_name, _sb_state = extract_county_state(_sb_county)
-            _sb_mask = (
-                (master_county_df["County Name"] == _sb_name)
-                & (master_county_df["State"] == _sb_state)
-            )
+            _sb_mask = _location_mask(master_county_df, _sb_county)
             if _sb_mask.any():
                 _sb_row = master_county_df[_sb_mask].iloc[0]
 
@@ -1412,7 +1465,7 @@ with st.sidebar:
             on_click=lambda: st.session_state.update(
                 overview_county=random.choice(locations)
             ),
-            use_container_width=True,
+            width="stretch",
             help="Jump the County Overview to a randomly chosen county",
         )
 
@@ -1426,7 +1479,7 @@ with st.sidebar:
                 key=f"recent_{_rc}",
                 on_click=_jump_to_county,
                 args=(_rc,),
-                use_container_width=True,
+                width="stretch",
             )
 
     # Global display settings (consumed by the map tab and animation)
@@ -1487,8 +1540,32 @@ with st.sidebar:
         unsafe_allow_html=True,
     )
 
+_MAP_PLAY_STRIDE = 7  # auto-play advances ~1 week per frame
+_MAP_PLAY_DELAY = {"0.5×": 1.2, "1×": 0.6, "2×": 0.3, "4×": 0.15}
+
+
+@st.fragment
 def render_map_tab(transforms, cases_df, deaths_df, population_df, dates, unique_states, selected_date, county_type_df, vax_latest_df=None) -> None:
-    """Geographic choropleth map tab — control panel left, full-width map right."""
+    """Geographic choropleth map tab — control panel left, full-width map right.
+
+    Runs as a fragment: map widgets, map clicks and auto-play frames rerun
+    only this tab instead of the whole seven-tab app.
+    """
+
+    # A fragment-scoped rerun is only legal during a fragment run; any full
+    # app run (sidebar change, another tab, a map click) goes app-wide.
+    _in_fragment_run = bool(getattr(get_script_run_ctx(), "fragment_ids_this_run", None))
+
+    def _rerun_map():
+        st.rerun(scope="fragment" if _in_fragment_run else "app")
+
+    # Auto-play: apply any queued date advance BEFORE the date slider is
+    # instantiated (Streamlit forbids mutating a widget's state after it is
+    # created, so the play engine queues the next date and reruns).
+    if "_map_date_queued" in st.session_state:
+        _queued_date = st.session_state.pop("_map_date_queued")
+        if _queued_date in dates:
+            st.session_state["map_date"] = _queued_date
 
     # Build metric catalogue (needed before columns so _vax_metric_cols is accessible)
     _vax_metric_cols = {
@@ -1497,8 +1574,22 @@ def render_map_tab(transforms, cases_df, deaths_df, population_df, dates, unique
         "% Boosted":              "vax_booster_pct",
         "% 65+ Fully Vaccinated": "vax_complete_65plus_pct",
     }
+    # State political context (Jan 2021) — state-level snapshot metrics
+    _pol_metric_cols = {
+        "2020 Presidential Margin": "pres_2020_margin_d",
+        "Governor Party":           "governor_party",
+    }
+
+    # Playback pauses on snapshot metrics (vaccination, political — nothing to
+    # animate) and on any full app run — frames only chain as fragment reruns,
+    # so an interaction elsewhere in the app stops playback cleanly.
+    _vax_selected = st.session_state.get("map_metric") in _vax_metric_cols
+    _snapshot_selected = _vax_selected or st.session_state.get("map_metric") in _pol_metric_cols
+    if st.session_state.get("map_playing") and (_snapshot_selected or not _in_fragment_run):
+        st.session_state["map_playing"] = False
     _has_vax   = vax_latest_df is not None and not vax_latest_df.empty
     _vax_group = list(_vax_metric_cols.keys()) if _has_vax else []
+    _pol_group = list(_pol_metric_cols.keys()) if _has_political else []
 
     metric_options = {
         "Cumulative Cases":        ("cases_df",     cases_df),
@@ -1514,7 +1605,7 @@ def render_map_tab(transforms, cases_df, deaths_df, population_df, dates, unique
         "Cases per 100k":          ("pc_cases",     transforms["pc_cases"]),
         "Deaths per 100k":         ("pc_deaths",    transforms["pc_deaths"]),
     }
-    all_metric_names = list(metric_options.keys()) + _vax_group
+    all_metric_names = list(metric_options.keys()) + _vax_group + _pol_group
 
     # Shareable map views: ?metric= and ?date= seed the widgets once, before
     # they instantiate; afterwards the user's own selections take over.
@@ -1528,7 +1619,7 @@ def render_map_tab(transforms, cases_df, deaths_df, population_df, dates, unique
     # Widgets that unmount (collapsed panel) lose their session entries unless
     # re-registered as app state each run — the standard persistence idiom.
     for _k in ("map_date", "map_metric", "map_state_filter", "county_type_filter",
-               "color_scale_mode", "map_county_for_overview"):
+               "color_scale_mode", "map_county_for_overview", "map_play_speed"):
         if _k in st.session_state:
             st.session_state[_k] = st.session_state[_k]
 
@@ -1548,6 +1639,13 @@ def render_map_tab(transforms, cases_df, deaths_df, population_df, dates, unique
         map_viz_col, map_ctrl_col = st.container(), None
 
     if map_ctrl_col is None:
+        # Keep playback stoppable while the panel (and its Play button) is hidden
+        if st.session_state.get("map_playing"):
+            with _sp:
+                if st.button("⏸ Pause", key="map_play_toggle_hidden"):
+                    st.session_state["map_playing"] = False
+                    _rerun_map()
+
         # Panel hidden: read the persisted control state (validated, with the
         # same defaults the widgets use on first render)
         map_selected_date = st.session_state.get("map_date", selected_date)
@@ -1576,6 +1674,37 @@ def render_map_tab(transforms, cases_df, deaths_df, population_df, dates, unique
                     help="Select the date to visualize. Vaccination metrics always show the most recent CDC snapshot.",
                     **_date_kwargs,
                 )
+
+                # Auto-play controls: step the date slider automatically. The
+                # engine at the end of this function advances the date and
+                # reruns the map fragment; render_geo_map keeps the zoom.
+                _play_c1, _play_c2 = st.columns([1, 1])
+                with _play_c1:
+                    _is_playing = st.session_state.get("map_playing", False)
+                    if st.button(
+                        "\u23f8 Pause" if _is_playing else "\u25b6 Play",
+                        key="map_play_toggle", width="stretch",
+                        disabled=_snapshot_selected,
+                        help=(
+                            "This metric is a single snapshot \u2014 nothing to animate."
+                            if _snapshot_selected else
+                            "Auto-advance the date and animate the map. Zoom is preserved."
+                        ),
+                    ):
+                        if not _is_playing and (
+                            map_selected_date not in dates
+                            or map_selected_date == dates[-1]
+                        ):
+                            # At the last date: replay from the start
+                            st.session_state["_map_date_queued"] = dates[0]
+                        st.session_state["map_playing"] = not _is_playing
+                        _rerun_map()
+                with _play_c2:
+                    st.selectbox(
+                        "Speed", list(_MAP_PLAY_DELAY),
+                        index=1, key="map_play_speed",
+                        label_visibility="collapsed", help="Playback speed.",
+                    )
 
                 st.markdown('<p class="map-ctrl-group">Metric</p>', unsafe_allow_html=True)
                 _metric_kwargs = {} if "map_metric" in st.session_state else {"index": 0}
@@ -1630,25 +1759,32 @@ def render_map_tab(transforms, cases_df, deaths_df, population_df, dates, unique
                     label_visibility="collapsed",
                     help="Select a county, then click the button to open its full public health profile.",
                 )
-                if st.button("Open County Overview →", key="map_open_overview", type="primary", use_container_width=True):
-                    st.session_state["overview_county"] = _map_county_pick
-                    st.toast(
-                        f"**{_map_county_pick}** loaded — click the **County Overview** tab to view its full profile.",
-                    )
+                if st.button("Open County Overview →", key="map_open_overview", type="primary", width="stretch"):
+                    # Full app rerun (this tab is a fragment): the pre-tab
+                    # consumer loads the county before the Overview renders.
+                    st.session_state["_pending_overview_county"] = _map_county_pick
+                    st.rerun()
+
+    # The KPI row above the tabs reads the county-type filter, but a change
+    # made here only reruns this fragment — rerun the full app to refresh it.
+    if _in_fragment_run and county_type_filter != st.session_state.get("_kpi_county_type_rendered"):
+        st.rerun()
 
     # Palette accessibility is a global setting, set in the sidebar
     cb_safe = st.session_state.get("cb_safe_global", False)
 
     _is_vax_metric = metric_name in _vax_metric_cols
+    _is_pol_metric = metric_name in _pol_metric_cols
+    _is_snapshot_metric = _is_vax_metric or _is_pol_metric
 
     # Reflect the current map view into the URL for sharing
     if st.query_params.get("metric") != metric_name:
         st.query_params["metric"] = metric_name
-    if not _is_vax_metric and st.query_params.get("date") != map_selected_date:
+    if not _is_snapshot_metric and st.query_params.get("date") != map_selected_date:
         st.query_params["date"] = map_selected_date
 
-    if _is_vax_metric:
-        _vax_col = _vax_metric_cols[metric_name]
+    if _is_snapshot_metric:
+        _vax_col = _vax_metric_cols.get(metric_name)
         identifier_cols = ["countyFIPS", "County Name", "State", "StateFIPS", "Location"]
         _date_cols   = [c for c in cases_df.columns if c not in identifier_cols]
         _latest_date = sorted(_date_cols)[-1]
@@ -1675,7 +1811,20 @@ def render_map_tab(transforms, cases_df, deaths_df, population_df, dates, unique
         _base["cases_pc"]  = np.where(_base["population"] > 0, (_base["cases"]  / _base["population"]) * 100_000, np.nan)
         _base["deaths_pc"] = np.where(_base["population"] > 0, (_base["deaths"] / _base["population"]) * 100_000, np.nan)
 
-        if _vax_col in vax_latest_df.columns:
+        if _is_pol_metric:
+            # State-level value: every county takes its state's value
+            _pol_col = _pol_metric_cols[metric_name]
+            _base = _base.merge(
+                state_political_df[["state_abbr", _pol_col]]
+                .rename(columns={"state_abbr": "State", _pol_col: "value"}),
+                on="State", how="left",
+            )
+            if _pol_col == "governor_party":
+                _base["value"] = (
+                    _base["value"].map({"D": "Democrat", "R": "Republican"})
+                    .fillna("N/A (no governor)")
+                )
+        elif _vax_col in vax_latest_df.columns:
             _vax_sub = vax_latest_df[["countyFIPS", _vax_col]].copy()
             _vax_sub["countyFIPS"] = _vax_sub["countyFIPS"].astype(str).str.zfill(5)
             _base = _base.merge(_vax_sub, on="countyFIPS", how="left")
@@ -1706,16 +1855,39 @@ def render_map_tab(transforms, cases_df, deaths_df, population_df, dates, unique
             geo_config["center"]     = {"lat": state_bounds["lat"], "lon": state_bounds["lon"]}
             geo_config["projection"] = {"scale": state_bounds["zoom"]}
 
+    # View key: constant while only the date changes (the user's pan/zoom is
+    # kept) and different when the metric/filter/scale change (those
+    # intentionally reset the view). render_geo_map carries the view forward
+    # itself; uirevision is set too so Plotly.react agrees with it.
+    _map_view_key = f"{metric_name}|{map_state_filter}|{county_type_filter}|{color_scale_mode}"
+    geo_config["uirevision"] = _map_view_key
+
     filtered_choro_data["countyFIPS"] = filtered_choro_data["countyFIPS"].astype(str).str.zfill(5)
 
     # Color scale anchored to national (pre-filter) range
     _national_vals       = choro_data["value"].dropna()
-    _national_actual_max = float(_national_vals.max()) if not _national_vals.empty else 1.0
+    _is_categorical_metric = metric_name == "Governor Party"
+    _national_actual_max = (
+        float(_national_vals.max())
+        if not _national_vals.empty and not _is_categorical_metric else 1.0
+    )
 
     color_col    = "value"
     _colorbar_kw = {}
 
-    if color_scale_mode == "Absolute":
+    # Political metrics ignore the Color Scale setting: the margin uses a
+    # scale symmetric around 0 (equal D and R margins get equal strength),
+    # clipped at the 99th percentile of |margin| so DC's +86.8 doesn't wash
+    # out every state; governor party is categorical.
+    if metric_name == "2020 Presidential Margin":
+        _zmax = (max(float(np.percentile(_national_vals.abs(), 99)), 1.0)
+                 if len(_national_vals) > 0 else 1.0)
+        _zmin = -_zmax
+
+    elif _is_categorical_metric:
+        _zmin = _zmax = None
+
+    elif color_scale_mode == "Absolute":
         _zmin = 0.0
         _zmax = max(_national_actual_max, 1.0)
 
@@ -1781,11 +1953,20 @@ def render_map_tab(transforms, cases_df, deaths_df, population_df, dates, unique
         _hover_data[color_col] = False
 
     color_scale = (
+        "RdBu" if metric_name == "2020 Presidential Margin" else
         "Blues" if _is_vax_metric else
         ("OrRd" if "Deaths" in metric_name else "YlOrRd")
     )
-    if cb_safe:
+    if cb_safe and not _is_pol_metric:  # RdBu is already colorblind-readable
         color_scale = "Viridis"
+    if _is_categorical_metric:
+        _color_kw = dict(
+            color_discrete_map={"Democrat": "#2166AC", "Republican": "#B2182B",
+                                "N/A (no governor)": "#BDBDBD"},
+            category_orders={color_col: ["Democrat", "Republican", "N/A (no governor)"]},
+        )
+    else:
+        _color_kw = dict(color_continuous_scale=color_scale, range_color=[_zmin, _zmax])
     fig_map = px.choropleth(
         filtered_choro_data,
         locations="countyFIPS",
@@ -1793,14 +1974,14 @@ def render_map_tab(transforms, cases_df, deaths_df, population_df, dates, unique
         scope="usa",
         geojson=GEO_SOURCE,
         featureidkey="id",
-        color_continuous_scale=color_scale,
-        range_color=[_zmin, _zmax],
         hover_data=_hover_data,
         custom_data=_custom_cols,
         labels={color_col: metric_name},
+        **_color_kw,
     )
 
-    title_text = f"<b>{metric_name} by County</b><br><sub>{map_selected_date}"
+    _title_date = "State-level, as of Jan 2021" if _is_pol_metric else map_selected_date
+    title_text = f"<b>{metric_name} by County</b><br><sub>{_title_date}"
     filter_parts = []
     if map_state_filter != "United States":
         filter_parts.append(map_state_filter)
@@ -1819,11 +2000,18 @@ def render_map_tab(transforms, cases_df, deaths_df, population_df, dates, unique
         margin={"r": 0, "t": 65, "l": 0, "b": 0},
         font=dict(family="Inter, Helvetica Neue, Arial, sans-serif", size=11),
         paper_bgcolor="white",
+        uirevision=_map_view_key,
     )
     if _colorbar_kw:
         fig_map.update_layout(**_colorbar_kw)
     # Indices come from _custom_cols above, so the template can never drift out
     # of sync with the columns actually placed in customdata.
+    _vi = _cd["value"]
+    _value_hover = (
+        f"%{{customdata[{_vi}]}}" if _is_categorical_metric else
+        f"%{{customdata[{_vi}]:+.1f}} pts (D−R)" if metric_name == "2020 Presidential Margin" else
+        f"%{{customdata[{_vi}]:.1f}}"
+    )
     fig_map.update_traces(
         hovertemplate=(
             f"<b>%{{customdata[{_cd['Location']}]}}</b><br>"
@@ -1832,7 +2020,7 @@ def render_map_tab(transforms, cases_df, deaths_df, population_df, dates, unique
             f"Deaths: %{{customdata[{_cd['deaths']}]:,}}<br>"
             f"Cases/100k: %{{customdata[{_cd['cases_pc']}]:.1f}}<br>"
             f"Deaths/100k: %{{customdata[{_cd['deaths_pc']}]:.1f}}<br>"
-            f"{metric_name}: %{{customdata[{_cd['value']}]:.1f}}<br>"
+            f"{metric_name}: {_value_hover}<br>"
             f"Metro/Nonmetro: %{{customdata[{_cd['County_Type']}]}}<extra></extra>"
         )
     )
@@ -1843,41 +2031,40 @@ def render_map_tab(transforms, cases_df, deaths_df, population_df, dates, unique
                 f"**{metric_name}** — Vaccination data shows the most recent CDC county snapshot "
                 "(through May 2023). The date slider above does not apply to this metric."
             )
-        _map_event = st.plotly_chart(
-            fig_map,
-            use_container_width=True,
-            on_select="rerun",
-            selection_mode="points",
-            key="map_select",
+        elif _is_pol_metric:
+            st.caption(
+                f"**{metric_name}** — state-level context as of January 2021, not a county "
+                "measure: every county in a state shares its state's color. The date slider "
+                "above does not apply to this metric."
+            )
+        # Not st.plotly_chart: it remounts the chart on every data change,
+        # which discards the user's zoom (see map_component.py).
+        _map_click = render_geo_map(
+            fig_map, key="geo_map", view_key=_map_view_key, geojson=GEO_SOURCE,
         )
         st.caption("Click any county to load it into the County Overview tab.")
 
         # Click-to-profile: resolve the clicked polygon to a Location string and
-        # stash it for the pre-tab consumer (see startup block). _last_map_click
-        # guards against re-processing the same persisted selection every rerun.
-        _sel_points = []
-        if _map_event is not None:
-            _sel_points = (getattr(_map_event, "selection", None) or {}).get("points", [])
-        if _sel_points:
+        # stash it for the pre-tab consumer (see startup block). The click is a
+        # one-shot trigger, so re-clicking the same county works too.
+        if _map_click:
             _clicked_loc = None
-            _pt = _sel_points[0]
-            _pt_cd = _pt.get("customdata")
+            _pt_cd = _map_click.get("customdata")
             if _pt_cd and len(_pt_cd) > _cd["Location"]:
                 _clicked_loc = _pt_cd[_cd["Location"]]
-            elif _pt.get("location"):
+            elif _map_click.get("location"):
                 _match = filtered_choro_data[
-                    filtered_choro_data["countyFIPS"] == str(_pt["location"]).zfill(5)
+                    filtered_choro_data["countyFIPS"] == str(_map_click["location"]).zfill(5)
                 ]
                 if not _match.empty:
                     _clicked_loc = _match.iloc[0]["Location"]
-            if _clicked_loc and _clicked_loc != st.session_state.get("_last_map_click"):
-                st.session_state["_last_map_click"] = _clicked_loc
+            if _clicked_loc:
                 st.session_state["_pending_overview_county"] = _clicked_loc
                 st.rerun()
 
         # Animated monthly playback (COVID metrics only — vaccination is a
         # single snapshot). Frames are built lazily and cached per metric.
-        if not _is_vax_metric:
+        if not _is_snapshot_metric:
             with st.expander("Animated playback — watch the pandemic move month by month", expanded=False):
                 if st.checkbox("Build animation", key="map_animate",
                                help="One frame per month (~40 frames). First build takes a few seconds."):
@@ -1904,7 +2091,7 @@ def render_map_tab(transforms, cases_df, deaths_df, population_df, dates, unique
                         font=dict(family="Inter, Helvetica Neue, Arial, sans-serif", size=11),
                         paper_bgcolor="white",
                     )
-                    st.plotly_chart(fig_anim, use_container_width=True)
+                    st.plotly_chart(fig_anim, width="stretch")
                     st.caption(
                         f"**{metric_name}**, one frame per month. Color scale fixed at the "
                         "99th-percentile value across the whole period so frames are comparable. "
@@ -1912,8 +2099,11 @@ def render_map_tab(transforms, cases_df, deaths_df, population_df, dates, unique
                     )
 
         # Spatial clustering: Getis-Ord Gi* hotspots for the current metric/date
-        with st.expander("Hotspot analysis — where is this metric spatially clustered?", expanded=False):
-            if st.checkbox("Run hotspot analysis", key="map_hotspots",
+        # Hidden for political metrics: Gi* on a state-constant value would
+        # only outline state borders.
+        with (st.expander("Hotspot analysis — where is this metric spatially clustered?", expanded=False)
+              if not _is_pol_metric else st.empty()):
+            if not _is_pol_metric and st.checkbox("Run hotspot analysis", key="map_hotspots",
                            help="Getis-Ord Gi* over county contiguity, national scope"):
                 if get_county_adjacency() is None:
                     st.info(
@@ -1974,7 +2164,7 @@ def render_map_tab(transforms, cases_df, deaths_df, population_df, dates, unique
                             paper_bgcolor="white",
                             legend=dict(orientation="h", y=-0.05),
                         )
-                        st.plotly_chart(fig_hs, use_container_width=True)
+                        st.plotly_chart(fig_hs, width="stretch")
                         _n_hot = int((_hs["gi_category"] == "Hotspot").sum())
                         _n_cold = int((_hs["gi_category"] == "Coldspot").sum())
                         st.caption(
@@ -2027,9 +2217,27 @@ def render_map_tab(transforms, cases_df, deaths_df, population_df, dates, unique
             file_name=f"covid_map_{metric_name.replace(' ','_').replace('/','-')}_{map_selected_date}.csv",
             mime="text/csv",
             key="map_download",
-            use_container_width=True,
+            width="stretch",
         )
         st.caption(f"{len(_export_df):,} counties · {metric_name} · {map_selected_date}")
+
+    # Auto-play engine: while playing, advance the date by one stride and rerun
+    # just this fragment (the other tabs are left untouched). Vaccination
+    # metrics never reach here \u2014 playback is paused at the top of the tab.
+    if st.session_state.get("map_playing"):
+        _delay = _MAP_PLAY_DELAY.get(st.session_state.get("map_play_speed"), 0.6)
+        try:
+            _cur_idx = dates.index(map_selected_date)
+        except ValueError:
+            _cur_idx = 0
+        if _cur_idx >= len(dates) - 1:
+            st.session_state["map_playing"] = False  # reached the end; stop
+        else:
+            # Clamp so the last frame lands exactly on the final date
+            _next_idx = min(_cur_idx + _MAP_PLAY_STRIDE, len(dates) - 1)
+            st.session_state["_map_date_queued"] = dates[_next_idx]
+            time.sleep(_delay)
+        _rerun_map()  # next frame, or refresh the button label after stopping
 
 def render_comparison_tab(cases_df, deaths_df, population_df, locations, national, vax_ts_df=None) -> None:
     """Unified comparison tab: County vs County / County vs Nation / County vs County vs Nation."""
@@ -2153,7 +2361,10 @@ def render_comparison_tab(cases_df, deaths_df, population_df, locations, nationa
         else:
             plot_col = base_col
         if "per 100k" in dual_metric.lower():
-            ts_pc = calculate_per_capita(ts[["Date", plot_col]], population_df, county_name, state_abbr)
+            ts_pc = calculate_per_capita(
+                ts[["Date", plot_col]], population_df, county_name, state_abbr,
+                fips=LOCATION_FIPS.get(f"{county_name}, {state_abbr}"),
+            )
             if "Per Capita" in ts_pc.columns:
                 ts, plot_col = ts_pc, "Per Capita"
         if dual_ma != "None":
@@ -2216,10 +2427,7 @@ def render_comparison_tab(cases_df, deaths_df, population_df, locations, nationa
                 "Smoothing and view controls do not apply to vaccination metrics."
             )
             for _loc in cmp_multi:
-                _mn, _ms = extract_county_state(_loc)
-                _prow = population_df[
-                    (population_df["County Name"] == _mn) & (population_df["State"] == _ms)
-                ]
+                _prow = population_df[_location_mask(population_df, _loc)]
                 if _prow.empty:
                     continue
                 _mts = get_county_vax_timeseries(
@@ -2254,6 +2462,11 @@ def render_comparison_tab(cases_df, deaths_df, population_df, locations, nationa
             if display_mode == "Normalized (Index = 100)":
                 y_label_m = "Index (first non-zero value = 100)"
 
+        # Raw counts: no decimals (one when smoothed); rates/index/% keep two
+        _num_fmt_m = (",.2f" if (_is_vax_multi or "per 100k" in dual_metric.lower()
+                                 or display_mode == "Normalized (Index = 100)")
+                      else ",.1f" if dual_ma != "None" else ",.0f")
+
         if len(series) < 2:
             st.warning("Fewer than two of the selected counties have data for this metric.")
             return
@@ -2264,7 +2477,7 @@ def render_comparison_tab(cases_df, deaths_df, population_df, locations, nationa
                 x=_mts["Date"], y=_mts["val"],
                 name=_loc, mode="lines",
                 line=dict(color=_MULTI_COLORS[_i % len(_MULTI_COLORS)], width=2.2),
-                hovertemplate=f"<b>{_loc}</b><br>%{{x|%Y-%m-%d}}: %{{y:,.2f}}<extra></extra>",
+                hovertemplate=f"<b>{_loc}</b><br>%{{x|%Y-%m-%d}}: %{{y:{_num_fmt_m}}}<extra></extra>",
             ))
         fig_m.update_layout(
             title=(
@@ -2286,14 +2499,14 @@ def render_comparison_tab(cases_df, deaths_df, population_df, locations, nationa
                         font=dict(size=10)),
             font=dict(family="sans-serif", size=11),
         )
-        st.plotly_chart(fig_m, use_container_width=True)
+        st.plotly_chart(fig_m, width="stretch")
 
         # Latest values, one metric per county
         _m_cols = st.columns(len(series))
         for _i, (_loc, _mts) in enumerate(series):
             _last = _mts["val"].dropna()
             with _m_cols[_i]:
-                st.metric(_loc, f"{_last.iloc[-1]:,.2f}" if len(_last) else "N/A")
+                st.metric(_loc, f"{_last.iloc[-1]:{_num_fmt_m}}" if len(_last) else "N/A")
 
         with st.expander("Download comparison data", expanded=False):
             _frames = [
@@ -2328,11 +2541,7 @@ def render_comparison_tab(cases_df, deaths_df, population_df, locations, nationa
 
         def _get_vax_county_ts(loc_str):
             """Fetch vaccination time-series for a location string."""
-            _cname, _cstate = extract_county_state(loc_str)
-            _pop_row = population_df[
-                (population_df["County Name"] == _cname) &
-                (population_df["State"] == _cstate)
-            ]
+            _pop_row = population_df[_location_mask(population_df, loc_str)]
             if _pop_row.empty or "countyFIPS" not in _pop_row.columns:
                 return pd.DataFrame()
             _fips = str(_pop_row.iloc[0]["countyFIPS"]).zfill(5)
@@ -2341,7 +2550,7 @@ def render_comparison_tab(cases_df, deaths_df, population_df, locations, nationa
         _ts_a = _get_vax_county_ts(county_a)
         _ts_b = _get_vax_county_ts(county_b) if include_county_b else pd.DataFrame()
 
-        # National median vaccination over time (mean of all counties per date)
+        # National median vaccination over time (median of all counties per date)
         if cmp_series in ("County vs Nation", "County vs County vs Nation") and _vax_cmp_col in vax_ts_df.columns:
             _nat_vax_ts = (
                 vax_ts_df.groupby("Date")[_vax_cmp_col]
@@ -2394,7 +2603,7 @@ def render_comparison_tab(cases_df, deaths_df, population_df, locations, nationa
         )
         _fig_vax_cmp.update_xaxes(showgrid=True, gridcolor="rgba(200,200,200,0.3)")
         _fig_vax_cmp.update_yaxes(showgrid=True, gridcolor="rgba(200,200,200,0.3)")
-        st.plotly_chart(_fig_vax_cmp, use_container_width=True)
+        st.plotly_chart(_fig_vax_cmp, width="stretch")
 
         # Summary cards for vaccination comparison
         _vax_cols_cmp = st.columns(2 if not include_county_b else 3)
@@ -2402,10 +2611,12 @@ def render_comparison_tab(cases_df, deaths_df, population_df, locations, nationa
             [(county_a, _ts_a)] + ([(county_b, _ts_b)] if include_county_b else [])
         ):
             if _i < len(_vax_cols_cmp) and not _ts.empty and _vax_cmp_col in _ts.columns:
-                _last_val = _ts.sort_values("Date")[_vax_cmp_col].dropna().iloc[-1] if not _ts.empty else np.nan
+                _vals = _ts.sort_values("Date")[_vax_cmp_col].dropna()
+                _last_val = _vals.iloc[-1] if not _vals.empty else np.nan
                 _last_date = str(_ts.sort_values("Date")["Date"].iloc[-1])[:10] if not _ts.empty else "N/A"
                 with _vax_cols_cmp[_i]:
-                    st.metric(f"{_loc}", f"{_last_val:.1f}%", help=f"As of {_last_date}")
+                    st.metric(f"{_loc}", f"{_last_val:.1f}%" if pd.notna(_last_val) else "N/A",
+                              help=f"As of {_last_date}")
         return  # Skip the rest of the COVID comparison logic
 
     # Standard COVID metric comparison
@@ -2454,6 +2665,10 @@ def render_comparison_tab(cases_df, deaths_df, population_df, locations, nationa
             data_n["National"] = _rebase(data_n["National"])
         y_label = "Index (first non-zero value = 100)"
 
+    # Raw counts: no decimals (one when smoothed); rates and index values keep two
+    _num_fmt = (",.2f" if (is_pc or display_mode == "Normalized (Index = 100)")
+                else ",.1f" if dual_ma != "None" else ",.0f")
+
     series_labels = [county_a]
     if include_county_b:
         series_labels.append(county_b)
@@ -2484,13 +2699,13 @@ def render_comparison_tab(cases_df, deaths_df, population_df, locations, nationa
             x=data_a["Date"], y=data_a[plot_col_a],
             name=county_a, mode="lines",
             line=dict(color=COUNTY_COLOR, width=2.5), yaxis="y1",
-            hovertemplate=f"<b>{county_a}</b><br>Date: %{{x|%Y-%m-%d}}<br>{y_label}: %{{y:,.2f}}<extra></extra>",
+            hovertemplate=f"<b>{county_a}</b><br>Date: %{{x|%Y-%m-%d}}<br>{y_label}: %{{y:{_num_fmt}}}<extra></extra>",
         ))
         fig.add_trace(go.Scatter(
             x=second_x, y=second_y,
             name=second_label, mode="lines",
             line=dict(color=second_color, width=2.5), yaxis="y2",
-            hovertemplate=f"<b>{second_label}</b><br>Date: %{{x|%Y-%m-%d}}<br>{y_label}: %{{y:,.2f}}<extra></extra>",
+            hovertemplate=f"<b>{second_label}</b><br>Date: %{{x|%Y-%m-%d}}<br>{y_label}: %{{y:{_num_fmt}}}<extra></extra>",
         ))
         fig.update_layout(
             title=chart_title,
@@ -2519,20 +2734,20 @@ def render_comparison_tab(cases_df, deaths_df, population_df, locations, nationa
                 x=data_n["Date"], y=data_n["National"],
                 name="United States", mode="lines",
                 line=dict(color=NATION_LINE_COLOR, width=2, dash="dot"),
-                hovertemplate=f"<b>United States</b><br>Date: %{{x|%Y-%m-%d}}<br>{y_label}: %{{y:,.2f}}<extra></extra>",
+                hovertemplate=f"<b>United States</b><br>Date: %{{x|%Y-%m-%d}}<br>{y_label}: %{{y:{_num_fmt}}}<extra></extra>",
             ))
         if include_county_b and not data_b.empty:
             fig.add_trace(go.Scatter(
                 x=data_b["Date"], y=data_b[plot_col_b],
                 name=county_b, mode="lines",
                 line=dict(color=NATIONAL_COLOR, width=2.5),
-                hovertemplate=f"<b>{county_b}</b><br>Date: %{{x|%Y-%m-%d}}<br>{y_label}: %{{y:,.2f}}<extra></extra>",
+                hovertemplate=f"<b>{county_b}</b><br>Date: %{{x|%Y-%m-%d}}<br>{y_label}: %{{y:{_num_fmt}}}<extra></extra>",
             ))
         fig.add_trace(go.Scatter(
             x=data_a["Date"], y=data_a[plot_col_a],
             name=county_a, mode="lines",
             line=dict(color=COUNTY_COLOR, width=2.5),
-            hovertemplate=f"<b>{county_a}</b><br>Date: %{{x|%Y-%m-%d}}<br>{y_label}: %{{y:,.2f}}<extra></extra>",
+            hovertemplate=f"<b>{county_a}</b><br>Date: %{{x|%Y-%m-%d}}<br>{y_label}: %{{y:{_num_fmt}}}<extra></extra>",
         ))
         fig.update_layout(
             title=chart_title,
@@ -2572,7 +2787,7 @@ def render_comparison_tab(cases_df, deaths_df, population_df, locations, nationa
                                    "<br>(daily value clipped to 0)<extra></extra>"),
                 ))
 
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 
     a_latest = data_a[plot_col_a].dropna().iloc[-1] if data_a[plot_col_a].dropna().shape[0] > 0 else np.nan
     b_latest = (
@@ -2592,8 +2807,8 @@ def render_comparison_tab(cases_df, deaths_df, population_df, locations, nationa
         b_first = data_b[plot_col_b].replace(0, np.nan).dropna() if not data_b.empty else pd.Series(dtype=float)
         a_chg   = ((a_latest - a_first.iloc[0]) / a_first.iloc[0] * 100) if not a_first.empty and pd.notna(a_latest) else np.nan
         b_chg   = ((b_latest - b_first.iloc[0]) / b_first.iloc[0] * 100) if not b_first.empty and pd.notna(b_latest) else np.nan
-        with s1: st.metric(f"{county_a} (Latest)", f"{a_latest:,.2f}" if pd.notna(a_latest) else "N/A")
-        with s2: st.metric(f"{county_b} (Latest)", f"{b_latest:,.2f}" if pd.notna(b_latest) else "N/A")
+        with s1: st.metric(f"{county_a} (Latest)", f"{a_latest:{_num_fmt}}" if pd.notna(a_latest) else "N/A")
+        with s2: st.metric(f"{county_b} (Latest)", f"{b_latest:{_num_fmt}}" if pd.notna(b_latest) else "N/A")
         with s3:
             if pd.notna(a_latest) and pd.notna(b_latest) and a_latest != 0:
                 st.metric(f"{county_b} / {county_a}", f"{b_latest / a_latest:.2f}×")
@@ -2605,10 +2820,10 @@ def render_comparison_tab(cases_df, deaths_df, population_df, locations, nationa
             st.metric("% Change (A vs B)", f"{a_str} vs {b_str}")
 
     elif cmp_series == "County vs Nation":
-        pop_row      = population_df[(population_df["County Name"] == county_a_name) & (population_df["State"] == county_a_state)]
+        pop_row      = population_df[_location_mask(population_df, county_a)]
         county_a_pop = pd.to_numeric(pop_row.iloc[0][pop_col_name], errors="coerce") if not pop_row.empty else np.nan
-        with s1: st.metric(f"{county_a} (Latest)", f"{a_latest:,.2f}" if pd.notna(a_latest) else "N/A")
-        with s2: st.metric("United States (Latest)", f"{n_latest:,.2f}" if pd.notna(n_latest) else "N/A")
+        with s1: st.metric(f"{county_a} (Latest)", f"{a_latest:{_num_fmt}}" if pd.notna(a_latest) else "N/A")
+        with s2: st.metric("United States (Latest)", f"{n_latest:{_num_fmt}}" if pd.notna(n_latest) else "N/A")
         with s3:
             if pd.notna(a_latest) and pd.notna(n_latest) and n_latest != 0:
                 st.metric("County / National", f"{a_latest / n_latest:.2f}×")
@@ -2619,9 +2834,9 @@ def render_comparison_tab(cases_df, deaths_df, population_df, locations, nationa
                       f"{int(county_a_pop):,}" if pd.notna(county_a_pop) else "N/A")
 
     else:  # County vs County vs Nation
-        with s1: st.metric(f"{county_a} (Latest)", f"{a_latest:,.2f}" if pd.notna(a_latest) else "N/A")
-        with s2: st.metric(f"{county_b} (Latest)", f"{b_latest:,.2f}" if pd.notna(b_latest) else "N/A")
-        with s3: st.metric("United States (Latest)", f"{n_latest:,.2f}" if pd.notna(n_latest) else "N/A")
+        with s1: st.metric(f"{county_a} (Latest)", f"{a_latest:{_num_fmt}}" if pd.notna(a_latest) else "N/A")
+        with s2: st.metric(f"{county_b} (Latest)", f"{b_latest:{_num_fmt}}" if pd.notna(b_latest) else "N/A")
+        with s3: st.metric("United States (Latest)", f"{n_latest:{_num_fmt}}" if pd.notna(n_latest) else "N/A")
         with s4:
             if pd.notna(a_latest) and pd.notna(n_latest) and n_latest != 0:
                 st.metric(f"{county_a} / National", f"{a_latest / n_latest:.2f}×")
@@ -2697,9 +2912,10 @@ def render_county_overview_tab(
     )
 
     # Clickable navigation cards. st.tabs offers no programmatic switching, so
-    # each card clicks the matching tab button in the parent document (matched
-    # by visible label, case-insensitive). If the DOM ever changes, the cards
-    # degrade to inert labels rather than erroring.
+    # each card clicks the matching tab button on the page (matched by visible
+    # label, case-insensitive). Rendered in-page with st.html, so class names
+    # are prefixed to keep the styles from touching anything else. If the DOM
+    # ever changes, the cards degrade to inert labels rather than erroring.
     _chip_defs = [
         ("Geographic Map", "Watch the pandemic move across the country, one date at a time."),
         ("County Comparison", "Put two counties side by side — or measure one against the nation."),
@@ -2709,42 +2925,44 @@ def render_county_overview_tab(
         ("Statistical Modeling", "Let regression and machine learning rank what mattered most."),
     ]
     _chip_buttons = "".join(
-        f'<button class="chip" onclick="go(\'{label}\')">'
-        f'<span class="t">{label}</span><span class="d">{desc}</span></button>'
+        f'<button class="nav-chip" data-tab="{label}">'
+        f'<span class="nav-chip-t">{label}</span><span class="nav-chip-d">{desc}</span></button>'
         for label, desc in _chip_defs
     )
-    components.html(
+    st.html(
         f"""
         <style>
-        body {{ margin: 0; font-family: 'Inter', 'Helvetica Neue', Arial, sans-serif; }}
-        .grid {{ display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }}
-        .chip {{
+        .nav-grid {{ display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;
+                     font-family: 'Inter', 'Helvetica Neue', Arial, sans-serif; margin-bottom: 1rem; }}
+        .nav-chip {{
+            font-family: inherit;
             background: #ffffff; border: 1px solid #ECF0F5; border-radius: 8px;
             padding: 12px 16px 11px; text-align: left; cursor: pointer;
             box-shadow: 0 1px 2px rgba(11,35,65,0.05), 0 2px 10px rgba(11,35,65,0.05);
             transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
         }}
-        .chip:hover {{
+        .nav-chip:hover {{
             transform: translateY(-2px);
             border-color: rgba(242,106,33,0.5);
             box-shadow: 0 3px 10px rgba(11,35,65,0.08), 0 8px 24px rgba(11,35,65,0.06);
         }}
-        .t {{ display: block; font-size: 13px; font-weight: 700; color: #0B2341; margin-bottom: 2px; }}
-        .d {{ display: block; font-size: 12px; color: #64707F; line-height: 1.45; }}
+        .nav-chip-t {{ display: block; font-size: 13px; font-weight: 700; color: #0B2341; margin-bottom: 2px; }}
+        .nav-chip-d {{ display: block; font-size: 12px; color: #64707F; line-height: 1.45; }}
         </style>
-        <div class="grid">{_chip_buttons}</div>
+        <div class="nav-grid">{_chip_buttons}</div>
         <script>
-        function go(name) {{
-            try {{
-                const tabs = window.parent.document.querySelectorAll('button[data-baseweb="tab"]');
-                for (const t of tabs) {{
-                    if (t.innerText.trim().toLowerCase() === name.toLowerCase()) {{ t.click(); return; }}
+        document.querySelectorAll('.nav-chip:not([data-bound])').forEach((chip) => {{
+            chip.dataset.bound = "1";
+            chip.addEventListener("click", () => {{
+                const name = chip.dataset.tab.toLowerCase();
+                for (const t of document.querySelectorAll('button[data-baseweb="tab"]')) {{
+                    if (t.innerText.trim().toLowerCase() === name) {{ t.click(); return; }}
                 }}
-            }} catch (e) {{ /* sandboxed or DOM changed — cards stay inert */ }}
-        }}
+            }});
+        }});
         </script>
         """,
-        height=190,
+        unsafe_allow_javascript=True,
     )
 
     # County selector. Session state key "overview_county" is shared with the
@@ -2777,11 +2995,11 @@ def render_county_overview_tab(
         st.button(
             "Surprise me",
             on_click=_pick_random_county,
-            use_container_width=True,
+            width="stretch",
             help="Jump to a randomly chosen county",
         )
     with _ov_ex_col:
-        with st.popover("Classroom examples", use_container_width=True):
+        with st.popover("Classroom examples", width="stretch"):
             st.caption("Six counties worth studying — click to load one.")
             for _ex_loc, _ex_note in _CLASSROOM_EXAMPLES:
                 if _ex_loc in locations:
@@ -2791,7 +3009,7 @@ def render_county_overview_tab(
                         on_click=_pick_preset_county,
                         args=(_ex_loc,),
                         help=_ex_note,
-                        use_container_width=True,
+                        width="stretch",
                     )
     with _ov_desc_col:
         st.markdown(
@@ -2822,10 +3040,7 @@ def render_county_overview_tab(
     # Lookup helpers
     master_row = pd.Series(dtype=object)
     if master_county_df is not None and not master_county_df.empty:
-        _mask = (
-            (master_county_df["County Name"] == county_name) &
-            (master_county_df["State"] == state)
-        )
+        _mask = _location_mask(master_county_df, location)
         if _mask.any():
             master_row = master_county_df[_mask].iloc[0]
 
@@ -2969,7 +3184,7 @@ def render_county_overview_tab(
 
     # Rolling CFR: the case-fatality story over time (testing eras, variants,
     # vaccination) that the single cumulative CFR number hides
-    with st.expander("Case fatality rate over time", expanded=False):
+    with st.expander("Case fatality rate & deaths per capita over time", expanded=False):
         _cfr_df = rolling_cfr(cases_df, deaths_df, county_name, state)
         _nat_cfr = rolling_cfr_from_daily(
             national["daily_cases"]["Value"].values,
@@ -2977,37 +3192,64 @@ def render_county_overview_tab(
             national["daily_cases"]["Date"],
         )
         if not _cfr_df.empty and _cfr_df["cfr"].notna().any():
-            _fig_cfr = go.Figure()
+            # Companion series (added per review request): the county's smoothed
+            # daily deaths per 100k, on a shared time axis in its own panel so
+            # the CFR trend can be read against the actual death rate.
+            _cfr_lag = _cached_overview_lag(county_name, state)
+            _deaths_pc_ts = (
+                _cfr_lag["deaths_ts"]
+                if isinstance(_cfr_lag, dict) and "error" not in _cfr_lag
+                else pd.DataFrame()
+            )
+
+            _fig_cfr = make_subplots(
+                rows=2, cols=1, shared_xaxes=True,
+                row_heights=[0.6, 0.4], vertical_spacing=0.09,
+            )
             _fig_cfr.add_trace(go.Scatter(
                 x=_nat_cfr["Date"], y=_nat_cfr["cfr"],
                 name="United States", mode="lines",
                 line=dict(color="#8A94A3", width=1.5, dash="dot"),
                 hovertemplate="US: %{y:.2f}%<extra></extra>",
-            ))
+            ), row=1, col=1)
             _fig_cfr.add_trace(go.Scatter(
                 x=_cfr_df["Date"], y=_cfr_df["cfr"],
                 name=location, mode="lines",
                 line=dict(color=COUNTY_COLOR, width=2.2),
                 hovertemplate="%{x|%Y-%m-%d}: %{y:.2f}%<extra></extra>",
-            ))
+            ), row=1, col=1)
+            if not _deaths_pc_ts.empty and "Per100k MA" in _deaths_pc_ts.columns:
+                _fig_cfr.add_trace(go.Scatter(
+                    x=_deaths_pc_ts["Date"], y=_deaths_pc_ts["Per100k MA"],
+                    name="Deaths /100k (7d MA)", mode="lines",
+                    line=dict(color="#D62728", width=1.8),
+                    hovertemplate="%{x|%Y-%m-%d}: %{y:.3f} deaths/100k<extra></extra>",
+                ), row=2, col=1)
             _fig_cfr.update_layout(
-                height=340, margin=dict(t=15, b=35, l=55, r=25),
+                height=470, margin=dict(t=15, b=35, l=55, r=25),
                 template="plotly_white", hovermode="x unified",
-                yaxis=dict(title="CFR (%)", rangemode="tozero",
-                           showgrid=True, gridcolor="rgba(200,200,200,0.3)"),
-                xaxis=dict(showgrid=False),
-                legend=dict(orientation="h", y=1.05, x=0, font=dict(size=10)),
+                legend=dict(orientation="h", y=1.06, x=0, font=dict(size=10)),
                 font=dict(family="sans-serif", size=10),
             )
-            st.plotly_chart(_fig_cfr, use_container_width=True)
+            _fig_cfr.update_yaxes(
+                title_text="CFR (%)", rangemode="tozero", row=1, col=1,
+                showgrid=True, gridcolor="rgba(200,200,200,0.3)",
+            )
+            _fig_cfr.update_yaxes(
+                title_text="Deaths /100k", rangemode="tozero", row=2, col=1,
+                showgrid=True, gridcolor="rgba(200,200,200,0.3)",
+            )
+            _fig_cfr.update_xaxes(showgrid=False)
+            st.plotly_chart(_fig_cfr, width="stretch")
             st.caption(
-                "CFR over a trailing 8-week window, with deaths compared against "
-                "cases from 14 days earlier (deaths lag infections). Gaps mean too "
-                "few cases in the window for a stable estimate. The typical arc — "
-                "high early CFR when testing was scarce, falling through 2021–22 as "
-                "testing broadened, vaccination rose, and Omicron's severity "
-                "profile differed — is a testing-and-variants story, not purely a "
-                "treatment story."
+                "Top panel: CFR over a trailing 8-week window, with deaths compared "
+                "against cases from 14 days earlier (deaths lag infections). Gaps "
+                "mean too few cases in the window for a stable estimate. The typical "
+                "arc — high early CFR when testing was scarce, falling through "
+                "2021–22 as testing broadened, vaccination rose, and Omicron's "
+                "severity profile differed — is a testing-and-variants story, not "
+                "purely a treatment story. Bottom panel: the county's smoothed daily "
+                "deaths per 100k on the same time axis."
             )
         else:
             st.info(
@@ -3043,7 +3285,7 @@ def render_county_overview_tab(
                 _peak_label = f"{(_peak_raw / population * 100_000):.1f} /100k"
             else:
                 _peak_label = f"{_peak_raw:,.0f}" if pd.notna(_peak_raw) else "N/A"
-            render_wave_metric_card("Largest Case Peak", _peak_label)
+            render_wave_metric_card("Peak of Most Significant Wave", _peak_label)
         with w4:
             _avg_dur = _wc["average_wave_duration"]
             render_wave_metric_card("Avg Wave Duration", f"{_avg_dur:.0f} days" if pd.notna(_avg_dur) and _avg_dur > 0 else "N/A")
@@ -3054,17 +3296,24 @@ def render_county_overview_tab(
         # Wave detail table sorted by significance
         if _wc["waves"]:
             _profile_wave_rows = []
+            # Smoothed daily deaths /100k (the Pandemic Timeline's series).
+            # Death *waves* are rarely detected in small/mid-size counties, so
+            # each case wave's death peak is read straight from this series.
+            _wt_lag = _cached_overview_lag(county_name, state)
+            _wt_deaths = (
+                _wt_lag["deaths_ts"].set_index("Date")["Per100k MA"]
+                if "error" not in _wt_lag else pd.Series(dtype=float)
+            )
             _sorted_waves = sorted(_wc["waves"], key=lambda w: w.get("wave_significance", 0), reverse=True)
             for _pw in _sorted_waves:
                 _pv_pc = (_pw["peak_value"] / population * 100_000) if population and population > 0 else np.nan
-                _dw_match = next(
-                    (dw for dw in _wd["waves"]
-                     if abs((pd.Timestamp(dw["peak_date"]) - pd.Timestamp(_pw["peak_date"])).days) < 90),
-                    None,
-                )
-                _deaths_pc = None
-                if _dw_match and population and population > 0:
-                    _deaths_pc = _dw_match["peak_value"] / population * 100_000
+                # Highest smoothed daily death rate from wave start to 4 weeks
+                # after its end (deaths trail cases)
+                _win = _wt_deaths.loc[
+                    pd.Timestamp(_pw["start_date"]):
+                    pd.Timestamp(_pw["end_date"]) + pd.Timedelta(days=28)
+                ].dropna()
+                _deaths_pc = float(_win.max()) if not _win.empty else None
                 _profile_wave_rows.append({
                     "Significance": f"{_pw.get('wave_significance', 0):.0f}/100",
                     "Start":         str(_pw["start_date"])[:10],
@@ -3077,14 +3326,16 @@ def render_county_overview_tab(
             if _profile_wave_rows:
                 st.dataframe(
                     pd.DataFrame(_profile_wave_rows),
-                    use_container_width=True,
+                    width="stretch",
                     hide_index=True,
                 )
                 st.caption(
                     "Waves sorted by Significance score (0–100). "
                     "Score combines peak prominence (30%), total burden (30%), duration (20%), "
                     "and burst intensity (20%). "
-                    "Peak Deaths /100k shows the matching death wave peak within 90 days of each case peak."
+                    "Peak Cases /100k and Peak Deaths /100k are daily rates (7-day average). "
+                    "Peak Deaths /100k is the highest daily death rate from the wave's start to "
+                    "four weeks after its end, since deaths trail cases."
                 )
 
         # Integrated pandemic timeline: cases and deaths (per-100k, smoothed),
@@ -3098,11 +3349,19 @@ def render_county_overview_tab(
                 _cts = _lag_ts_mini["cases_ts"]
                 _dts = _lag_ts_mini["deaths_ts"]
 
-                _has_vax_ts = vax_ts_df is not None and not vax_ts_df.empty and _fips_str5
+                # Vaccination panel only when this county has rollout data —
+                # otherwise the timeline is two panels, not an empty third.
+                _tl_vax = (
+                    get_county_vax_timeseries(vax_ts_df, _fips_str5)
+                    if vax_ts_df is not None and not vax_ts_df.empty and _fips_str5
+                    else pd.DataFrame()
+                )
+                _tl_has_vax = not _tl_vax.empty and "vax_complete_pct" in _tl_vax.columns
+                _tl_rows = 3 if _tl_has_vax else 2
                 _tl = make_subplots(
-                    rows=2, cols=1, shared_xaxes=True,
-                    row_heights=[0.72, 0.28], vertical_spacing=0.07,
-                    specs=[[{"secondary_y": True}], [{}]],
+                    rows=_tl_rows, cols=1, shared_xaxes=True,
+                    row_heights=[0.46, 0.30, 0.24] if _tl_has_vax else [0.6, 0.4],
+                    vertical_spacing=0.06,
                 )
 
                 _tl.add_trace(go.Scatter(
@@ -3110,13 +3369,13 @@ def render_county_overview_tab(
                     name="Cases /100k (7d MA)", mode="lines",
                     line=dict(color=NATIONAL_COLOR, width=2),
                     hovertemplate="%{x|%Y-%m-%d}: %{y:.2f} cases/100k<extra></extra>",
-                ), row=1, col=1, secondary_y=False)
+                ), row=1, col=1)
                 _tl.add_trace(go.Scatter(
                     x=_dts["Date"], y=_dts["Per100k MA"],
                     name="Deaths /100k (7d MA)", mode="lines",
-                    line=dict(color="rgba(214,39,40,0.65)", width=1.5),
+                    line=dict(color="#D62728", width=1.8),
                     hovertemplate="%{x|%Y-%m-%d}: %{y:.3f} deaths/100k<extra></extra>",
-                ), row=1, col=1, secondary_y=True)
+                ), row=2, col=1)
 
                 # Structural-peer median trajectory (10 most similar counties)
                 if not _peers.empty and "ma7_cases" in transforms:
@@ -3130,17 +3389,18 @@ def render_county_overview_tab(
                             name="Peer median (10 similar counties)", mode="lines",
                             line=dict(color="#8A94A3", width=1.4, dash="dash"),
                             hovertemplate="%{x|%Y-%m-%d}: %{y:.2f} cases/100k (peer median)<extra></extra>",
-                        ), row=1, col=1, secondary_y=False)
+                        ), row=1, col=1)
 
                 # Detected waves: shaded spans + labelled peak markers placed
                 # on the case curve
                 _c_by_date = _cts.set_index("Date")["Per100k MA"]
                 for _w in _wc["waves"]:
-                    _tl.add_vrect(
-                        x0=_w["start_date"], x1=_w["end_date"],
-                        fillcolor="rgba(214,39,40,0.05)", line_width=0,
-                        layer="below", row=1, col=1,
-                    )
+                    for _wr in (1, 2):
+                        _tl.add_vrect(
+                            x0=_w["start_date"], x1=_w["end_date"],
+                            fillcolor="rgba(214,39,40,0.05)", line_width=0,
+                            layer="below", row=_wr, col=1,
+                        )
                 _pk_x = [pd.Timestamp(_w["peak_date"]) for _w in _wc["waves"]]
                 _pk_y = [float(_c_by_date.get(d, np.nan)) for d in _pk_x]
                 _tl.add_trace(go.Scatter(
@@ -3152,19 +3412,17 @@ def render_county_overview_tab(
                     marker=dict(color=COUNTY_COLOR, size=10, symbol="diamond",
                                 line=dict(color="white", width=1)),
                     hovertemplate="Wave peak: %{x|%Y-%m-%d}<br>%{y:.2f} cases/100k<extra></extra>",
-                ), row=1, col=1, secondary_y=False)
+                ), row=1, col=1)
 
                 # Vaccination rollout panel on the shared time axis
-                if _has_vax_ts:
-                    _tl_vax = get_county_vax_timeseries(vax_ts_df, _fips_str5)
-                    if not _tl_vax.empty and "vax_complete_pct" in _tl_vax.columns:
-                        _tl.add_trace(go.Scatter(
-                            x=_tl_vax["Date"], y=_tl_vax["vax_complete_pct"],
-                            name="Fully vaccinated (%)", mode="lines",
-                            line=dict(color="#2CA02C", width=1.8),
-                            fill="tozeroy", fillcolor="rgba(44,160,44,0.10)",
-                            hovertemplate="%{x|%Y-%m-%d}: %{y:.1f}% fully vaccinated<extra></extra>",
-                        ), row=2, col=1)
+                if _tl_has_vax:
+                    _tl.add_trace(go.Scatter(
+                        x=_tl_vax["Date"], y=_tl_vax["vax_complete_pct"],
+                        name="Fully vaccinated (%)", mode="lines",
+                        line=dict(color="#2CA02C", width=1.8),
+                        fill="tozeroy", fillcolor="rgba(44,160,44,0.10)",
+                        hovertemplate="%{x|%Y-%m-%d}: %{y:.1f}% fully vaccinated<extra></extra>",
+                    ), row=3, col=1)
 
                 # Default view: the outbreak window; mini-map slider explores all
                 if _wc["waves"]:
@@ -3174,43 +3432,61 @@ def render_county_overview_tab(
                     _tl_x0, _tl_x1 = _cts["Date"].min(), _cts["Date"].max()
 
                 _tl.update_layout(
-                    height=560, margin=dict(t=30, b=10, l=55, r=55),
+                    height=680 if _tl_has_vax else 560,
+                    margin=dict(t=30, b=10, l=55, r=55),
                     template="plotly_white", hovermode="x unified",
                     legend=dict(orientation="h", y=1.05, x=0, font=dict(size=10)),
                     font=dict(family="sans-serif", size=10),
                 )
-                _tl.update_xaxes(range=[_tl_x0, _tl_x1], row=1, col=1, showgrid=False)
+                for _r in range(1, _tl_rows + 1):
+                    _tl.update_xaxes(range=[_tl_x0, _tl_x1], row=_r, col=1, showgrid=False)
+                # Mini-map slider on the bottom panel
                 _tl.update_xaxes(
-                    range=[_tl_x0, _tl_x1], row=2, col=1, showgrid=False,
-                    rangeslider=dict(visible=True, thickness=0.08),
+                    rangeslider=dict(visible=True, thickness=0.08), row=_tl_rows, col=1,
                 )
                 _tl.update_yaxes(
-                    title_text="Cases /100k", row=1, col=1, secondary_y=False,
+                    title_text="Cases /100k", row=1, col=1,
                     title_font=dict(color=NATIONAL_COLOR, size=10),
                     tickfont=dict(color=NATIONAL_COLOR, size=9),
                     showgrid=True, gridcolor="rgba(200,200,200,0.3)",
                 )
                 _tl.update_yaxes(
-                    title_text="Deaths /100k", row=1, col=1, secondary_y=True,
+                    title_text="Deaths /100k", row=2, col=1, rangemode="tozero",
                     title_font=dict(color="#D62728", size=10),
-                    tickfont=dict(color="#D62728", size=9), showgrid=False,
+                    tickfont=dict(color="#D62728", size=9),
+                    showgrid=True, gridcolor="rgba(200,200,200,0.3)",
                 )
-                _tl.update_yaxes(
-                    title_text="Vacc. %", range=[0, 100], row=2, col=1,
-                    title_font=dict(color="#2CA02C", size=10),
-                    tickfont=dict(color="#2CA02C", size=9),
-                    showgrid=True, gridcolor="rgba(200,200,200,0.2)",
-                )
-                st.plotly_chart(_tl, use_container_width=True)
+                if _tl_has_vax:
+                    _tl.update_yaxes(
+                        title_text="Vacc. %", range=[0, 100], row=3, col=1,
+                        title_font=dict(color="#2CA02C", size=10),
+                        tickfont=dict(color="#2CA02C", size=9),
+                        showgrid=True, gridcolor="rgba(200,200,200,0.2)",
+                    )
+                st.plotly_chart(_tl, width="stretch")
                 st.caption(
-                    "One integrated view of how the pandemic unfolded here: shaded "
-                    "spans are detected waves (peaks labelled W1, W2, …), the dashed "
-                    "gray line is the median trajectory of this county's ten "
-                    "structural peers, and the lower panel shows the vaccination "
-                    "rollout on the same time axis. Opens zoomed to the outbreak "
-                    "period — drag the mini-map to explore. Case-to-death lag "
-                    "detail lives in the Time Lag Analysis tab."
+                    "One integrated view of how the pandemic unfolded here, split "
+                    f"across {'three' if _tl_has_vax else 'two'} panels on one shared "
+                    "time axis: cases /100k on top (shaded spans are detected waves, "
+                    "peaks labelled W1, W2, …; the dashed gray line is the median "
+                    "trajectory of this county's ten structural peers), deaths /100k "
+                    + ("in the middle, and the vaccination rollout on the bottom. "
+                       if _tl_has_vax else
+                       "below (no vaccination data is available for this county). ")
+                    + "Opens zoomed to the outbreak period — drag the mini-map to "
+                    "explore. Case-to-death lag detail lives in the Time Lag Analysis tab."
                 )
+            else:
+                st.info(
+                    "Pandemic Timeline not shown — per-100k rates could not be computed "
+                    f"for this county ({_lag_ts_mini['error'].rstrip('.')})."
+                )
+        else:
+            st.info(
+                "Pandemic Timeline not shown — no case or death waves were detected for "
+                "this county at Standard sensitivity (common for small counties with sparse "
+                "data). Try the Wave Analysis tab with Sensitive detection."
+            )
     else:
         st.info("Wave analysis unavailable for this county.")
 
@@ -3273,6 +3549,25 @@ def render_county_overview_tab(
         render_metric_card("HPSA Designation", _hpsa_label)
     with h7:
         render_metric_card("Critical Access Hospitals", _fmt_int(_v("critical_access_hospitals")))
+
+    with st.expander("What do these terms mean?"):
+        st.markdown(
+            "- **PCP /100k** — Primary Care Physicians per 100,000 residents "
+            "(active MDs/DOs in primary-care specialties). Higher = more accessible front-line care.\n"
+            "- **Active MDs /100k** — All active patient-care physicians per 100,000 residents, "
+            "across every specialty.\n"
+            "- **Hospital Beds /100k** — Staffed short-term general hospital beds per 100,000 residents.\n"
+            "- **ICU Beds /100k** — Intensive-care-unit beds per 100,000 residents; a proxy for capacity "
+            "to treat the most severe COVID-19 cases.\n"
+            "- **SNF Beds /100k** — Skilled Nursing Facility beds per 100,000 residents. SNFs provide "
+            "longer-term / post-acute nursing care (e.g. nursing homes), a population especially "
+            "vulnerable to COVID-19.\n"
+            "- **HPSA Designation** — Whether the county is a federally designated Health Professional "
+            "Shortage Area for primary care (a marker of under-served access).\n"
+            "- **Critical Access Hospitals** — Count of small rural hospitals holding CMS Critical "
+            "Access Hospital status (\u226425 beds), a key part of the rural safety net.\n\n"
+            "*Source: HRSA Area Health Resources Files (AHRF).*"
+        )
 
     # SECTION 5 — SOCIOECONOMIC FACTORS
 
@@ -3343,8 +3638,6 @@ def render_county_overview_tab(
 
         # National comparison for vaccination
         _nat_vax_complete = nat_med.get("vax_complete_pct", np.nan)
-        _nat_vax_dose1    = nat_med.get("vax_dose1_pct", np.nan)
-        _nat_vax_booster  = nat_med.get("vax_booster_pct", np.nan)
         if pd.notna(_nat_vax_complete):
             _vdiff = _vax_complete - _nat_vax_complete if pd.notna(_vax_complete) else np.nan
             if pd.notna(_vdiff):
@@ -3396,9 +3689,60 @@ def render_county_overview_tab(
                         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
                         font=dict(family="sans-serif", size=11),
                     )
-                    st.plotly_chart(_fig_vax, use_container_width=True)
+                    st.plotly_chart(_fig_vax, width="stretch")
     else:
         st.info("Vaccination data not available for this county.")
+
+    # STATE POLITICAL CONTEXT — the one place the political values are shown
+    # as text; elsewhere they are used only as map/analysis dimensions.
+    # Unnumbered so Sections 7-9 (and references to them) keep their numbers.
+    _pol_row = (
+        state_political_df[state_political_df["state_abbr"] == state]
+        if _has_political else pd.DataFrame()
+    )
+    if not _pol_row.empty:
+        _pr = _pol_row.iloc[0]
+        _ctrl = {"D": "Democratic", "R": "Republican"}
+
+        def _pv(col):
+            v = _pr.get(col)
+            return v if pd.notna(v) and str(v).strip() else None
+
+        st.markdown(
+            '<div class="sub-section-header"><h3>State Political Context (as of Jan 2021)</h3>'
+            f'<p>State-level context shared by every county in {_pv("state_name") or state} '
+            '— not a county-level measure.</p></div>',
+            unsafe_allow_html=True,
+        )
+        _pol_lines = []
+        if _pv("governor_name"):
+            _pol_lines.append(
+                f"**Governor:** {_pv('governor_name')} ({_pv('governor_party') or '—'})"
+            )
+        _sens = [
+            f"{_pv(n)} ({_pv(p_) or '—'})"
+            for n, p_ in (("senator1_name", "senator1_party"), ("senator2_name", "senator2_party"))
+            if _pv(n)
+        ]
+        if _sens:
+            _pol_lines.append(f"**U.S. Senators:** {', '.join(_sens)}")
+        if _pv("legislature_control"):
+            _leg = _ctrl.get(_pv("legislature_control"), _pv("legislature_control"))
+            _sen_c, _house_c = _pv("state_senate_control"), _pv("state_house_control")
+            if (_sen_c and _house_c and _sen_c != _house_c) or _leg == "Split":
+                _leg += f" (state senate: {_ctrl.get(_sen_c, _sen_c)}; house: {_ctrl.get(_house_c, _house_c)})"
+            _pol_lines.append(f"**State legislature:** {_leg}")
+        _margin = _pr.get("pres_2020_margin_d")
+        if pd.notna(_margin):
+            _leader = "Biden" if _margin > 0 else "Trump" if _margin < 0 else "Tie"
+            _pol_lines.append(
+                f"**2020 presidential result:** {_leader} +{abs(_margin):.1f} pts"
+                if _leader != "Tie" else "**2020 presidential result:** tie"
+            )
+        for _line in _pol_lines:
+            st.markdown(f"- {_line}")
+        if _pv("notes"):
+            st.caption(f"Note: {_pv('notes')}")
 
     # SECTION 7 — COUNTY VS NATIONAL & PEER MEDIANS
     # (structural peers were computed just after the hero banner — the
@@ -3413,6 +3757,7 @@ def render_county_overview_tab(
     )
 
     _cmp_rows = []
+    _cmp_favorable = []   # per row: True favorable, False unfavorable, None neutral/unknown
     _cmp_defs = [
         ("Cases per 100k",           "cases_per_100k",          cases_100k,              ".1f"),
         ("Deaths per 100k",          "deaths_per_100k",         deaths_100k,             ".2f"),
@@ -3441,23 +3786,31 @@ def render_county_overview_tab(
         nat_str    = f"{nat_val:{fmt}}"    if pd.notna(nat_val)    else "N/A"
         peer_str   = f"{peer_val:{fmt}}"   if pd.notna(peer_val)   else "—"
 
-        if pd.notna(county_val) and pd.notna(nat_val) and nat_val != 0:
-            pct_diff = ((county_val - nat_val) / abs(nat_val)) * 100
-            diff_str = f"{pct_diff:+.1f}%"
-            # For rates where lower is better (mortality, poverty, unemployment, no-hs-diploma), flip the arrow
+        if pd.notna(county_val) and pd.notna(nat_val):
+            if nat_val != 0:
+                pct_diff = ((county_val - nat_val) / abs(nat_val)) * 100
+                diff_str = f"{pct_diff:+.1f}%"
+            else:
+                diff_str = "—"   # % difference undefined against a zero median
+            # Arrows show direction; colour shows whether that direction is
+            # favorable for this metric.
             lower_is_better = col in {
-                "deaths_per_100k", "case_fatality_rate", "unemployment_rate",
-                "child_poverty_pct", "pct_no_hs_diploma",
+                "cases_per_100k", "deaths_per_100k", "case_fatality_rate",
+                "unemployment_rate", "child_poverty_pct", "pct_no_hs_diploma",
                 # Note: higher vaccination = BETTER, so higher is NOT lower-is-better
                 # (vaccination columns intentionally omitted from this set)
             }
-            if lower_is_better:
-                status = "▼ Below avg" if county_val < nat_val else ("▲ Above avg" if county_val > nat_val else "At avg")
+            neutral = col in {"pct_pop_65plus", "median_age"}
+            status = "▲ Above median" if county_val > nat_val else ("▼ Below median" if county_val < nat_val else "At median")
+            if neutral or county_val == nat_val:
+                favorable = None
             else:
-                status = "▲ Above avg" if county_val > nat_val else ("▼ Below avg" if county_val < nat_val else "At avg")
+                favorable = bool(county_val < nat_val) if lower_is_better else bool(county_val > nat_val)
         else:
             diff_str = "—"
             status   = "—"
+            favorable = None
+        _cmp_favorable.append(favorable)
 
         _cmp_rows.append({
             "Metric":           label,
@@ -3471,21 +3824,23 @@ def render_county_overview_tab(
     if _cmp_rows:
         _cmp_df = pd.DataFrame(_cmp_rows)
 
-        def _style_vs(v):
-            if "Above avg" in str(v):
-                return "color: #2CA02C; font-weight: 600"
-            if "Below avg" in str(v):
-                return "color: #D62728; font-weight: 600"
-            return ""
+        def _style_vs(col):
+            return [
+                "color: #2CA02C; font-weight: 600" if f is True
+                else "color: #D62728; font-weight: 600" if f is False
+                else ""
+                for f in _cmp_favorable
+            ]
 
         st.dataframe(
-            _cmp_df.style.map(_style_vs, subset=["vs National"]),
-            use_container_width=True, hide_index=True,
+            _cmp_df.style.apply(_style_vs, subset=["vs National"]),
+            width="stretch", hide_index=True,
         )
         st.caption(
-            "▲ Above avg = county value exceeds the national median (arrows compare against "
-            "the national column). For mortality, poverty, and unemployment, above average "
-            "is unfavorable. Peer Median = the ten structurally similar counties from "
+            "▲ Above median = county value exceeds the national median (arrows compare against "
+            "the national column). Green = favorable, red = unfavorable — for cases, mortality, "
+            "poverty, and unemployment, above the median is unfavorable; age measures are "
+            "uncolored. Peer Median = the ten structurally similar counties from "
             "Section 9 — a fairer benchmark than the whole nation."
         )
     else:
@@ -3621,7 +3976,7 @@ def render_county_overview_tab(
                 "CFR (%)":        "{:.2f}",
                 "Fully Vacc. (%)": "{:.1f}",
             }),
-            use_container_width=True, hide_index=True,
+            width="stretch", hide_index=True,
         )
 
         _peer_deaths = pd.to_numeric(_peers.get("deaths_per_100k"), errors="coerce").dropna()
@@ -3660,7 +4015,7 @@ def render_county_overview_tab(
                 })
             if _sim_rows:
                 st.dataframe(pd.DataFrame(_sim_rows),
-                             use_container_width=True, hide_index=True)
+                             width="stretch", hide_index=True)
             st.caption(
                 "Counties are matched on these structural features (z-scored; "
                 "population log-transformed) — describing what a county *is*, "
@@ -3694,7 +4049,7 @@ def render_county_overview_tab(
                                 "Cases /100k": "{:,.0f}",
                                 "Fully Vacc. (%)": "{:.1f}",
                             }),
-                            use_container_width=True, hide_index=True,
+                            width="stretch", hide_index=True,
                         )
                         _nb_deaths = pd.to_numeric(_nb_pool.get("deaths_per_100k"), errors="coerce").dropna()
                         if len(_nb_deaths) >= 3 and pd.notna(deaths_100k):
@@ -3730,7 +4085,7 @@ def render_county_overview_tab(
             file_name=f"county_report_{str(fips)}_{county_name.replace(' ', '_')}.html",
             mime="text/html",
             key="overview_report_download",
-            use_container_width=True,
+            width="stretch",
         )
     with _share_col:
         st.caption(
@@ -3844,7 +4199,7 @@ th {{ background: #0B2341; color: white; font-size: 0.78rem; text-transform: upp
 <div class="badges"><span>{rucc_group}</span></div>
 <div class="summary">
 Detected case waves (Standard sensitivity): <strong>{n_waves}</strong> &middot;
-Peak wave date: <strong>{peak_wave}</strong> &middot;
+Most significant wave peak: <strong>{peak_wave}</strong> &middot;
 Average case-to-death lag: <strong>{avg_lag} days</strong>
 </div>
 <table>
@@ -3879,7 +4234,7 @@ Sources: USAFacts, HRSA Area Health Resources Files, CDC county vaccination data
 County-level (ecological) statistics — not individual-level or causal estimates.</p>
 </body></html>"""
 
-def _render_lag_chart(location_label, results, summary, lag_ma_window):
+def _render_lag_chart(location_label, results, summary, lag_ma_window, chart_key=None):
     """
     Render the dual-axis cases/deaths chart with matched peaks.
 
@@ -4031,7 +4386,7 @@ def _render_lag_chart(location_label, results, summary, lag_ma_window):
                     bgcolor="rgba(255,255,255,0.9)", font=dict(size=10)),
         font=dict(family="sans-serif", size=11),
     )
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch", key=chart_key)
     if not matches.empty:
         if show_pair_overlays:
             st.caption(
@@ -4108,7 +4463,7 @@ def _render_lag_pairs_table(matches):
                 "Peak Deaths /100k": "{:.3f}",
                 "Severity Ratio":    "{:.4f}",
             }),
-            use_container_width=True, hide_index=True,
+            width="stretch", hide_index=True,
         )
     else:
         st.info(
@@ -4128,7 +4483,7 @@ def _render_lag_all_peaks_expander(case_peaks, death_peaks):
                     "peak_date": "Date", "peak_value": "Peak Cases /100k", "peak_prominence": "Prominence",
                 })
                 st.dataframe(cp_df.style.format({"Peak Cases /100k": "{:.2f}", "Prominence": "{:.2f}"}),
-                             use_container_width=True, hide_index=True)
+                             width="stretch", hide_index=True)
             else:
                 st.caption("No case peaks detected with current settings.")
         with dcol:
@@ -4140,7 +4495,7 @@ def _render_lag_all_peaks_expander(case_peaks, death_peaks):
                     "peak_date": "Date", "peak_value": "Peak Deaths /100k", "peak_prominence": "Prominence",
                 })
                 st.dataframe(dp_df.style.format({"Peak Deaths /100k": "{:.3f}", "Prominence": "{:.3f}"}),
-                             use_container_width=True, hide_index=True)
+                             width="stretch", hide_index=True)
             else:
                 st.caption("No death peaks detected with current settings.")
 
@@ -4150,8 +4505,8 @@ def render_lag_tab(cases_df, deaths_df, population_df, locations) -> None:
         "Time Lag Analysis",
         "Deaths don't follow cases immediately — there's a delay. This tool measures how long "
         "after a case surge mortality followed in any county, identifies matched outbreak and "
-        "death peaks, and quantifies the lag. A longer lag can signal early intervention; "
-        "a shorter one may reflect healthcare system strain.",
+        "death peaks, and quantifies the lag. The lag reflects disease progression plus "
+        "reporting delays; differences between counties can have many causes.",
     )
     render_learning_aids(
         terms=("lag", "severity_ratio", "prominence", "per_100k"),
@@ -4230,7 +4585,8 @@ def render_lag_tab(cases_df, deaths_df, population_df, locations) -> None:
     )
 
     county_name, state = extract_county_state(location_lag)
-    lag_results = analyze_county_lag(cases_df, deaths_df, population_df, county_name, state, **lag_kwargs)
+    lag_results = analyze_county_lag(cases_df, deaths_df, population_df, county_name, state,
+                                     fips=LOCATION_FIPS.get(location_lag), **lag_kwargs)
 
     if "error" in lag_results:
         st.warning(f"{lag_results['error']} Try a different county.")
@@ -4240,7 +4596,8 @@ def render_lag_tab(cases_df, deaths_df, population_df, locations) -> None:
 
     if lag_mode == "County vs County":
         county_b_name, state_b = extract_county_state(location_lag_b)
-        lag_results_b = analyze_county_lag(cases_df, deaths_df, population_df, county_b_name, state_b, **lag_kwargs)
+        lag_results_b = analyze_county_lag(cases_df, deaths_df, population_df, county_b_name, state_b,
+                                           fips=LOCATION_FIPS.get(location_lag_b), **lag_kwargs)
         summary_b = summarize_lag_results(lag_results_b)
 
         tab_a, tab_b, tab_cmp = st.tabs([location_lag, location_lag_b, "Side-by-Side Comparison"])
@@ -4251,7 +4608,7 @@ def render_lag_tab(cases_df, deaths_df, population_df, locations) -> None:
             else:
                 _render_lag_summary_metrics(summary, lag_results["population"])
                 st.markdown("---")
-                _render_lag_chart(location_lag, lag_results, summary, lag_ma_window)
+                _render_lag_chart(location_lag, lag_results, summary, lag_ma_window, chart_key="lag_chart_a")
                 _render_lag_pairs_table(lag_results["matches"])
                 _render_lag_all_peaks_expander(lag_results["case_peaks"], lag_results["death_peaks"])
 
@@ -4261,7 +4618,7 @@ def render_lag_tab(cases_df, deaths_df, population_df, locations) -> None:
             else:
                 _render_lag_summary_metrics(summary_b, lag_results_b["population"])
                 st.markdown("---")
-                _render_lag_chart(location_lag_b, lag_results_b, summary_b, lag_ma_window)
+                _render_lag_chart(location_lag_b, lag_results_b, summary_b, lag_ma_window, chart_key="lag_chart_b")
                 _render_lag_pairs_table(lag_results_b["matches"])
                 _render_lag_all_peaks_expander(lag_results_b["case_peaks"], lag_results_b["death_peaks"])
 
@@ -4285,8 +4642,10 @@ def render_lag_tab(cases_df, deaths_df, population_df, locations) -> None:
                 ("Population",              f"{int(lag_results['population']):,}" if pd.notna(lag_results["population"]) else "N/A",
                                             f"{int(lag_results_b['population']):,}" if "error" not in lag_results_b and pd.notna(lag_results_b.get("population", np.nan)) else "N/A"),
             ]
-            cmp_df = pd.DataFrame(cmp_rows, columns=["Metric", location_lag, location_lag_b])
-            st.dataframe(cmp_df, use_container_width=True, hide_index=True)
+            _col_a, _col_b = ((f"{location_lag} (A)", f"{location_lag_b} (B)")
+                              if location_lag == location_lag_b else (location_lag, location_lag_b))
+            cmp_df = pd.DataFrame(cmp_rows, columns=["Metric", _col_a, _col_b])
+            st.dataframe(cmp_df, width="stretch", hide_index=True)
 
             # Overlay chart: smoothed cases /100k for both counties on a shared axis
             st.markdown("#### Cases per 100k — Overlay")
@@ -4314,7 +4673,7 @@ def render_lag_tab(cases_df, deaths_df, population_df, locations) -> None:
                 legend=dict(x=0.01, y=0.99, bgcolor="rgba(255,255,255,0.85)"),
                 font=dict(family="sans-serif", size=11),
             )
-            st.plotly_chart(fig_cmp, use_container_width=True)
+            st.plotly_chart(fig_cmp, width="stretch")
 
     else:
 
@@ -4384,10 +4743,7 @@ def render_wave_tab(cases_df, deaths_df, transforms, locations, population_df, v
     daily_deaths_df = transforms["daily_deaths"]
 
     pop_col = get_population_column(population_df)
-    pop_row = population_df[
-        (population_df["County Name"] == wave_county_name) &
-        (population_df["State"] == wave_state)
-    ]
+    pop_row = population_df[_location_mask(population_df, wave_location)]
     county_population = (
         float(pd.to_numeric(pop_row.iloc[0][pop_col], errors="coerce"))
         if (not pop_row.empty and pop_col) else float("nan")
@@ -4559,11 +4915,9 @@ def render_wave_tab(cases_df, deaths_df, transforms, locations, population_df, v
     metric_base    = "Cases" if is_cases_metric else "Deaths"
     if is_percap_metric:
         y_label    = f"Daily {metric_base} per 100k"
-        val_fmt    = "{:,.2f}"
-        burden_lbl = f"Total {metric_base}/100k·Days"
+        burden_lbl = f"Total {metric_base} per 100k During Wave"
     else:
         y_label    = f"Daily {metric_base}"
-        val_fmt    = "{:,.0f}"
         burden_lbl = f"Total {metric_base} During Wave"
 
     st.markdown("#### Summary Metrics")
@@ -4571,18 +4925,22 @@ def render_wave_tab(cases_df, deaths_df, transforms, locations, population_df, v
 
     with kw1:
         render_wave_metric_card("Waves Detected", n_waves)
+    # Raw counts without decimals; per-100k rates to two places; units shown
+    _wave_unit = f"{metric_base.lower()}{'/100k' if is_percap_metric else ''}/day"
+
+    def _wave_val(v):
+        if v is None or pd.isna(v):
+            return None
+        return f"{v:.2f}" if is_percap_metric else f"{v:,.0f}"
+
     with kw2:
-        render_wave_metric_card(
-            "Largest Peak",
-            round(active_metrics["largest_wave"], 2 if is_percap_metric else 0)
-            if active_metrics["largest_wave"] else 0,
-        )
+        _v2 = _wave_val(active_metrics["largest_wave"])
+        render_wave_metric_card("Peak of Most Significant Wave", _v2,
+                                suffix=_wave_unit if _v2 is not None else "")
     with kw3:
-        render_wave_metric_card(
-            "Avg Wave Height",
-            round(active_metrics["average_wave_height"], 2 if is_percap_metric else 0)
-            if active_metrics["average_wave_height"] else 0,
-        )
+        _v3 = _wave_val(active_metrics["average_wave_height"])
+        render_wave_metric_card("Avg Wave Height", _v3,
+                                suffix=_wave_unit if _v3 is not None else "")
     with kw4:
         render_wave_metric_card(
             "Avg Duration",
@@ -4592,7 +4950,7 @@ def render_wave_tab(cases_df, deaths_df, transforms, locations, population_df, v
         )
     with kw5:
         peak_date = active_metrics["date_of_peak_wave"]
-        render_wave_metric_card("Peak Wave Date", str(peak_date)[:10] if peak_date else "N/A")
+        render_wave_metric_card("Most Significant Wave Date", str(peak_date)[:10] if peak_date else "N/A")
     with kw6:
         avg_iw = active_metrics["average_time_between_waves"]
         render_wave_metric_card(
@@ -4770,7 +5128,7 @@ def render_wave_tab(cases_df, deaths_df, transforms, locations, population_df, v
     )
     fig_waves.update_xaxes(showgrid=True, gridcolor="rgba(200,200,200,0.3)")
     fig_waves.update_yaxes(showgrid=True, gridcolor="rgba(200,200,200,0.3)")
-    st.plotly_chart(fig_waves, use_container_width=True)
+    st.plotly_chart(fig_waves, width="stretch")
 
     if wave_list:
         st.markdown("#### Individual Wave Details")
@@ -4779,10 +5137,7 @@ def render_wave_tab(cases_df, deaths_df, transforms, locations, population_df, v
         _wave_fips = None
         _vax_peak_lookup: dict = {}
         if vax_ts_df is not None and not vax_ts_df.empty:
-            _pop_row = population_df[
-                (population_df["County Name"] == wave_county_name) &
-                (population_df["State"] == wave_state)
-            ]
+            _pop_row = population_df[_location_mask(population_df, wave_location)]
             if not _pop_row.empty and "countyFIPS" in _pop_row.columns:
                 _wave_fips = str(_pop_row.iloc[0]["countyFIPS"]).zfill(5)
                 _cv_vax_ts = get_county_vax_timeseries(vax_ts_df, _wave_fips)
@@ -4821,7 +5176,7 @@ def render_wave_tab(cases_df, deaths_df, transforms, locations, population_df, v
             wave_table_rows.append(_row)
 
         wave_table_df = pd.DataFrame(wave_table_rows)
-        st.dataframe(wave_table_df, use_container_width=True, hide_index=True)
+        st.dataframe(wave_table_df, width="stretch", hide_index=True)
         if _vax_peak_lookup:
             st.caption(
                 "**Fully Vacc. at Peak**: % of county population with completed primary COVID-19 "
@@ -4872,7 +5227,7 @@ def render_wave_tab(cases_df, deaths_df, transforms, locations, population_df, v
                                               if _vax_peak_lookup.get(w["wave_number"], np.nan) > 0
                                               and not np.isnan(w["peak_value"])],
                     })
-                    st.dataframe(_vs_df, use_container_width=True, hide_index=True)
+                    st.dataframe(_vs_df, width="stretch", hide_index=True)
     else:
         st.info(
             "No major waves detected with the current settings. "
@@ -4890,38 +5245,65 @@ def render_wave_tab(cases_df, deaths_df, transforms, locations, population_df, v
             cmp1, cmp2, cmp3 = st.columns(3)
             with cmp1: st.metric("Case Waves",  c_waves)
             with cmp2: st.metric("Death Waves", d_waves)
-            with cmp3:
-                c_peak = raw_county_results["cases"]["date_of_peak_wave"]
-                d_peak = raw_county_results["deaths"]["date_of_peak_wave"]
-                if c_peak and d_peak:
-                    lag = (pd.Timestamp(d_peak) - pd.Timestamp(c_peak)).days
-                    st.metric("Peak Death Lag", f"{lag} days",
-                              help="Days between peak case wave and peak death wave")
-                else:
-                    st.metric("Peak Death Lag", "N/A")
-
             c_list = raw_county_results["cases"]["waves"]
             d_list = raw_county_results["deaths"]["waves"]
+
+            def _match_death_wave(case_peak_date, used=()):
+                """Index and lag of the nearest death wave peaking 0–89 days after
+                case_peak_date (the Overview's 90-day window), or None."""
+                best = None
+                for j, dw in enumerate(d_list):
+                    if j in used:
+                        continue
+                    _lag = (pd.Timestamp(dw["peak_date"]) - pd.Timestamp(case_peak_date)).days
+                    if 0 <= _lag < 90 and (best is None or _lag < best[1]):
+                        best = (j, _lag)
+                return best
+
+            with cmp3:
+                c_peak = raw_county_results["cases"]["date_of_peak_wave"]
+                _pk_match = _match_death_wave(c_peak) if c_peak else None
+                if _pk_match is not None:
+                    st.metric("Peak Death Lag", f"{_pk_match[1]} days",
+                              help="Days from the most significant case wave's peak to the "
+                                   "death-wave peak that followed it within 90 days")
+                else:
+                    st.metric("Peak Death Lag", "N/A",
+                              help="No death-wave peak within 90 days after the most "
+                                   "significant case wave's peak")
+
             if c_list or d_list:
-                rows = []
-                for i in range(max(len(c_list), len(d_list))):
-                    row = {"Wave #": i + 1}
-                    if i < len(c_list):
-                        cw = c_list[i]
-                        row["Case Peak Date"]  = str(cw["peak_date"])[:10]
-                        row["Case Peak Count"] = f"{cw['peak_value']:,.0f}"
-                        row["Case Duration"]   = f"{cw['duration_days']} days"
-                    else:
-                        row["Case Peak Date"] = row["Case Peak Count"] = row["Case Duration"] = "—"
-                    if i < len(d_list):
-                        dw = d_list[i]
+                # Pair each case wave with the death wave that followed it in time
+                # (not by list position); unmatched death waves get their own row.
+                rows, _used = [], set()
+                for cw in c_list:
+                    row = {
+                        "Case Peak Date":  str(cw["peak_date"])[:10],
+                        "Case Peak Count": f"{cw['peak_value']:,.0f}",
+                        "Case Duration":   f"{cw['duration_days']} days",
+                    }
+                    _m = _match_death_wave(cw["peak_date"], _used)
+                    if _m is not None:
+                        _used.add(_m[0])
+                        dw = d_list[_m[0]]
                         row["Death Peak Date"]  = str(dw["peak_date"])[:10]
                         row["Death Peak Count"] = f"{dw['peak_value']:,.0f}"
                         row["Death Duration"]   = f"{dw['duration_days']} days"
                     else:
                         row["Death Peak Date"] = row["Death Peak Count"] = row["Death Duration"] = "—"
                     rows.append(row)
-                st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+                for j, dw in enumerate(d_list):
+                    if j not in _used:
+                        rows.append({
+                            "Case Peak Date": "—", "Case Peak Count": "—", "Case Duration": "—",
+                            "Death Peak Date":  str(dw["peak_date"])[:10],
+                            "Death Peak Count": f"{dw['peak_value']:,.0f}",
+                            "Death Duration":   f"{dw['duration_days']} days",
+                        })
+                rows.sort(key=lambda r: min(d for d in (r["Case Peak Date"], r["Death Peak Date"]) if d != "—"))
+                for i, row in enumerate(rows):
+                    rows[i] = {"Wave #": i + 1, **row}
+                st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
 
     with st.expander("Detection Diagnostics", expanded=False):
         _audit_log   = diag.get("peak_audit_log", [])
@@ -4973,7 +5355,7 @@ def render_wave_tab(cases_df, deaths_df, transforms, locations, population_df, v
                     "Min Duration"    if _region_mode else "Eff. Min Width": _min_dur,
                     "Status":                                               _status,
                 })
-            st.dataframe(pd.DataFrame(_audit_rows), use_container_width=True, hide_index=True)
+            st.dataframe(pd.DataFrame(_audit_rows), width="stretch", hide_index=True)
             if _region_mode:
                 st.caption(
                     "Each row is one detected epidemic region. "
@@ -4992,7 +5374,7 @@ def render_wave_tab(cases_df, deaths_df, transforms, locations, population_df, v
     with st.expander("Validation — detected waves vs national surge windows", expanded=False):
         if wave_list:
             _val_df = match_waves_to_national_windows(wave_list)
-            st.dataframe(_val_df, use_container_width=True, hide_index=True)
+            st.dataframe(_val_df, width="stretch", hide_index=True)
 
             _hit_windows = set(_val_df["National Window"]) - {"Outside national windows"}
             _missed = [name for name, _s, _e in NATIONAL_WAVE_WINDOWS
@@ -5025,7 +5407,6 @@ def render_wave_tab(cases_df, deaths_df, transforms, locations, population_df, v
         _elev_abs  = _preset_info.get("elevation_threshold_abs", 2.0)
         _min_reg   = _preset_info.get("min_region_duration", 14)
         _reg_gap   = _preset_info.get("region_merge_gap", 35)
-        _onset_lb  = _preset_info.get("onset_lookback", 28)
         _bl_win    = _preset_info.get("baseline_window", 42)
         _bl_smooth = _preset_info.get("baseline_smooth_window", 21)
         st.markdown(f"""
@@ -5105,7 +5486,7 @@ def render_county_factors_tab(
         st.warning(
             "AHRF socioeconomic data did not load — healthcare access and economic factors "
             "will show as N/A. Vaccination factors remain available. Check that "
-            "`DATA/ahrf2023.csv` is present and readable.",
+            "`data/ahrf2023.csv` is present and readable.",
             icon=None,
         )
 
@@ -5113,8 +5494,8 @@ def render_county_factors_tab(
         "Cases per 100k (cumulative)":   "cases_per_100k",
         "Deaths per 100k (cumulative)":  "deaths_per_100k",
         "Case Fatality Rate (%)":        "case_fatality_rate",
-        "Peak Wave Size — cases/100k":   "peak_wave_cases_per_100k",
-        "Peak Wave Size — deaths/100k":  "peak_wave_deaths_per_100k",
+        "Peak of Most Significant Wave — cases/100k":   "peak_wave_cases_per_100k",
+        "Peak of Most Significant Wave — deaths/100k":  "peak_wave_deaths_per_100k",
         "Number of Case Waves":          "case_wave_count",
         # Vaccination outcomes (CDC county dataset)
         "Vaccination Complete (%)":      "vax_complete_pct",
@@ -5151,26 +5532,28 @@ def render_county_factors_tab(
         # Rural-urban
         "RUCC Code (1=most metro → 9=most rural)": "rucc_code",
     }
+    if _has_political:
+        FACTOR_OPTIONS["2020 Presidential Margin (D−R pts, state-level)"] = "pres_2020_margin_d"
 
     WAVE_OUTCOMES = {"peak_wave_cases_per_100k", "peak_wave_deaths_per_100k", "case_wave_count"}
 
     # Primary axis selectors + county highlight
     sel_col1, sel_col2, sel_col3 = st.columns([2, 2, 1.6])
     with sel_col1:
-        outcome_label = st.selectbox(
-            "COVID Outcome (Y axis)",
-            list(OUTCOME_OPTIONS.keys()),
-            help="Select the COVID outcome variable to plot on the Y axis",
-        )
-        outcome_col = OUTCOME_OPTIONS[outcome_label]
-
-    with sel_col2:
         factor_label = st.selectbox(
             "County Factor (X axis)",
             list(FACTOR_OPTIONS.keys()),
             help="Select the county characteristic to plot on the X axis",
         )
         factor_col = FACTOR_OPTIONS[factor_label]
+
+    with sel_col2:
+        outcome_label = st.selectbox(
+            "COVID Outcome (Y axis)",
+            list(OUTCOME_OPTIONS.keys()),
+            help="Select the COVID outcome variable to plot on the Y axis",
+        )
+        outcome_col = OUTCOME_OPTIONS[outcome_label]
 
     with sel_col3:
         cf_highlight = st.selectbox(
@@ -5284,16 +5667,19 @@ def render_county_factors_tab(
     # Wave metrics are computed lazily on demand (all ~3,100 counties, ~60–90 s).
     if outcome_col in WAVE_OUTCOMES:
         if outcome_col not in plot_df.columns:
-            st.info(
-                "Wave metrics require computing waves for all ~3,100 counties. "
-                "This takes about 60–90 seconds and is cached for the session."
-            )
-            compute_waves = st.button(
-                "Compute wave metrics for all counties",
-                key="cf_compute_waves_btn",
-            )
-            if not compute_waves:
-                st.stop()
+            if not st.session_state.get("cf_wave_metrics_computed"):
+                st.info(
+                    "Wave metrics require computing waves for all ~3,100 counties. "
+                    "This takes about 60–90 seconds and is cached for the session."
+                )
+                compute_waves = st.button(
+                    "Compute wave metrics for all counties",
+                    key="cf_compute_waves_btn",
+                )
+                if not compute_waves:
+                    # Return (not st.stop) so the tabs after this one still render
+                    return
+                st.session_state["cf_wave_metrics_computed"] = True
 
             with st.spinner("Computing wave metrics for all counties (one time)…"):
                 wave_metrics_df = get_county_wave_metrics(
@@ -5321,6 +5707,13 @@ def render_county_factors_tab(
             st.warning(msg)
         return
 
+    if factor_col == "pres_2020_margin_d":
+        st.caption(
+            "**2020 Presidential Margin** is state-level context (as of Jan 2021), not a county "
+            "measure: every county in a state shares one value, so ~3,100 counties carry only 51 "
+            "distinct values. Counties are not independent here, so p-values overstate the evidence."
+        )
+
     if factor_col == outcome_col:
         st.info(
             "The X and Y axes are the same variable — every point falls on a "
@@ -5346,7 +5739,7 @@ def render_county_factors_tab(
     with stat_col2:
         render_metric_card("Pearson r", _fmt(corr["pearson_r"]))
     with stat_col3:
-        render_metric_card("Spearman r", _fmt(corr["spearman_r"]))
+        render_metric_card("Spearman ρ", _fmt(corr["spearman_r"]))
     with stat_col4:
         render_metric_card("R²", _fmt(corr["r_squared"]))
     with stat_col5:
@@ -5404,9 +5797,8 @@ def render_county_factors_tab(
     # Highlighted county: a labelled star drawn above everything else, with a
     # diagnostic message when the county can't appear on this scatter.
     if cf_highlight != "(none)":
-        _hl_name, _hl_state = extract_county_state(cf_highlight)
         _hl_row = valid_df[
-            (valid_df.get("County Name") == _hl_name) & (valid_df.get("State") == _hl_state)
+            _location_mask(valid_df, cf_highlight)
         ] if "County Name" in valid_df.columns else pd.DataFrame()
 
         if not _hl_row.empty:
@@ -5454,9 +5846,7 @@ def render_county_factors_tab(
                 )
         else:
             # Diagnose the absence: filtered out, or missing data?
-            _in_filtered = plot_df[
-                (plot_df["County Name"] == _hl_name) & (plot_df["State"] == _hl_state)
-            ]
+            _in_filtered = plot_df[_location_mask(plot_df, cf_highlight)]
             if _in_filtered.empty:
                 st.warning(
                     f"**{cf_highlight}** is excluded by the active state/region/metro "
@@ -5483,7 +5873,7 @@ def render_county_factors_tab(
                        f"{math.tanh(_zf + 1.96 * _se):.3f}]")
         ann_lines = [
             f"<b>Pearson r</b> = {_fmt(corr['pearson_r'])}{_ci_txt}  (p {_fmt_p(corr['pearson_p'])})",
-            f"<b>Spearman r</b> = {_fmt(corr['spearman_r'])}  (p {_fmt_p(corr['spearman_p'])})",
+            f"<b>Spearman ρ</b> = {_fmt(corr['spearman_r'])}  (p {_fmt_p(corr['spearman_p'])})",
             f"<b>R²</b> = {_fmt(corr['r_squared'])}  ·  <b>N</b> = {corr['n']:,}",
         ]
         fig.add_annotation(
@@ -5501,7 +5891,7 @@ def render_county_factors_tab(
 
     apply_chart_styling(fig)
     fig.update_layout(height=580, hovermode="closest")
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 
     if corr["n"] >= 30 and pd.notna(corr["pearson_r"]):
         r = corr["pearson_r"]
@@ -5527,7 +5917,7 @@ def render_county_factors_tab(
             display_df = display_df.rename(columns={color_col: "Metro/Nonmetro"})
         st.dataframe(
             display_df.sort_values(outcome_label, ascending=False),
-            use_container_width=True,
+            width="stretch",
             hide_index=True,
         )
         st.caption(f"{len(valid_df):,} counties shown · sorted by {outcome_label} descending")
@@ -5577,7 +5967,7 @@ def render_county_factors_tab(
                 "N":          "{:,}",
             })
             .map(_style_r, subset=["Pearson r", "Spearman ρ"]),
-            use_container_width=True,
+            width="stretch",
             hide_index=True,
         )
     else:
@@ -5634,7 +6024,7 @@ def render_county_factors_tab(
                 fmt_cols["Residual"] = "{:.3f}"
                 st.dataframe(
                     top20.style.format(fmt_cols),
-                    use_container_width=True,
+                    width="stretch",
                     hide_index=True,
                 )
 
@@ -5643,7 +6033,7 @@ def render_county_factors_tab(
                 bot20 = resil_df_disp.nlargest(20, "Residual")
                 st.dataframe(
                     bot20.style.format(fmt_cols),
-                    use_container_width=True,
+                    width="stretch",
                     hide_index=True,
                 )
 
@@ -5661,7 +6051,7 @@ def render_county_factors_tab(
 
     with st.expander("AHRF variable catalog", expanded=False):
         catalog = get_variable_catalog()
-        st.dataframe(catalog, use_container_width=True, hide_index=True)
+        st.dataframe(catalog, width="stretch", hide_index=True)
         st.caption(
             "All variables sourced from HRSA Area Health Resources Files (AHRF). "
             "Primary source: ahrf2023.csv (2021-era data). "
@@ -5754,7 +6144,7 @@ def render_modeling_tab(master_county_df, locations) -> None:
         st.warning(
             "AHRF socioeconomic data did not load — healthcare access and economic "
             "factor columns will be absent from models. Vaccination factors remain "
-            "available. Check that `DATA/ahrf2023.csv` is present and readable.",
+            "available. Check that `data/ahrf2023.csv` is present and readable.",
             icon=None,
         )
 
@@ -5846,11 +6236,28 @@ def render_modeling_tab(master_county_df, locations) -> None:
             columns=[c for c in _mod_override if c in plot_df.columns]
         ).merge(_mod_win, on=["countyFIPS", "State"], how="left")
 
+    # Model sections run on a button click; the settings each was run with
+    # are remembered so results survive reruns triggered by any other widget.
+    _filter_sig = (tuple(mod_states), tuple(mod_regions), mod_metro, mod_window)
+
+    def _persisted_run(label, key, params):
+        """True while this section's button has been clicked for exactly these settings."""
+        if st.button(label, key=key):
+            st.session_state[f"{key}_params"] = params
+        return st.session_state.get(f"{key}_params") == params
+
     _window_note = (
         f" · outcome window **{_mod_window_range[0]} → {_mod_window_range[1]}**"
         if _mod_window_range else ""
     )
     st.caption(f"**{len(plot_df):,}** counties in model dataset{_window_note}.")
+    if "pres_2020_margin_d" in _factor_cols_all:
+        st.caption(
+            "*2020 Presidential Margin* is state-level context (as of Jan 2021), not a county "
+            "measure: all counties in a state share one value (51 distinct values), so its "
+            "p-values and importance overstate the evidence. It is excluded from the "
+            "Resilience Score and County Explorer."
+        )
 
     # SECTION 1 — CORRELATION MATRIX
 
@@ -5868,7 +6275,7 @@ def render_modeling_tab(master_county_df, locations) -> None:
             "A correlation matrix shows how strongly each county characteristic "
             "moves together with each COVID outcome. Pearson r measures the "
             "strength and direction of a linear relationship between two "
-            "variables, while Spearman rho measures the strength of a monotonic "
+            "variables, while Spearman ρ measures the strength of a monotonic "
             "relationship based on ranked values and is less sensitive to "
             "outliers. Values run from −1 (perfect negative) through 0 (none) "
             "to +1 (perfect positive) — and correlation is not causation."
@@ -5897,7 +6304,7 @@ def render_modeling_tab(master_county_df, locations) -> None:
                 "N": "{:,}",
             })
             .map(_color_r, subset=["Pearson r", "Spearman ρ"]),
-            use_container_width=True, hide_index=True,
+            width="stretch", hide_index=True,
         )
 
     # Heatmap: all outcomes × all factors
@@ -5933,7 +6340,7 @@ def render_modeling_tab(master_county_df, locations) -> None:
                 font=dict(family="sans-serif", size=11),
                 xaxis=dict(side="bottom"),
             )
-            st.plotly_chart(fig_heat, use_container_width=True)
+            st.plotly_chart(fig_heat, width="stretch")
             st.caption(
                 "Blue = negative association (higher factor → lower outcome). "
                 "Red = positive. Intensity reflects strength."
@@ -5965,7 +6372,7 @@ def render_modeling_tab(master_county_df, locations) -> None:
     )
     fi_out_col = _available_outcomes[fi_out_label]
 
-    if st.button("Run Feature Importance", key="mod_fi_run"):
+    if _persisted_run("Run Feature Importance", "mod_fi_run", (_filter_sig, fi_out_col)):
         with st.spinner("Fitting Random Forest…"):
             fi_df, fi_err = _cached_rf_importance(
                 plot_df, fi_out_col, tuple(_factor_cols_all),
@@ -5995,12 +6402,12 @@ def render_modeling_tab(master_county_df, locations) -> None:
                 template="plotly_white",
                 font=dict(family="sans-serif", size=11),
             )
-            st.plotly_chart(fig_fi, use_container_width=True)
+            st.plotly_chart(fig_fi, width="stretch")
 
             show_cols = [c for c in ["Rank", "Feature", "Importance"] if c in fi_df.columns]
             st.dataframe(
                 fi_df[show_cols].style.format({"Importance": "{:.4f}"}),
-                use_container_width=True, hide_index=True,
+                width="stretch", hide_index=True,
             )
 
             # Partial dependence: how does the predicted outcome move as each
@@ -6029,7 +6436,7 @@ def render_modeling_tab(master_county_df, locations) -> None:
                             font=dict(family="sans-serif", size=10),
                             showlegend=False,
                         )
-                        st.plotly_chart(fig_pd, use_container_width=True)
+                        st.plotly_chart(fig_pd, width="stretch")
                 st.caption(
                     "Each curve sweeps one feature across its 5th–95th percentile range "
                     "while all other features keep their observed values; the y-axis is the "
@@ -6092,7 +6499,9 @@ def render_modeling_tab(master_county_df, locations) -> None:
             ),
         )
 
-    if ols_pred_labels and st.button("Fit OLS Model", key="mod_ols_run"):
+    if ols_pred_labels and _persisted_run(
+        "Fit OLS Model", "mod_ols_run", (_filter_sig, ols_out_col, tuple(ols_pred_labels)),
+    ):
         ols_pred_cols = tuple(_available_factors[lbl] for lbl in ols_pred_labels)
         with st.spinner("Fitting OLS model…"):
             ols_res, ols_err = _cached_ols(plot_df, ols_out_col, ols_pred_cols)
@@ -6123,7 +6532,7 @@ def render_modeling_tab(master_county_df, locations) -> None:
                     lambda v: "background-color: #fef3c7" if isinstance(v, float) and v < 0.05 else "",
                     subset=["p-value", "Robust p"],
                 ),
-                use_container_width=True, hide_index=True,
+                width="stretch", hide_index=True,
             )
             st.caption(
                 "Highlighted cells: p < 0.05. **Robust SE (HC3)** are "
@@ -6143,7 +6552,7 @@ def render_modeling_tab(master_county_df, locations) -> None:
                                        if isinstance(v, float) and v > 5 else ""),
                             subset=["VIF"],
                         ),
-                        use_container_width=True, hide_index=True,
+                        width="stretch", hide_index=True,
                     )
                     st.caption(
                         "Variance Inflation Factor: VIF > 5 (red) means the predictor is "
@@ -6204,10 +6613,12 @@ def render_modeling_tab(master_county_df, locations) -> None:
         f"(strict {res_cv}-fold cross-validation — no data leakage)."
     )
 
-    if st.button("Compute Resilience Scores", key="mod_res_run"):
+    if _persisted_run("Compute Resilience Scores", "mod_res_run", (_filter_sig, res_out_col, res_cv)):
         with st.spinner(f"Running {res_cv}-fold cross-validation across {len(plot_df):,} counties…"):
             res_df, res_err = _cached_resilience(
-                plot_df, res_out_col, tuple(_factor_cols_all), cv_folds=res_cv,
+                plot_df, res_out_col,
+                tuple(c for c in _factor_cols_all if c != "pres_2020_margin_d"),
+                cv_folds=res_cv,
             )
 
         if res_err:
@@ -6287,7 +6698,7 @@ def render_modeling_tab(master_county_df, locations) -> None:
                     paper_bgcolor="rgba(0,0,0,0)",
                 )
                 fig_res.update_traces(marker_line_width=0.1, marker_line_color="rgba(0,0,0,0.2)")
-                st.plotly_chart(fig_res, use_container_width=True)
+                st.plotly_chart(fig_res, width="stretch")
 
             st.markdown("##### Rankings")
             tbl_cols = [c for c in ["County Name", "State", "actual", "predicted",
@@ -6310,7 +6721,7 @@ def render_modeling_tab(master_county_df, locations) -> None:
                     res_df.nlargest(25, "resilience_score")[tbl_cols]
                     .rename(columns=tbl_rename)
                 )
-                st.dataframe(top25.style.format(tbl_fmt), use_container_width=True, hide_index=True)
+                st.dataframe(top25.style.format(tbl_fmt), width="stretch", hide_index=True)
 
             with bot_col:
                 st.markdown("**Bottom 25 — Least Resilient** (worse than expected)")
@@ -6318,7 +6729,7 @@ def render_modeling_tab(master_county_df, locations) -> None:
                     res_df.nsmallest(25, "resilience_score")[tbl_cols]
                     .rename(columns=tbl_rename)
                 )
-                st.dataframe(bot25.style.format(tbl_fmt), use_container_width=True, hide_index=True)
+                st.dataframe(bot25.style.format(tbl_fmt), width="stretch", hide_index=True)
 
             with st.expander("Full resilience ranking (all counties)", expanded=False):
                 full_tbl = (
@@ -6329,7 +6740,7 @@ def render_modeling_tab(master_county_df, locations) -> None:
                 full_tbl.insert(0, "Rank", range(1, len(full_tbl) + 1))
                 st.dataframe(
                     full_tbl.style.format(tbl_fmt),
-                    use_container_width=True, hide_index=True,
+                    width="stretch", hide_index=True,
                 )
 
             st.caption(
@@ -6377,7 +6788,9 @@ def render_modeling_tab(master_county_df, locations) -> None:
         with _ve_c3:
             _ve_color_by = st.selectbox(
                 "Color by",
-                ["Metro/Nonmetro", "Census Region", "None"],
+                ["Metro/Nonmetro", "Census Region"]
+                + (["Governor Party (state-level)"] if "governor_party" in plot_df.columns else [])
+                + ["None"],
                 key="ve_color_by",
             )
 
@@ -6386,10 +6799,17 @@ def render_modeling_tab(master_county_df, locations) -> None:
             _ve_cols_needed.append("rucc_group")
         if _ve_color_by == "Census Region" and "census_region_name" in plot_df.columns:
             _ve_cols_needed.append("census_region_name")
+        if _ve_color_by == "Governor Party (state-level)" and "governor_party" in plot_df.columns:
+            _ve_cols_needed.append("governor_party")
 
         _ve_df = plot_df[[c for c in _ve_cols_needed if c in plot_df.columns]].dropna(
             subset=[_ve_vax_col, _ve_out_col]
         ).copy()
+        if "governor_party" in _ve_df.columns:
+            _ve_df["governor_party"] = (
+                _ve_df["governor_party"].map({"D": "Democratic governor", "R": "Republican governor"})
+                .fillna("No governor (DC)")
+            )
 
         if len(_ve_df) >= 20:
             # Trendline via numpy polyfit (no scipy needed)
@@ -6404,6 +6824,8 @@ def render_modeling_tab(master_county_df, locations) -> None:
                 _ve_color_col = "rucc_group"
             elif _ve_color_by == "Census Region" and "census_region_name" in _ve_df.columns:
                 _ve_color_col = "census_region_name"
+            elif _ve_color_by == "Governor Party (state-level)" and "governor_party" in _ve_df.columns:
+                _ve_color_col = "governor_party"
 
             _ve_hover = (
                 "<b>%{customdata[0]}, %{customdata[1]}</b><br>"
@@ -6417,12 +6839,17 @@ def render_modeling_tab(master_county_df, locations) -> None:
                 _ve_groups = sorted(_ve_df[_ve_color_col].dropna().unique())
                 _palette = ["#1F77B4", "#D62728", "#2CA02C", "#9467BD", "#8C564B",
                             "#17BECF", "#E377C2", "#7F7F7F"]
+                # Party groupings get party colours rather than palette order
+                _fixed_colors = {"Democratic governor": "#2166AC",
+                                 "Republican governor": "#B2182B",
+                                 "No governor (DC)": "#9E9E9E"}
                 for _gi, _grp in enumerate(_ve_groups):
                     _gdf = _ve_df[_ve_df[_ve_color_col] == _grp]
                     _ve_fig.add_trace(go.Scatter(
                         x=_gdf[_ve_vax_col], y=_gdf[_ve_out_col],
                         mode="markers", name=str(_grp),
-                        marker=dict(color=_palette[_gi % len(_palette)], size=5, opacity=0.65),
+                        marker=dict(color=_fixed_colors.get(_grp, _palette[_gi % len(_palette)]),
+                                    size=5, opacity=0.65),
                         customdata=_gdf[["County Name", "State"]].values,
                         hovertemplate=_ve_hover,
                     ))
@@ -6448,13 +6875,13 @@ def render_modeling_tab(master_county_df, locations) -> None:
             _ve_fig.update_layout(
                 title=dict(
                     text=(
-                        f"<b>{_ve_vax_lbl} vs. {_ve_out_lbl}</b>"
+                        f"<b>{_ve_out_lbl} vs. {_ve_vax_lbl}</b>"
                         f"<br><sub>r = {_ve_r:+.2f} · R² = {_ve_r2:.3f} · N = {len(_ve_df):,} counties</sub>"
                     ),
                     font=dict(size=14),
                 ),
                 xaxis=dict(
-                    title=f"{_ve_vax_lbl} (%)",
+                    title=_ve_vax_lbl,
                     showgrid=True, gridcolor="rgba(200,200,200,0.3)",
                 ),
                 yaxis=dict(
@@ -6472,7 +6899,7 @@ def render_modeling_tab(master_county_df, locations) -> None:
                 ),
                 font=dict(family="sans-serif", size=11),
             )
-            st.plotly_chart(_ve_fig, use_container_width=True)
+            st.plotly_chart(_ve_fig, width="stretch")
 
             # Interpretation callout
             _ve_interp_dir = "negative" if _ve_m < 0 else "positive"
@@ -6514,11 +6941,7 @@ def render_modeling_tab(master_county_df, locations) -> None:
     with exp_col:
         exp_location = st.selectbox("Select County", locations, key="mod_exp_county")
 
-    exp_county, exp_state = extract_county_state(exp_location)
-    exp_mask = (
-        (master_county_df["County Name"] == exp_county) &
-        (master_county_df["State"] == exp_state)
-    )
+    exp_mask = _location_mask(master_county_df, exp_location)
     exp_row = master_county_df[exp_mask].iloc[0] if exp_mask.any() else pd.Series(dtype=object)
 
     def _ev(col, fallback="N/A"):
@@ -6541,11 +6964,11 @@ def render_modeling_tab(master_county_df, locations) -> None:
     ec1, ec2, ec3, ec4, ec5 = st.columns(5)
     with ec1: render_metric_card("Cases per 100k",    _efmt("cases_per_100k",    ".1f"))
     with ec2: render_metric_card("Deaths per 100k",   _efmt("deaths_per_100k",   ".2f"))
-    with ec3: render_metric_card("Case Fatality Rate", f"{_efmt('case_fatality_rate', '.2f')}%")
+    with ec3: render_metric_card("Case Fatality Rate", f"{_efmt('case_fatality_rate', '.2f')}%" if pd.notna(_ev("case_fatality_rate", np.nan)) else "N/A")
     with ec4: render_metric_card("Total Cases",
-                                  f"{int(_ev('total_cases', 0)):,}" if pd.notna(_ev("total_cases")) else "N/A")
+                                  f"{int(_ev('total_cases', 0)):,}" if pd.notna(_ev("total_cases", np.nan)) else "N/A")
     with ec5: render_metric_card("Population",
-                                  f"{int(_ev('population', 0)):,}" if pd.notna(_ev("population")) else "N/A")
+                                  f"{int(_ev('population', 0)):,}" if pd.notna(_ev("population", np.nan)) else "N/A")
 
     st.markdown("**Healthcare Capacity**")
     eh1, eh2, eh3, eh4, eh5 = st.columns(5)
@@ -6558,19 +6981,21 @@ def render_modeling_tab(master_county_df, locations) -> None:
     st.markdown("**Socioeconomic Conditions**")
     es1, es2, es3, es4, es5 = st.columns(5)
     with es1:
-        mfi = _ev("median_family_income")
+        mfi = _ev("median_family_income", np.nan)
         render_metric_card("Median Family Income",
                            f"${int(mfi):,}" if pd.notna(mfi) else "N/A")
     with es2: render_metric_card("Unemployment %",      _efmt("unemployment_rate",  ".1f"))
     with es3: render_metric_card("Child Poverty %",     _efmt("child_poverty_pct",  ".1f"))
     with es4: render_metric_card("% No HS Diploma",     _efmt("pct_no_hs_diploma",  ".1f"))
     with es5: render_metric_card("RUCC Code",
-                                  str(int(_ev("rucc_code"))) if pd.notna(_ev("rucc_code")) else "N/A")
+                                  str(int(_ev("rucc_code"))) if pd.notna(_ev("rucc_code", np.nan)) else "N/A")
 
     # Percentile context
     st.markdown("**Where does this county rank nationally?**")
     pct_rows = []
     for lbl, col in list(_available_outcomes.items()) + list(_available_factors.items()):
+        if col == "pres_2020_margin_d":
+            continue  # state-level value; shown only in the County Overview
         val = _ev(col, None)
         if val is None or not pd.notna(val):
             continue
@@ -6602,7 +7027,7 @@ def render_modeling_tab(master_county_df, locations) -> None:
             pct_df.style
             .format({"County Value": "{:.2f}", "National Pctile": "{:.0f}th"})
             .map(_pct_color, subset=["National Pctile"]),
-            use_container_width=True, hide_index=True,
+            width="stretch", hide_index=True,
         )
         st.caption(
             "Red ≥ 75th percentile · Green ≤ 25th percentile. "
@@ -6642,7 +7067,7 @@ def render_modeling_tab(master_county_df, locations) -> None:
             ),
         )
     with _ac2:
-        run_arch = st.button("Identify archetypes", key="mod_arch_run")
+        run_arch = _persisted_run("Identify archetypes", "mod_arch_run", (_filter_sig, arch_k))
 
     if run_arch:
         with st.spinner("Clustering counties…"):
@@ -6677,7 +7102,7 @@ def render_modeling_tab(master_county_df, locations) -> None:
                 paper_bgcolor="white",
                 legend=dict(orientation="h", y=-0.05),
             )
-            st.plotly_chart(fig_arch, use_container_width=True)
+            st.plotly_chart(fig_arch, width="stretch")
 
             if arch_profile is not None:
                 _profile_disp = arch_profile.copy()
@@ -6710,7 +7135,7 @@ def render_modeling_tab(master_county_df, locations) -> None:
                         if c not in ("Archetype", "Counties")
                     } | {"Counties": "{:,.0f}", "Mean Population": "{:,.0f}",
                          "Median Income ($)": "{:,.0f}"}),
-                    use_container_width=True, hide_index=True,
+                    width="stretch", hide_index=True,
                 )
                 st.caption(
                     "Clustering features are z-score standardized (population "

@@ -45,9 +45,18 @@ def load_county_geojson(data_dir=None):
             return None
 
     try:
+        import ssl
         from urllib.request import urlopen
 
-        with urlopen(GEOJSON_CDN_URL, timeout=30) as resp:
+        # python.org macOS builds ship without a CA store until "Install
+        # Certificates" is run; certifi's bundle makes the download work anyway.
+        try:
+            import certifi
+            ssl_ctx = ssl.create_default_context(cafile=certifi.where())
+        except ImportError:
+            ssl_ctx = None
+
+        with urlopen(GEOJSON_CDN_URL, timeout=30, context=ssl_ctx) as resp:
             raw = resp.read()
         geo = json.loads(raw)
         try:
@@ -59,6 +68,36 @@ def load_county_geojson(data_dir=None):
     except Exception as exc:
         warnings.warn(f"County GeoJSON unavailable ({exc}); falling back to CDN URL")
         return None
+
+
+STATE_POLITICAL_FILENAME = "state_political.csv"
+
+
+def load_state_political(data_dir=None):
+    """
+    State-level political context (one row per state + DC, as of Jan 2021).
+
+    Join key is ``state_abbr`` (2-letter), matching the dashboard's ``State``
+    column. The file's full-name ``state`` column is returned as
+    ``state_name`` so it can't be confused with ``State``. DC has no governor,
+    senators, or legislature — those fields are NaN and ``notes`` explains why.
+
+    Returns an empty DataFrame if the file is missing or unreadable, so the
+    political features can be hidden without breaking the app.
+    """
+    path = Path(data_dir or DATA_DIR) / STATE_POLITICAL_FILENAME
+    if not path.exists():
+        return pd.DataFrame()
+    try:
+        df = pd.read_csv(path, dtype={"state_abbr": str})
+    except (OSError, ValueError, pd.errors.ParserError) as exc:
+        warnings.warn(f"Could not read {STATE_POLITICAL_FILENAME}: {exc}")
+        return pd.DataFrame()
+    if "state_abbr" not in df.columns:
+        return pd.DataFrame()
+    df["state_abbr"] = df["state_abbr"].str.strip().str.upper()
+    df["pres_2020_margin_d"] = pd.to_numeric(df.get("pres_2020_margin_d"), errors="coerce")
+    return df.rename(columns={"state": "state_name"})
 
 
 def get_identifier_columns(df):
@@ -249,7 +288,7 @@ def apply_moving_average(timeseries_df, metric_column, window=7):
     return df
 
 
-def calculate_per_capita(timeseries, population_df, county_name, state):
+def calculate_per_capita(timeseries, population_df, county_name, state, fips=None):
     """
     Add per-capita (per 100k population) column to timeseries data.
 
@@ -258,14 +297,23 @@ def calculate_per_capita(timeseries, population_df, county_name, state):
         population_df: Wide-format population dataframe
         county_name: County name
         state: State abbreviation
+        fips: Optional 5-char FIPS. When given, the population row is matched
+            on (countyFIPS, State) — county names differ between the USAFacts
+            cases and population files for some counties.
 
     Returns:
         DataFrame with additional 'Per Capita' column
     """
-    pop_row = population_df[
-        (population_df["County Name"] == county_name) &
-        (population_df["State"] == state)
-    ]
+    if fips is not None:
+        pop_row = population_df[
+            (population_df["countyFIPS"] == fips) &
+            (population_df["State"] == state)
+        ]
+    else:
+        pop_row = population_df[
+            (population_df["County Name"] == county_name) &
+            (population_df["State"] == state)
+        ]
 
     if pop_row.empty:
         return timeseries.copy()

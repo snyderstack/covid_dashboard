@@ -5,6 +5,9 @@ venv/
 .venv/
 .streamlit/secrets.toml
 
+# Generated at runtime by map_component.py (plotly.js + county GeoJSON copies)
+static/
+
 # Large AHRF binary data files — not parsed (no layout files available for these years)
 data/ahrf2021.asc
 data/ahrf2022.asc

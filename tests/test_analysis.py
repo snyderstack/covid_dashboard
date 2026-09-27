@@ -2,7 +2,6 @@
 
 import numpy as np
 import pandas as pd
-import pytest
 
 from lag_analysis import match_case_death_peaks
 from spatial_analysis import (

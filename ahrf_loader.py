@@ -22,6 +22,8 @@ All sources are joined to the COVID dataset on 5-character zero-padded countyFIP
 strings. AHRF variable names carry a 2-digit year suffix (e.g., _21 = 2021).
 """
 
+import contextlib
+import io
 import re
 import warnings
 from pathlib import Path
@@ -238,7 +240,6 @@ def load_ahrf_2021_sas(data_dir: Optional[Path] = None) -> pd.DataFrame:
     """
     d         = data_dir or DATA_DIR
     sas_path  = d / "AHRF_2020-2021_SAS" / "AHRF2021.sas7bdat"
-    layout_p  = d / "AHRF_2019-2020" / "DOC" / "AHRF2019-2020.sas"
 
     if not sas_path.exists():
         warnings.warn(f"AHRF2021.sas7bdat not found at {sas_path} — skipping 2021 SAS source")
@@ -262,7 +263,9 @@ def load_ahrf_2021_sas(data_dir: Optional[Path] = None) -> pd.DataFrame:
         "f1387610": "pop_density_2010_sas",
     }
 
-    with warnings.catch_warnings():
+    # pandas print()s "column count mismatch" for this file's header; the data
+    # itself loads completely (3,230 counties), so the message is silenced.
+    with warnings.catch_warnings(), contextlib.redirect_stdout(io.StringIO()):
         warnings.simplefilter("ignore")
         df = pd.read_sas(sas_path)
 
@@ -459,14 +462,14 @@ def build_ahrf_feature_table(
     if covid_fips:
         diag = _run_diagnostics(df, covid_fips, "ahrf_master")
         if verbose:
-            print(f"\nDiagnostics:")
+            print("\nDiagnostics:")
             print(f"  Matched:      {diag['matched_fips']:,}/{diag['covid_fips_count']:,} "
                   f"({diag['match_rate_pct']:.1f}%)")
             print(f"  Unmatched:    {len(diag['unmatched_covid'])} COVID FIPS "
                   f"not in AHRF: {diag['unmatched_covid'][:5]}")
             print(f"  Duplicates:   {len(diag['duplicate_fips'])} duplicate FIPS "
                   f"{'(none)' if not diag['duplicate_fips'] else diag['duplicate_fips'][:3]}")
-            print(f"  Missing data % for key columns:")
+            print("  Missing data % for key columns:")
             for col, pct in diag["missing_pct"].items():
                 print(f"    {col:<35s}: {pct:5.1f}%")
 
@@ -571,12 +574,12 @@ if __name__ == "__main__":
 
     print(f"\nMaster table shape: {feat_df.shape}")
     print(f"Columns: {list(feat_df.columns)}")
-    print(f"\nSample rows:")
+    print("\nSample rows:")
     sample_cols = ["countyFIPS", "state", "county_name", "rucc_code",
                    "rucc_group", "pcp_per_100k", "hospital_beds_per_100k",
                    "unemployment_rate", "pct_no_hs_diploma"]
     print(feat_df[[c for c in sample_cols if c in feat_df.columns]].head(5).to_string())
 
-    print(f"\nRUCC classification:")
+    print("\nRUCC classification:")
     rucc_cls = get_rucc_classification(feat_df)
     print(rucc_cls["County_Type"].value_counts().to_string())
