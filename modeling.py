@@ -39,15 +39,14 @@ import numpy as np
 import pandas as pd
 from scipy import stats as _ss
 
+from vaccination_loader import VAX_METRIC_COLS
+
 
 # Factor / outcome catalogs (mirrors County Factors tab)
 
 FACTOR_COLS: Dict[str, str] = {
     # Vaccination (CDC county-level vaccination dataset, 2020–2023)
-    "Vaccination Complete (%)":      "vax_complete_pct",
-    "At Least 1 Dose (%)":           "vax_dose1_pct",
-    "Booster Rate (%)":              "vax_booster_pct",
-    "65+ Vaccination Rate (%)":      "vax_complete_65plus_pct",
+    **VAX_METRIC_COLS,
     # Healthcare access (AHRF)
     "PCP per 100k":                  "pcp_per_100k",
     "Active MDs per 100k":           "total_md_per_100k",
@@ -71,7 +70,7 @@ FACTOR_COLS: Dict[str, str] = {
     # Political context (state-level, Jan 2021; present only when
     # data/state_political.csv is loaded). Kept last so default predictor
     # selections are unchanged.
-    "2020 Presidential Margin (D−R pts, state-level)": "pres_2020_margin_d",
+    "2020 Presidential Margin": "pres_2020_margin_d",
 }
 
 OUTCOME_COLS: Dict[str, str] = {

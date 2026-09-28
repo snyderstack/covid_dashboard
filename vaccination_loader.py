@@ -53,13 +53,21 @@ _CDC_TO_INTERNAL = {
 
 VAX_PCT_COLS = list(_CDC_TO_INTERNAL.values())   # all internal % column names
 
-# Human-readable labels (internal column → display label)
+# Human-readable labels (internal column → display label). These are the
+# Geographic Map's metric names; every tab uses them so one metric is never
+# called two different things.
 VAX_LABELS = {
-    "vax_dose1_pct":           "At Least 1 Dose (%)",
-    "vax_complete_pct":        "Fully Vaccinated (%)",
-    "vax_booster_pct":         "Booster Rate (%)",
-    "vax_complete_65plus_pct": "65+ Fully Vaccinated (%)",
-    "vax_bivalent_pct":        "Bivalent Booster (%)",
+    "vax_complete_pct":        "% Fully Vaccinated",
+    "vax_dose1_pct":           "% At Least 1 Dose",
+    "vax_booster_pct":         "% Boosted",
+    "vax_complete_65plus_pct": "% 65+ Fully Vaccinated",
+    "vax_bivalent_pct":        "% Bivalent Booster",
+}
+
+# Display label → column for the four vaccination metrics offered in the UI
+VAX_METRIC_COLS = {
+    VAX_LABELS[c]: c
+    for c in ("vax_complete_pct", "vax_dose1_pct", "vax_booster_pct", "vax_complete_65plus_pct")
 }
 
 

@@ -60,6 +60,7 @@ Public API:
 import pandas as pd
 import numpy as np
 from scipy.signal import find_peaks as _scipy_find_peaks
+from scipy.stats import poisson as _poisson
 from typing import Dict, List, Optional, Tuple
 
 
@@ -139,6 +140,46 @@ SENSITIVITY_PRESETS: Dict[str, Dict] = {
 }
 
 _DEFAULT_SENSITIVITY = "standard"
+
+# Death series need their own tuning. Deaths are small integer counts that are
+# often batch-reported (a week of deaths lands on one day), and death waves
+# are broader than case waves. The case presets' absolute floors (1–3 per day)
+# are never cleared by most counties' death rates, while a plain low floor
+# turns every single reported death into a "wave". So deaths are smoothed over
+# DEATH_MA_WINDOW days, use a baseline window four times the case preset's
+# (death waves often last 3–4 months; a shorter window lets the baseline rise
+# into the wave and hide it), find candidate regions with a floor in
+# deaths/day (detection runs on counts; see find_waves(count_unit=...)), and
+# keep a candidate only if its peak passes a Poisson count test (_death_peak_significant) — the test that separates a
+# small county's real wave (7 deaths in three weeks) from one or two deaths.
+DEATH_MA_WINDOW = 21
+
+DEATH_PRESET_OVERRIDES: Dict[str, Dict] = {
+    "conservative": {
+        "elevation_threshold_abs": 0.1,     # deaths/day above baseline
+        "poisson_alpha":           1e-4,
+        "min_expected_deaths":     1.0,
+        "baseline_window":         224,
+        "baseline_smooth_window":  112,
+        "min_region_duration":     28,
+    },
+    "standard": {
+        "elevation_threshold_abs": 0.1,
+        "poisson_alpha":           1e-3,
+        "min_expected_deaths":     1.0,
+        "baseline_window":         168,
+        "baseline_smooth_window":  84,
+        "min_region_duration":     21,
+    },
+    "sensitive": {
+        "elevation_threshold_abs": 0.05,
+        "poisson_alpha":           1e-2,
+        "min_expected_deaths":     1.0,
+        "baseline_window":         112,
+        "baseline_smooth_window":  56,
+        "min_region_duration":     14,
+    },
+}
 
 # Widely-acknowledged US national surge windows, used only as a validation
 # reference for detected waves. Boundaries are deliberately generous — county
@@ -224,6 +265,64 @@ def estimate_optimal_smoothing(
         prev_var = var
 
     return chosen
+
+
+def smooth_series(daily_values: np.ndarray, ma_window: int) -> np.ndarray:
+    """
+    Centered moving average used for wave detection.
+
+    NaN is treated as zero, and the first/last ma_window // 2 values are set to
+    zero (the window there is incomplete). Charts that mark detected peaks
+    should plot this same series so the markers sit on the line.
+    """
+    filled = np.nan_to_num(np.asarray(daily_values, dtype=float), nan=0.0)
+    smoothed = np.convolve(filled, np.ones(ma_window) / ma_window, mode="same")
+    half = ma_window // 2
+    smoothed[:half] = 0.0
+    smoothed[len(smoothed) - half:] = 0.0
+    return smoothed
+
+
+def _death_peak_significant(
+    smoothed_val: float,
+    baseline_val: float,
+    ma_window: int,
+    preset: Dict,
+) -> bool:
+    """
+    Peak-significance test for death waves (values in deaths/day).
+
+    Small death counts need a count-based test, not a fixed rate: a county
+    with ~3 deaths a month has a real wave at 7 deaths in three weeks, which
+    no fixed per-day floor separates from noise across all county sizes. The
+    deaths in the ma_window-day window around the peak must be unlikely under
+    the local baseline (Poisson upper tail < poisson_alpha, with the baseline
+    taken as at least min_expected_deaths per window). Large counties also
+    need the case detector's relative rise over baseline, since their counts
+    are overdispersed and a Poisson test alone would pass every bump.
+    """
+    observed = round(smoothed_val * ma_window)   # deaths in window
+    expected = max(baseline_val * ma_window,
+                   preset["min_expected_deaths"])
+    p_value  = float(_poisson.sf(observed - 1, expected))    # P(X >= observed)
+    relative_ok = (smoothed_val - baseline_val) >= (
+        preset["peak_significance_mult"] * preset["elevation_threshold_rel"] * baseline_val
+    )
+    return p_value < preset["poisson_alpha"] and relative_ok
+
+
+def min_death_wave_count(sensitivity: str) -> int:
+    """
+    Fewest deaths in a DEATH_MA_WINDOW-day window that can pass the death
+    peak-significance test when the local baseline is near zero — the
+    smallest death wave the preset can report. Used to explain "no death
+    waves" results to users.
+    """
+    preset = DEATH_PRESET_OVERRIDES[sensitivity]
+    k = 1
+    while _poisson.sf(k - 1, preset["min_expected_deaths"]) >= preset["poisson_alpha"]:
+        k += 1
+    return k
 
 
 # Region-based epidemic detection helpers
@@ -645,9 +744,17 @@ def find_waves(
     prominence: float = 1000,
     min_merge_days: int = 0,
     sensitivity: Optional[str] = None,
+    series: str = "cases",
+    count_unit: float = 1.0,
 ) -> Tuple[List[Dict], Dict]:
     """
     Detect epidemiologically meaningful waves in smoothed daily data.
+
+    series="deaths" applies DEATH_PRESET_OVERRIDES on top of the sensitivity
+    preset. count_unit is the size of one case or death in the input's units
+    (1.0 for raw counts, 100_000 / population for per-100k rates): the
+    presets' absolute floors are per-day counts, so raw and per-100k input
+    find the same waves.
 
     When sensitivity is supplied ("conservative", "standard", or "sensitive"),
     the region-based algorithm is used:
@@ -681,16 +788,11 @@ def find_waves(
     }
 
     valid_mask = ~np.isnan(daily_values)
-    filled     = daily_values.copy()
-    filled[~valid_mask] = 0.0
 
     if valid_mask.sum() < ma_window + 2:
         return [], diagnostics
 
-    smoothed = np.convolve(filled, np.ones(ma_window) / ma_window, mode="same")
-    half     = ma_window // 2
-    smoothed[:half]                 = 0.0
-    smoothed[len(smoothed) - half:] = 0.0
+    smoothed = smooth_series(daily_values, ma_window)
 
     if smoothed.max() == 0:
         return [], diagnostics
@@ -698,11 +800,21 @@ def find_waves(
     # Region-based epidemiological path
 
     if sensitivity is not None and sensitivity in SENSITIVITY_PRESETS:
-        preset = SENSITIVITY_PRESETS[sensitivity]
+        preset = dict(SENSITIVITY_PRESETS[sensitivity])
+        if series == "deaths":
+            preset.update(DEATH_PRESET_OVERRIDES[sensitivity])
+        # Detection runs on a count scale (cases/day, deaths/day): the presets'
+        # absolute floors are counts, so a per-100k series must find the same
+        # waves as the raw counts it was scaled from. Daily values are
+        # converted back to counts before smoothing (rounding removes the
+        # float noise of the per-100k round trip), so a per-100k series is
+        # smoothed from exactly the raw counts — and raw input
+        # (count_unit = 1) is processed exactly as before.
+        counts = smooth_series(np.round(daily_values / count_unit, 6), ma_window)
 
         # Step 1: adaptive baseline
         baseline = _estimate_epidemic_baseline(
-            smoothed,
+            counts,
             window       = preset["baseline_window"],
             percentile   = preset["baseline_percentile"],
             smooth_window= preset["baseline_smooth_window"],
@@ -711,7 +823,7 @@ def find_waves(
 
         # Step 2: epidemic region detection
         raw_regions = _detect_epidemic_regions(
-            smoothed, baseline,
+            counts, baseline,
             threshold_rel = preset["elevation_threshold_rel"],
             threshold_abs = preset["elevation_threshold_abs"],
             min_duration  = preset["min_region_duration"],
@@ -722,7 +834,7 @@ def find_waves(
         # Handles counties where transmission between distinct surges (e.g., Delta
         # and Omicron) stayed continuously elevated, preventing a clean region gap.
         raw_regions = _split_regions_at_valleys(
-            raw_regions, smoothed, baseline,
+            raw_regions, counts, baseline,
             valley_split_pct  = preset["valley_split_pct"],
             min_sub_duration  = preset["min_region_duration"],
             threshold_abs     = preset["elevation_threshold_abs"],
@@ -738,11 +850,11 @@ def find_waves(
         signal_max = float(np.nanmax(smoothed)) if np.nanmax(smoothed) > 0 else 1.0
 
         for s, e in raw_regions:
-            refined_s = _refine_region_onset(smoothed, s, preset["onset_lookback"])
+            refined_s = _refine_region_onset(counts, s, preset["onset_lookback"])
             refined_s = max(refined_s, prev_end)   # no overlap with prior wave
             prev_end  = e + 1
 
-            region_slice = smoothed[refined_s: e + 1]
+            region_slice = counts[refined_s: e + 1]
             if len(region_slice) == 0:
                 continue
 
@@ -763,7 +875,7 @@ def find_waves(
             # _trim_wave_bounds). Regions mark where the signal is elevated
             # above local background; the wave itself is the surge within.
             wave_start, wave_end = _trim_wave_bounds(
-                smoothed, baseline, refined_s, e, peak_idx
+                counts, baseline, refined_s, e, peak_idx
             )
 
             waves.append({
@@ -784,12 +896,18 @@ def find_waves(
         dropped: List[Dict] = []
         for w in waves:
             idx = w["peak_index"]
-            elevation = float(smoothed[idx] - baseline[idx])
-            required  = peak_mult * (
-                baseline[idx] * preset["elevation_threshold_rel"]
-                + preset["elevation_threshold_abs"]
-            )
-            (kept if elevation >= required else dropped).append(w)
+            elevation = float(counts[idx] - baseline[idx])
+            if series == "deaths":
+                significant = _death_peak_significant(
+                    float(counts[idx]), float(baseline[idx]), ma_window, preset,
+                )
+            else:
+                required = peak_mult * (
+                    baseline[idx] * preset["elevation_threshold_rel"]
+                    + preset["elevation_threshold_abs"]
+                )
+                significant = elevation >= required
+            (kept if significant else dropped).append(w)
 
         diagnostics["onset_refined"]              = True
         diagnostics["merge_applied_in_detection"] = True
@@ -881,9 +999,13 @@ def calculate_wave_metrics(
     prominence: float = 1000,
     min_merge_days: int = 0,
     sensitivity: Optional[str] = None,
+    series: str = "cases",
+    count_unit: float = 1.0,
 ) -> Dict:
     """
     Calculate wave metrics for a county's daily case or death series.
+
+    series / count_unit: see find_waves (death-specific detection settings).
 
     When sensitivity is supplied ("conservative" | "standard" | "sensitive"),
     the region-based epidemiological wave detection is used (v3). Merging is
@@ -928,6 +1050,8 @@ def calculate_wave_metrics(
         prominence=prominence,
         min_merge_days=0,         # date-based merge handled below for legacy path
         sensitivity=sensitivity,
+        series=series,
+        count_unit=count_unit,
     )
 
     # Annotate audit log entries with human-readable peak dates
@@ -1036,6 +1160,8 @@ def calculate_waves_from_values(
     prominence: float = 1000,
     min_merge_days: int = 0,
     sensitivity: Optional[str] = None,
+    series: str = "cases",
+    count_unit: float = 1.0,
 ) -> Dict:
     """
     Run wave analysis on a pre-prepared values array.
@@ -1049,6 +1175,8 @@ def calculate_waves_from_values(
         prominence=prominence,
         min_merge_days=min_merge_days,
         sensitivity=sensitivity,
+        series=series,
+        count_unit=count_unit,
     )
 
 
@@ -1063,12 +1191,14 @@ def calculate_waves_for_county(
     prominence: float = 1000,
     min_merge_days: int = 0,
     sensitivity: Optional[str] = None,
+    death_ma_window: int = DEATH_MA_WINDOW,
 ) -> Dict:
     """
     Calculate wave metrics for a specific county.
 
     Accepts an optional sensitivity preset; when supplied, the preset
-    parameters govern the region-based detection.
+    parameters govern the region-based detection. Cases are smoothed with
+    ma_window, deaths with death_ma_window (see DEATH_MA_WINDOW).
     """
     cases_row        = cases_df[(cases_df["County Name"] == county_name) & (cases_df["State"] == state)]
     daily_cases_row  = daily_cases_df[(daily_cases_df["County Name"] == county_name) & (daily_cases_df["State"] == state)]
@@ -1095,7 +1225,8 @@ def calculate_waves_for_county(
         daily_cases,  dates, ma_window, prominence, min_merge_days, sensitivity
     )
     deaths_metrics = calculate_wave_metrics(
-        daily_deaths, dates, ma_window, prominence, min_merge_days, sensitivity
+        daily_deaths, dates, death_ma_window, prominence, min_merge_days, sensitivity,
+        series="deaths",
     )
 
     return {

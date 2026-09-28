@@ -10,6 +10,7 @@ from spatial_analysis import (
     compute_morans_i,
 )
 from wave_analysis import (
+    DEATH_MA_WINDOW,
     calculate_wave_metrics,
     match_waves_to_national_windows,
     score_wave_significance,
@@ -141,6 +142,98 @@ def test_lag_peak_matching_greedy_chronological():
     # death peaks before every case peak stay unmatched
     early = [{"peak_date": pd.Timestamp("2020-03-01"), "peak_value": 1.0}]
     assert match_case_death_peaks(case_peaks, early, max_lag_days=90).empty
+
+
+def _batched_deaths(n=500, seed=3):
+    """Weekly batch-reported deaths: one broad wave (~1/day at peak) plus
+    scattered single deaths; every week's deaths land on one day."""
+    rng = np.random.default_rng(seed)
+    x = np.arange(n, dtype=float)
+    rate = 1.0 * np.exp(-((x - 250) ** 2) / (2 * 30 ** 2)) + 0.02
+    daily = rng.poisson(rate).astype(float)
+    weekly = np.zeros(n)
+    for start in range(0, n, 7):
+        weekly[min(start + 6, n - 1)] = daily[start:start + 7].sum()
+    return weekly
+
+
+def test_death_wave_detected_despite_batch_reporting():
+    values = _batched_deaths()
+    dates = pd.date_range("2020-06-01", periods=len(values))
+    metrics = calculate_wave_metrics(values, dates, ma_window=DEATH_MA_WINDOW,
+                                     sensitivity="standard", series="deaths")
+    assert metrics["number_of_waves"] == 1
+    assert abs((metrics["waves"][0]["peak_date"] - dates[250]).days) <= 21
+
+
+def test_case_detection_same_for_raw_and_per_100k():
+    # A per-100k series is a rescaled raw series; with count_unit the
+    # absolute floors scale too, so both find the same waves. Before, the
+    # per-100k floor (2 per 100k/day) dropped real waves in large counties.
+    values = _two_wave_signal() * 20
+    dates = pd.date_range("2020-03-01", periods=len(values))
+    population = 1_500_000
+    raw = calculate_wave_metrics(values, dates, ma_window=7, sensitivity="standard")
+    pc = calculate_wave_metrics(values / population * 100_000, dates, ma_window=7,
+                                sensitivity="standard", count_unit=100_000 / population)
+    assert raw["number_of_waves"] == 2
+    assert [w["peak_date"] for w in raw["waves"]] == [w["peak_date"] for w in pc["waves"]]
+
+
+def test_small_county_death_wave_detected():
+    # Regression test for Abbeville County, SC: a death every few weeks,
+    # rising to 7 in three weeks (~1 expected). A fixed deaths/day floor
+    # dropped this real wave; the Poisson count test must keep it.
+    values = np.zeros(500)
+    values[np.arange(5, 500, 20)] = 1.0                # ~1.5 deaths a month
+    values[230:270] = 0.0
+    values[[240, 243, 246, 249, 252, 255, 258]] = 1.0  # 7 in three weeks
+    dates = pd.date_range("2020-06-01", periods=len(values))
+    metrics = calculate_wave_metrics(values, dates, ma_window=DEATH_MA_WINDOW,
+                                     sensitivity="standard", series="deaths")
+    assert metrics["number_of_waves"] == 1
+    assert abs((metrics["waves"][0]["peak_date"] - dates[250]).days) <= 14
+
+
+def test_isolated_deaths_do_not_form_waves():
+    # A handful of single reported deaths with no surge is not a wave
+    values = np.zeros(500)
+    values[[40, 130, 210, 300, 420]] = 1.0
+    dates = pd.date_range("2020-06-01", periods=len(values))
+    metrics = calculate_wave_metrics(values, dates, ma_window=DEATH_MA_WINDOW,
+                                     sensitivity="standard", series="deaths")
+    assert metrics["number_of_waves"] == 0
+
+
+def test_death_detection_same_for_raw_and_per_100k():
+    # count_unit makes the deaths/day floor unit-independent
+    values = _batched_deaths(seed=5)
+    dates = pd.date_range("2020-06-01", periods=len(values))
+    population = 25_000
+    raw = calculate_wave_metrics(values, dates, ma_window=DEATH_MA_WINDOW,
+                                 sensitivity="standard", series="deaths")
+    pc = calculate_wave_metrics(values / population * 100_000, dates,
+                                ma_window=DEATH_MA_WINDOW, sensitivity="standard",
+                                series="deaths", count_unit=100_000 / population)
+    assert [w["peak_date"] for w in raw["waves"]] == [w["peak_date"] for w in pc["waves"]]
+
+
+def test_lag_pairing_allows_death_peak_shortly_before_case_peak():
+    # Butte County, CA pattern: the smoothed death peak of an outbreak lands
+    # 7 days before the case peak. It must pair (lag −7), but not when it
+    # falls before the case wave starts or more than 21 days early.
+    case = [{"peak_date": pd.Timestamp("2020-12-31"), "peak_value": 50.0,
+             "wave_start": pd.Timestamp("2020-11-06")}]
+    death = [{"peak_date": pd.Timestamp("2020-12-24"), "peak_value": 1.0}]
+    assert list(match_case_death_peaks(case, death)["lag_days"]) == [-7]
+    too_early = [{"peak_date": pd.Timestamp("2020-12-05"), "peak_value": 1.0}]
+    assert match_case_death_peaks(case, too_early).empty
+    late_start = [{**case[0], "wave_start": pd.Timestamp("2020-12-28")}]
+    assert match_case_death_peaks(late_start, death).empty
+    # nearest wins: a death peak 5 days before beats one 30 days after
+    both = death + [{"peak_date": pd.Timestamp("2021-01-30"), "peak_value": 1.0}]
+    both[0] = {"peak_date": pd.Timestamp("2020-12-26"), "peak_value": 1.0}
+    assert list(match_case_death_peaks(case, both)["lag_days"]) == [-5]
 
 
 def _square_ring(x0, y0):

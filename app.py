@@ -50,13 +50,17 @@ from wave_analysis import (
     match_waves_to_national_windows,
     SENSITIVITY_PRESETS,
     NATIONAL_WAVE_WINDOWS,
+    DEATH_MA_WINDOW,
+    DEATH_PRESET_OVERRIDES,
+    min_death_wave_count,
 )
-from lag_analysis import analyze_county_lag, summarize_lag_results
+from lag_analysis import analyze_county_lag, summarize_lag_results, pair_case_death_waves
 from ahrf_loader import build_ahrf_feature_table, get_variable_catalog
 from vaccination_loader import (
     load_vaccination_latest,
     load_vaccination_timeseries,
     get_county_vax_timeseries,
+    VAX_METRIC_COLS,
 )
 from county_features import (
     create_master_county_table,
@@ -1335,8 +1339,7 @@ def _cached_overview_waves(county_name, state):
 def _cached_overview_lag(county_name, state):
     return analyze_county_lag(
         cases_df, deaths_df, population_df, county_name, state,
-        ma_window=7, case_prominence=1.0, death_prominence=0.05,
-        max_lag_days=90, min_peak_distance_days=14,
+        sensitivity="standard", max_lag_days=90,
         fips=LOCATION_FIPS.get(f"{county_name}, {state}"),
     )
 
@@ -1543,6 +1546,14 @@ with st.sidebar:
 _MAP_PLAY_STRIDE = 7  # auto-play advances ~1 week per frame
 _MAP_PLAY_DELAY = {"0.5×": 1.2, "1×": 0.6, "2×": 0.3, "4×": 0.15}
 
+# Wave-detection sensitivity presets, shared by the Wave Analysis and Time Lag
+# tabs so both detect the same waves.
+_WAVE_SENSITIVITY_OPTIONS = {
+    "Conservative — major national waves only (~3–5)":   "conservative",
+    "Standard — major + significant regional surges (~4–8)": "standard",
+    "Sensitive — includes smaller local surges (~6–15)": "sensitive",
+}
+
 
 @st.fragment
 def render_map_tab(transforms, cases_df, deaths_df, population_df, dates, unique_states, selected_date, county_type_df, vax_latest_df=None) -> None:
@@ -1568,12 +1579,7 @@ def render_map_tab(transforms, cases_df, deaths_df, population_df, dates, unique
             st.session_state["map_date"] = _queued_date
 
     # Build metric catalogue (needed before columns so _vax_metric_cols is accessible)
-    _vax_metric_cols = {
-        "% Fully Vaccinated":     "vax_complete_pct",
-        "% At Least 1 Dose":      "vax_dose1_pct",
-        "% Boosted":              "vax_booster_pct",
-        "% 65+ Fully Vaccinated": "vax_complete_65plus_pct",
-    }
+    _vax_metric_cols = VAX_METRIC_COLS
     # State political context (Jan 2021) — state-level snapshot metrics
     _pol_metric_cols = {
         "2020 Presidential Margin": "pres_2020_margin_d",
@@ -2281,7 +2287,7 @@ def render_comparison_tab(cases_df, deaths_df, population_df, locations, nationa
         )
     with ctrl4:
         _vax_cmp_opts = (
-            ["Vaccination Rate (Fully Vaccinated %)", "At Least 1 Dose (%)"]
+            list(VAX_METRIC_COLS)
             if (vax_ts_df is not None and not vax_ts_df.empty) else []
         )
         dual_metric = st.selectbox(
@@ -2411,17 +2417,15 @@ def render_comparison_tab(cases_df, deaths_df, population_df, locations, nationa
             return
 
         _MULTI_COLORS = ["#1F77B4", "#D62728", "#2CA02C", "#9467BD", "#8C564B"]
-        _is_vax_multi = "Vaccination" in dual_metric or "1 Dose" in dual_metric
+        _is_vax_multi = dual_metric in VAX_METRIC_COLS
         series = []          # (label, DataFrame with 'Date' + 'val')
 
         if _is_vax_multi:
             if vax_ts_df is None or vax_ts_df.empty:
                 st.info("Vaccination time-series data is unavailable.")
                 return
-            _vcol = ("vax_complete_pct" if "Fully Vaccinated" in dual_metric
-                     else "vax_dose1_pct")
-            y_label_m = ("% Fully Vaccinated" if "Fully Vaccinated" in dual_metric
-                         else "% At Least 1 Dose")
+            _vcol = VAX_METRIC_COLS[dual_metric]
+            y_label_m = dual_metric
             st.caption(
                 "Vaccination data covers Dec 2020 – May 2023 (CDC county dataset). "
                 "Smoothing and view controls do not apply to vaccination metrics."
@@ -2526,14 +2530,10 @@ def render_comparison_tab(cases_df, deaths_df, population_df, locations, nationa
         return
 
     # Vaccination comparison (special path)
-    _is_vax_cmp = "Vaccination" in dual_metric or "1 Dose" in dual_metric
+    _is_vax_cmp = dual_metric in VAX_METRIC_COLS
     if _is_vax_cmp and vax_ts_df is not None and not vax_ts_df.empty:
-        _vax_cmp_col = (
-            "vax_complete_pct" if "Fully Vaccinated" in dual_metric else "vax_dose1_pct"
-        )
-        _vax_y_label = (
-            "% Fully Vaccinated" if "Fully Vaccinated" in dual_metric else "% At Least 1 Dose"
-        )
+        _vax_cmp_col = VAX_METRIC_COLS[dual_metric]
+        _vax_y_label = dual_metric
         st.caption(
             "Vaccination data covers Dec 2020 – May 2023 (CDC county dataset). "
             "Smoothing and view controls do not apply to vaccination metrics."
@@ -3221,7 +3221,7 @@ def render_county_overview_tab(
             if not _deaths_pc_ts.empty and "Per100k MA" in _deaths_pc_ts.columns:
                 _fig_cfr.add_trace(go.Scatter(
                     x=_deaths_pc_ts["Date"], y=_deaths_pc_ts["Per100k MA"],
-                    name="Deaths /100k (7d MA)", mode="lines",
+                    name=f"Deaths /100k ({DEATH_MA_WINDOW}d MA)", mode="lines",
                     line=dict(color="#D62728", width=1.8),
                     hovertemplate="%{x|%Y-%m-%d}: %{y:.3f} deaths/100k<extra></extra>",
                 ), row=2, col=1)
@@ -3297,8 +3297,8 @@ def render_county_overview_tab(
         if _wc["waves"]:
             _profile_wave_rows = []
             # Smoothed daily deaths /100k (the Pandemic Timeline's series).
-            # Death *waves* are rarely detected in small/mid-size counties, so
-            # each case wave's death peak is read straight from this series.
+            # Small counties often have too few deaths to form a death wave,
+            # so each case wave's death peak is read straight from this series.
             _wt_lag = _cached_overview_lag(county_name, state)
             _wt_deaths = (
                 _wt_lag["deaths_ts"].set_index("Date")["Per100k MA"]
@@ -3333,7 +3333,8 @@ def render_county_overview_tab(
                     "Waves sorted by Significance score (0–100). "
                     "Score combines peak prominence (30%), total burden (30%), duration (20%), "
                     "and burst intensity (20%). "
-                    "Peak Cases /100k and Peak Deaths /100k are daily rates (7-day average). "
+                    f"Peak Cases /100k and Peak Deaths /100k are daily rates (Peak Deaths uses a "
+                    f"{DEATH_MA_WINDOW}-day average, since deaths are often batch-reported). "
                     "Peak Deaths /100k is the highest daily death rate from the wave's start to "
                     "four weeks after its end, since deaths trail cases."
                 )
@@ -3366,13 +3367,13 @@ def render_county_overview_tab(
 
                 _tl.add_trace(go.Scatter(
                     x=_cts["Date"], y=_cts["Per100k MA"],
-                    name="Cases /100k (7d MA)", mode="lines",
+                    name=f"Cases /100k ({_lag_ts_mini['case_ma_window']}d MA)", mode="lines",
                     line=dict(color=NATIONAL_COLOR, width=2),
                     hovertemplate="%{x|%Y-%m-%d}: %{y:.2f} cases/100k<extra></extra>",
                 ), row=1, col=1)
                 _tl.add_trace(go.Scatter(
                     x=_dts["Date"], y=_dts["Per100k MA"],
-                    name="Deaths /100k (7d MA)", mode="lines",
+                    name=f"Deaths /100k ({DEATH_MA_WINDOW}d MA)", mode="lines",
                     line=dict(color="#D62728", width=1.8),
                     hovertemplate="%{x|%Y-%m-%d}: %{y:.3f} deaths/100k<extra></extra>",
                 ), row=2, col=1)
@@ -3494,7 +3495,8 @@ def render_county_overview_tab(
 
     st.markdown(
         '<div class="sub-section-header"><h3>3 — Time Lag Summary</h3>'
-        '<p>Default parameters: 7-day MA, case prominence 1.0, death prominence 0.05, max lag 90 days.</p></div>',
+        '<p>Default parameters: Standard wave-detection sensitivity (the same waves as the '
+        'Wave Analysis tab), max lag 90 days.</p></div>',
         unsafe_allow_html=True,
     )
 
@@ -3509,9 +3511,7 @@ def render_county_overview_tab(
         with l2:
             render_metric_card("Median Lag", f"{_lag_summary['median_lag']:.1f} d" if pd.notna(_lag_summary["median_lag"]) else "N/A")
         with l3:
-            _lr = (f"{int(_lag_summary['min_lag'])}–{int(_lag_summary['max_lag'])} d"
-                   if pd.notna(_lag_summary["min_lag"]) and pd.notna(_lag_summary["max_lag"])
-                   else "N/A")
+            _lr = _fmt_lag_range(_lag_summary)
             render_metric_card("Lag Range", _lr)
         with l4:
             render_metric_card("Matched Pairs", str(_lag_summary["n_matched"]))
@@ -3762,10 +3762,10 @@ def render_county_overview_tab(
         ("Cases per 100k",           "cases_per_100k",          cases_100k,              ".1f"),
         ("Deaths per 100k",          "deaths_per_100k",         deaths_100k,             ".2f"),
         ("Case Fatality Rate (%)",   "case_fatality_rate",      cfr,                     ".2f"),
-        ("Fully Vaccinated (%)",     "vax_complete_pct",        _v("vax_complete_pct"),  ".1f"),
-        ("At Least 1 Dose (%)",      "vax_dose1_pct",           _v("vax_dose1_pct"),     ".1f"),
-        ("Booster Rate (%)",         "vax_booster_pct",         _v("vax_booster_pct"),   ".1f"),
-        ("65+ Vaccination Rate (%)", "vax_complete_65plus_pct", _v("vax_complete_65plus_pct"), ".1f"),
+        ("% Fully Vaccinated",       "vax_complete_pct",        _v("vax_complete_pct"),  ".1f"),
+        ("% At Least 1 Dose",        "vax_dose1_pct",           _v("vax_dose1_pct"),     ".1f"),
+        ("% Boosted",                "vax_booster_pct",         _v("vax_booster_pct"),   ".1f"),
+        ("% 65+ Fully Vaccinated",   "vax_complete_65plus_pct", _v("vax_complete_65plus_pct"), ".1f"),
         ("PCP per 100k",             "pcp_per_100k",            _v("pcp_per_100k"),      ".1f"),
         ("Hospital Beds per 100k",   "hospital_beds_per_100k",  _v("hospital_beds_per_100k"), ".1f"),
         ("ICU Beds per 100k",        "icu_beds_per_100k",       _v("icu_beds_per_100k"), ".1f"),
@@ -4234,7 +4234,7 @@ Sources: USAFacts, HRSA Area Health Resources Files, CDC county vaccination data
 County-level (ecological) statistics — not individual-level or causal estimates.</p>
 </body></html>"""
 
-def _render_lag_chart(location_label, results, summary, lag_ma_window, chart_key=None):
+def _render_lag_chart(location_label, results, summary, chart_key=None):
     """
     Render the dual-axis cases/deaths chart with matched peaks.
 
@@ -4340,7 +4340,7 @@ def _render_lag_chart(location_label, results, summary, lag_ma_window, chart_key
     else:
         view_start, view_end = cases_ts["Date"].min(), cases_ts["Date"].max()
 
-    subtitle_bits = [f"{lag_ma_window}-day MA",
+    subtitle_bits = [f"cases {results['case_ma_window']}-day MA · deaths {results['death_ma_window']}-day MA",
                      f"{summary['n_matched']} matched peak pair(s)"]
     if show_pair_overlays:
         subtitle_bits.append("shaded bands span case peak → death peak")
@@ -4403,24 +4403,34 @@ def _render_lag_chart(location_label, results, summary, lag_ma_window, chart_key
                 "analysis window — use the mini-map slider or buttons to navigate."
             )
 
+def _fmt_lag_range(summary):
+    """'11 to 19 d' (reads cleanly when either end is negative), or N/A."""
+    if pd.isna(summary["min_lag"]) or pd.isna(summary["max_lag"]):
+        return "N/A"
+    lo, hi = int(summary["min_lag"]), int(summary["max_lag"])
+    return f"{lo} d" if lo == hi else f"{lo} to {hi} d"
+
+
 def _render_lag_summary_metrics(summary, population):
     """Render the KPI metric row for a single county's lag results."""
     s1, s2, s3, s4, s5, s6 = st.columns(6)
     with s1: st.metric("Avg Lag",    f"{summary['avg_lag']:.1f} d"    if pd.notna(summary["avg_lag"])    else "N/A")
     with s2: st.metric("Median Lag", f"{summary['median_lag']:.1f} d" if pd.notna(summary["median_lag"]) else "N/A")
     with s3:
-        lag_range = (
-            f"{int(summary['min_lag'])}–{int(summary['max_lag'])} d"
-            if pd.notna(summary["min_lag"]) and pd.notna(summary["max_lag"]) else "N/A"
+        lag_range = _fmt_lag_range(summary)
+        st.metric(
+            "Lag Range", lag_range,
+            help="A negative lag means the smoothed death peak came before the case "
+                 "peak (allowed up to 21 days): both peaks sit on broad curves of the "
+                 "same outbreak, and reporting can push the case peak later.",
         )
-        st.metric("Lag Range", lag_range)
     with s4:
         st.metric(
             "Matched Pairs", summary["n_matched"],
-            help="Case peaks that were successfully paired with a death peak "
-                 "occurring within the lag window after them. Each pair lets us "
-                 "measure how many days deaths trailed behind that surge in "
-                 "infections. Peaks with no partner within the window stay unmatched.",
+            help="Case-wave peaks paired with a death-wave peak between 21 days "
+                 "before and the Max Lag Window after them. Each pair measures how "
+                 "long deaths trailed that surge in infections. Peaks with no "
+                 "partner stay unmatched.",
         )
     with s5:
         sr = summary.get("mean_severity_ratio")
@@ -4431,15 +4441,22 @@ def _render_lag_summary_metrics(summary, population):
                  "Lower values indicate mortality remained proportionally smaller relative to case burden.",
         )
     with s6: st.metric("Population", f"{int(population):,}")
+    if pd.notna(summary["min_lag"]) and summary["min_lag"] < 0:
+        st.caption(
+            "Negative lags mean the smoothed death peak came before the case peak "
+            "(allowed up to 21 days). Both peaks sit on broad curves of the same "
+            "outbreak, and reporting can push the reported case peak later."
+        )
 
-def _render_lag_pairs_table(matches):
+def _render_lag_pairs_table(results):
     """Render the matched case→death peak pairs table with severity ratio column."""
+    matches = results["matches"]
     st.subheader(
         "Matched Case → Death Peak Pairs",
-        help="Each row is a surge in cases that was followed by a surge in deaths "
-             "within the allowed time window. 'Lag' is the number of days between "
-             "the two peaks — a plain-language estimate of how long it took for a "
-             "wave of infections to translate into deaths in this county.",
+        help="Each row pairs a surge in cases with the surge in deaths that "
+             "belongs to it. 'Lag' is the number of days between the two peaks — "
+             "a plain-language estimate of how long it took for a wave of "
+             "infections to translate into deaths in this county.",
     )
     if not matches.empty:
         display = matches.copy()
@@ -4465,39 +4482,60 @@ def _render_lag_pairs_table(matches):
             }),
             width="stretch", hide_index=True,
         )
+    elif not results["case_peaks"]:
+        st.info(
+            "No case wave detected, so there is nothing to pair. Very small counties "
+            "often have too few cases for a sustained surge to stand out from "
+            "day-to-day noise. Try **Sensitive** detection to include smaller surges."
+        )
+    elif not results["death_peaks"]:
+        # Largest 3-week death count, from the smoothed per-100k series
+        _deaths_3wk = (
+            results["deaths_ts"]["Per100k MA"].max()
+            * results["population"] / 100_000 * results["death_ma_window"]
+        )
+        _need = min_death_wave_count(results["sensitivity"])
+        st.info(
+            f"No death wave detected, so there is nothing to pair. This county's largest "
+            f"three-week death count was **{_deaths_3wk:.0f}**; at this sensitivity a death "
+            f"wave needs at least **{_need}** deaths in three weeks, clearly above the "
+            f"county's background level. Lags built from a few deaths would mostly "
+            f"reflect chance. Try **Sensitive** detection to include smaller surges."
+        )
     else:
         st.info(
-            "No case peak was followed by a matching death peak within the configured lag window. "
-            "Try increasing **Max Lag Window**, lowering the prominence thresholds, or selecting a different county."
+            f"{len(results['death_peaks'])} death wave(s) detected, but none peaks between "
+            f"21 days before and {results['max_lag_days']} days after a case-wave peak. "
+            "Try increasing **Max Lag Window** or changing **Detection Sensitivity**."
         )
 
 def _render_lag_all_peaks_expander(case_peaks, death_peaks):
-    with st.expander("All Detected Peaks (including unmatched)", expanded=False):
+    def _peaks_table(peaks, value_label, value_fmt):
+        df = pd.DataFrame(peaks)
+        for c in ("peak_date", "wave_start", "wave_end"):
+            df[c] = pd.to_datetime(df[c]).dt.strftime("%Y-%m-%d")
+        df = df.rename(columns={
+            "peak_date": "Peak Date", "peak_value": value_label,
+            "wave_start": "Wave Start", "wave_end": "Wave End",
+            "wave_significance": "Significance",
+        })[["Peak Date", value_label, "Wave Start", "Wave End", "Significance"]]
+        st.dataframe(df.style.format({value_label: value_fmt, "Significance": "{:.0f}"}),
+                     width="stretch", hide_index=True)
+
+    with st.expander("All Detected Wave Peaks (including unmatched)", expanded=False):
         pcol, dcol = st.columns(2)
         with pcol:
-            st.markdown("**Case Peaks**")
+            st.markdown("**Case Wave Peaks**")
             if case_peaks:
-                cp_df = pd.DataFrame(case_peaks)
-                cp_df["peak_date"] = pd.to_datetime(cp_df["peak_date"]).dt.strftime("%Y-%m-%d")
-                cp_df = cp_df.rename(columns={
-                    "peak_date": "Date", "peak_value": "Peak Cases /100k", "peak_prominence": "Prominence",
-                })
-                st.dataframe(cp_df.style.format({"Peak Cases /100k": "{:.2f}", "Prominence": "{:.2f}"}),
-                             width="stretch", hide_index=True)
+                _peaks_table(case_peaks, "Peak Cases /100k", "{:.2f}")
             else:
-                st.caption("No case peaks detected with current settings.")
+                st.caption("No case waves detected with current settings.")
         with dcol:
-            st.markdown("**Death Peaks**")
+            st.markdown("**Death Wave Peaks**")
             if death_peaks:
-                dp_df = pd.DataFrame(death_peaks)
-                dp_df["peak_date"] = pd.to_datetime(dp_df["peak_date"]).dt.strftime("%Y-%m-%d")
-                dp_df = dp_df.rename(columns={
-                    "peak_date": "Date", "peak_value": "Peak Deaths /100k", "peak_prominence": "Prominence",
-                })
-                st.dataframe(dp_df.style.format({"Peak Deaths /100k": "{:.3f}", "Prominence": "{:.3f}"}),
-                             width="stretch", hide_index=True)
+                _peaks_table(death_peaks, "Peak Deaths /100k", "{:.3f}")
             else:
-                st.caption("No death peaks detected with current settings.")
+                st.caption("No death waves detected with current settings.")
 
 def render_lag_tab(cases_df, deaths_df, population_df, locations) -> None:
     """Epidemiological lag analysis tab."""
@@ -4509,10 +4547,10 @@ def render_lag_tab(cases_df, deaths_df, population_df, locations) -> None:
         "reporting delays; differences between counties can have many causes.",
     )
     render_learning_aids(
-        terms=("lag", "severity_ratio", "prominence", "per_100k"),
+        terms=("lag", "severity_ratio", "per_100k"),
     )
 
-    _lp1, _lp2, _lp3 = st.columns([2, 1, 2])
+    _lp1, _lp2, _lp3 = st.columns([2, 3, 1])
     with _lp1:
         lag_mode = st.selectbox(
             "Analysis Mode",
@@ -4522,13 +4560,17 @@ def render_lag_tab(cases_df, deaths_df, population_df, locations) -> None:
                  "County vs County: side-by-side comparison of lag patterns.",
         )
     with _lp2:
-        lag_ma_window = st.selectbox(
-            "Smoothing",
-            [3, 5, 7],
-            index=2,
-            key="lag_ma_window",
-            help="Moving-average window applied to daily per-100k rates before peak detection.",
+        _lag_sens_label = st.selectbox(
+            "Detection Sensitivity",
+            list(_WAVE_SENSITIVITY_OPTIONS),
+            index=1,  # Standard, as on the Wave Analysis tab
+            key="lag_sensitivity",
+            help=(
+                "Peaks are the wave peaks found by the Wave Analysis detector "
+                "with this preset, so both tabs report the same waves."
+            ),
         )
+        lag_sensitivity = _WAVE_SENSITIVITY_OPTIONS[_lag_sens_label]
 
     if lag_mode == "County vs County":
         _lc1, _lc2 = st.columns(2)
@@ -4543,46 +4585,17 @@ def render_lag_tab(cases_df, deaths_df, population_df, locations) -> None:
             location_lag = st.selectbox("Select County", locations, key="timelag_county")
         location_lag_b = None
 
-    # Detection parameters (advanced — collapsed)
-    with st.expander("Detection parameters", expanded=False):
-        st.caption(
-            "Default values work well for most counties. Adjust if the chart shows "
-            "too many or too few peaks."
-        )
-        _dp1, _dp2, _dp3, _dp4 = st.columns(4)
-        with _dp1:
-            case_prominence = st.number_input(
-                "Case Peak Prominence (/100k)",
-                min_value=0.05, max_value=100.0,
-                value=1.0, step=0.05, key="case_prominence",
-                help="Minimum prominence for a case peak. Lower = more sensitive.",
-            )
-        with _dp2:
-            death_prominence = st.number_input(
-                "Death Peak Prominence (/100k)",
-                min_value=0.005, max_value=10.0,
-                value=0.05, step=0.005, format="%.3f", key="death_prominence",
-                help="Minimum prominence for a death peak. Deaths /100k are typically much smaller.",
-            )
-        with _dp3:
+    # Matching window (advanced — collapsed)
+    with st.expander("Matching parameters", expanded=False):
+        _mp1, _ = st.columns([1, 2])
+        with _mp1:
             max_lag_days = st.slider(
                 "Max Lag Window (days)", 7, 120, 90, 1, key="max_lag_days",
                 help="A death peak can only be matched to a case peak within this many days afterward.",
             )
-        with _dp4:
-            min_peak_distance = st.slider(
-                "Min Peak Spacing (days)", 3, 60, 14, 1, key="min_peak_distance",
-                help="Minimum days between consecutive peaks (suppresses noisy double-peaks).",
-            )
 
     # Shared kwargs for analyze_county_lag
-    lag_kwargs = dict(
-        ma_window=lag_ma_window,
-        case_prominence=case_prominence,
-        death_prominence=death_prominence,
-        max_lag_days=max_lag_days,
-        min_peak_distance_days=min_peak_distance,
-    )
+    lag_kwargs = dict(sensitivity=lag_sensitivity, max_lag_days=max_lag_days)
 
     county_name, state = extract_county_state(location_lag)
     lag_results = analyze_county_lag(cases_df, deaths_df, population_df, county_name, state,
@@ -4608,8 +4621,8 @@ def render_lag_tab(cases_df, deaths_df, population_df, locations) -> None:
             else:
                 _render_lag_summary_metrics(summary, lag_results["population"])
                 st.markdown("---")
-                _render_lag_chart(location_lag, lag_results, summary, lag_ma_window, chart_key="lag_chart_a")
-                _render_lag_pairs_table(lag_results["matches"])
+                _render_lag_chart(location_lag, lag_results, summary, chart_key="lag_chart_a")
+                _render_lag_pairs_table(lag_results)
                 _render_lag_all_peaks_expander(lag_results["case_peaks"], lag_results["death_peaks"])
 
         with tab_b:
@@ -4618,8 +4631,8 @@ def render_lag_tab(cases_df, deaths_df, population_df, locations) -> None:
             else:
                 _render_lag_summary_metrics(summary_b, lag_results_b["population"])
                 st.markdown("---")
-                _render_lag_chart(location_lag_b, lag_results_b, summary_b, lag_ma_window, chart_key="lag_chart_b")
-                _render_lag_pairs_table(lag_results_b["matches"])
+                _render_lag_chart(location_lag_b, lag_results_b, summary_b, chart_key="lag_chart_b")
+                _render_lag_pairs_table(lag_results_b)
                 _render_lag_all_peaks_expander(lag_results_b["case_peaks"], lag_results_b["death_peaks"])
 
         with tab_cmp:
@@ -4667,7 +4680,7 @@ def render_lag_tab(cases_df, deaths_df, population_df, locations) -> None:
                 ))
             fig_cmp.update_layout(
                 xaxis=dict(title="Date", showgrid=True, gridcolor="rgba(200,200,200,0.3)"),
-                yaxis=dict(title=f"New Cases per 100k ({lag_ma_window}-day MA)",
+                yaxis=dict(title=f"New Cases per 100k ({lag_results['case_ma_window']}-day MA)",
                            showgrid=True, gridcolor="rgba(200,200,200,0.3)"),
                 hovermode="x unified", height=500, template="plotly_white",
                 legend=dict(x=0.01, y=0.99, bgcolor="rgba(255,255,255,0.85)"),
@@ -4679,8 +4692,8 @@ def render_lag_tab(cases_df, deaths_df, population_df, locations) -> None:
 
         _render_lag_summary_metrics(summary, lag_results["population"])
         st.markdown("---")
-        _render_lag_chart(location_lag, lag_results, summary, lag_ma_window)
-        _render_lag_pairs_table(lag_results["matches"])
+        _render_lag_chart(location_lag, lag_results, summary)
+        _render_lag_pairs_table(lag_results)
         _render_lag_all_peaks_expander(lag_results["case_peaks"], lag_results["death_peaks"])
 
     with st.expander("How this analysis works", expanded=False):
@@ -4689,17 +4702,16 @@ def render_lag_tab(cases_df, deaths_df, population_df, locations) -> None:
 
 1. **Daily values** — cumulative cases/deaths are converted to daily new counts via differencing. Negative values (data corrections) are clipped to zero.
 2. **Per-100k normalization** — daily counts are divided by county population and multiplied by 100,000.
-3. **Smoothing** — a rolling moving average (3, 5, or 7 days) reduces day-to-day reporting noise.
-   _Note: the first (window−1) smoothed values use fewer than `window` data points (`min_periods=1`). Treat early-pandemic smoothed values with caution._
-4. **Peak detection** — `scipy.signal.find_peaks` finds local maxima filtered by prominence and minimum spacing.
-5. **Peak matching** — each case peak is matched to the nearest death peak occurring on or after it, within the configured lag window. Each death peak can only be matched once.
+3. **Smoothing** — a centered moving average. Cases use the window the Wave Analysis tab picks automatically (usually 7 days). Deaths use a 21-day window: deaths are small counts that are often reported in weekly batches, and a shorter window turns each batch into a spike.
+4. **Wave detection** — peaks are the wave peaks from the Wave Analysis detector (adaptive baseline, sustained-elevation regions, peak significance filter) at the selected sensitivity, so both tabs report the same waves. For deaths the detector requires a minimum number of excess deaths per day, so one or two reported deaths cannot form a wave.
+5. **Peak matching** — each case-wave peak is paired with the nearest death-wave peak from 21 days before it to the Max Lag Window after it (and not before the case wave starts). A small negative lag is allowed because both peaks are read off broad smoothed curves of the same outbreak, and reporting can push the case peak later. Each death peak can only be matched once. The Wave Analysis tab's case-vs-death comparison uses the same rule.
 6. **Lag** — `lag_days = death_peak_date − case_peak_date`.
-7. **Severity ratio** — `death_peak_value / case_peak_value` for each matched pair. Reflects how large the mortality peak was relative to the case surge that preceded it.
+7. **Severity ratio** — `death_peak_value / case_peak_value` for each matched pair, using the smoothed rates on the peak dates. Reflects how large the mortality peak was relative to the case surge that preceded it.
 
 **Assumptions**
 - Per-100k normalization uses a single, static county population applied across all dates.
-- A death peak with no preceding case peak within the lag window is reported as **unmatched**.
-- Default prominence thresholds (1.0 cases/100k, 0.05 deaths/100k) are starting points; smaller counties or later pandemic waves may need lower thresholds to detect meaningful peaks.
+- A peak with no partner within the window is reported as **unmatched**.
+- Small counties often record too few deaths to form a death wave; they then show no matched pairs rather than pairs built from individual deaths.
 """)
         st.markdown("**The core formulas**")
         st.latex(r"r_t = \frac{c_t - c_{t-1}}{P} \times 100{,}000")
@@ -4729,10 +4741,10 @@ def render_wave_tab(cases_df, deaths_df, transforms, locations, population_df, v
     with r1c2:
         wave_metric = st.selectbox(
             "Metric",
-            ["Cases (Raw)", "Cases per 100k", "Deaths (Raw)", "Deaths per 100k"],
+            ["Daily Cases", "Daily Cases per 100k", "Daily Deaths", "Daily Deaths per 100k"],
             key="wave_metric",
             help=(
-                "Cases/Deaths (Raw): daily counts  |  "
+                "Daily Cases/Deaths: raw daily counts  |  "
                 "per 100k: normalised by county population — best for inter-county comparisons"
             ),
         )
@@ -4786,14 +4798,9 @@ def render_wave_tab(cases_df, deaths_df, transforms, locations, population_df, v
     # Sensitivity + smoothing controls
     dc1, dc2, dc3 = st.columns([2, 2, 1])
     with dc1:
-        _SENS_OPTIONS = {
-            "Conservative — major national waves only (~3–5)":   "conservative",
-            "Standard — major + significant regional surges (~4–8)": "standard",
-            "Sensitive — includes smaller local surges (~6–15)": "sensitive",
-        }
         _sens_label = st.selectbox(
             "Detection Sensitivity",
-            list(_SENS_OPTIONS.keys()),
+            list(_WAVE_SENSITIVITY_OPTIONS.keys()),
             index=1,  # "Standard" default
             key="wave_sensitivity",
             help=(
@@ -4804,18 +4811,24 @@ def render_wave_tab(cases_df, deaths_df, transforms, locations, population_df, v
                 "Use Sensitive to explore smaller regional events."
             ),
         )
-        wave_sensitivity = _SENS_OPTIONS[_sens_label]
+        wave_sensitivity = _WAVE_SENSITIVITY_OPTIONS[_sens_label]
     with dc2:
         auto_smooth = st.checkbox(
             "Auto-select smoothing window", value=True, key="wave_auto_smooth",
             help="System selects the optimal moving-average window from the signal variance",
         )
         if auto_smooth:
-            wave_ma_window = estimate_optimal_smoothing(analysis_vals)
-            st.caption(f"Auto: **{wave_ma_window}-day** moving average")
+            # Deaths: fixed longer window — batch-reported small counts (see
+            # wave_analysis.DEATH_MA_WINDOW); the variance heuristic suits cases.
+            if is_cases_metric:
+                wave_ma_window = estimate_optimal_smoothing(analysis_vals)
+                st.caption(f"Auto: **{wave_ma_window}-day** moving average")
+            else:
+                wave_ma_window = DEATH_MA_WINDOW
+                st.caption(f"Auto: **{wave_ma_window}-day** moving average (deaths are often batch-reported)")
         else:
             wave_ma_window = st.selectbox(
-                "Smoothing Window", [3, 5, 7, 14], index=2, key="wave_ma_window_manual",
+                "Smoothing Window", [3, 5, 7, 14, 21], index=2, key="wave_ma_window_manual",
                 help="Larger window → smoother signal, fewer detected waves",
             )
     with dc3:
@@ -4889,6 +4902,9 @@ def render_wave_tab(cases_df, deaths_df, transforms, locations, population_df, v
             prominence=_eff_prominence,
             min_merge_days=_eff_merge,
             sensitivity=_eff_sensitivity,
+            series="cases" if is_cases_metric else "deaths",
+            # one death in the analysed units (per-100k or raw)
+            count_unit=(100_000 / county_population) if is_percap_metric else 1.0,
         )
     except Exception as e:
         st.warning(f"Wave detection failed: {e}")
@@ -4904,10 +4920,11 @@ def render_wave_tab(cases_df, deaths_df, transforms, locations, population_df, v
         raw_county_results = calculate_waves_for_county(
             cases_df, deaths_df, daily_cases_df, daily_deaths_df,
             wave_county_name, wave_state,
-            ma_window=wave_ma_window,
+            ma_window=wave_ma_window if is_cases_metric else 7,
             prominence=_eff_prominence,
             min_merge_days=_eff_merge,
             sensitivity=_eff_sensitivity,
+            death_ma_window=DEATH_MA_WINDOW if is_cases_metric else wave_ma_window,
         )
     except Exception:
         raw_county_results = {"error": "unavailable"}
@@ -5248,41 +5265,35 @@ def render_wave_tab(cases_df, deaths_df, transforms, locations, population_df, v
             c_list = raw_county_results["cases"]["waves"]
             d_list = raw_county_results["deaths"]["waves"]
 
-            def _match_death_wave(case_peak_date, used=()):
-                """Index and lag of the nearest death wave peaking 0–89 days after
-                case_peak_date (the Overview's 90-day window), or None."""
-                best = None
-                for j, dw in enumerate(d_list):
-                    if j in used:
-                        continue
-                    _lag = (pd.Timestamp(dw["peak_date"]) - pd.Timestamp(case_peak_date)).days
-                    if 0 <= _lag < 90 and (best is None or _lag < best[1]):
-                        best = (j, _lag)
-                return best
+            # Same pairing rule as the Time Lag tab (lag_analysis)
+            _pairs = {i: (j, lag) for i, j, lag in pair_case_death_waves(c_list, d_list)}
 
             with cmp3:
                 c_peak = raw_county_results["cases"]["date_of_peak_wave"]
-                _pk_match = _match_death_wave(c_peak) if c_peak else None
+                _pk_idx = next((i for i, cw in enumerate(c_list)
+                                if cw["peak_date"] == c_peak), None)
+                _pk_match = _pairs.get(_pk_idx)
                 if _pk_match is not None:
                     st.metric("Peak Death Lag", f"{_pk_match[1]} days",
-                              help="Days from the most significant case wave's peak to the "
-                                   "death-wave peak that followed it within 90 days")
+                              help="Days from the most significant case wave's peak to its "
+                                   "paired death-wave peak (up to 21 days before or 90 "
+                                   "days after), as on the Time Lag tab")
                 else:
                     st.metric("Peak Death Lag", "N/A",
-                              help="No death-wave peak within 90 days after the most "
-                                   "significant case wave's peak")
+                              help="No death-wave peak between 21 days before and 90 days "
+                                   "after the most significant case wave's peak")
 
             if c_list or d_list:
                 # Pair each case wave with the death wave that followed it in time
                 # (not by list position); unmatched death waves get their own row.
                 rows, _used = [], set()
-                for cw in c_list:
+                for _ci, cw in enumerate(c_list):
                     row = {
                         "Case Peak Date":  str(cw["peak_date"])[:10],
                         "Case Peak Count": f"{cw['peak_value']:,.0f}",
                         "Case Duration":   f"{cw['duration_days']} days",
                     }
-                    _m = _match_death_wave(cw["peak_date"], _used)
+                    _m = _pairs.get(_ci)
                     if _m is not None:
                         _used.add(_m[0])
                         dw = d_list[_m[0]]
@@ -5403,6 +5414,9 @@ def render_wave_tab(cases_df, deaths_df, transforms, locations, population_df, v
 
     with st.expander("How wave detection works", expanded=False):
         _preset_info = SENSITIVITY_PRESETS.get(wave_sensitivity, {})
+        if not is_cases_metric:
+            _preset_info = {**_preset_info, **DEATH_PRESET_OVERRIDES.get(wave_sensitivity, {})}
+        _elev_unit = "cases/day" if is_cases_metric else "deaths/day"
         _elev_rel  = int(_preset_info.get("elevation_threshold_rel", 0.30) * 100)
         _elev_abs  = _preset_info.get("elevation_threshold_abs", 2.0)
         _min_reg   = _preset_info.get("min_region_duration", 14)
@@ -5413,14 +5427,14 @@ def render_wave_tab(cases_df, deaths_df, transforms, locations, population_df, v
 **Detection pipeline ({_sens_disp} mode) — epidemiological wave detection**
 
 1. **Smoothing** — {wave_ma_window}-day moving average applied to suppress reporting artefacts
-   (weekend effects, batch corrections). {'*Window auto-selected from signal variance.*' if auto_smooth else '*Manually specified.*'}
+   (weekend effects, batch corrections). {('*Window auto-selected from signal variance.*' if is_cases_metric else '*Deaths use a fixed 21-day window: small counts are often reported in weekly batches.*') if auto_smooth else '*Manually specified.*'}
 2. **Adaptive baseline** — local epidemic background estimated as the rolling 10th percentile
    over a ±{_bl_win // 2}-day window, then re-smoothed over {_bl_smooth} days.
    The baseline represents between-wave transmission so that post-Omicron surges
    are measured against their local context rather than the county's all-time maximum.
    This is why the detector can find a BA.5 wave even when it is 10× smaller than Omicron.
 3. **Epidemic region detection** — sustained periods where the smoothed signal exceeds
-   the local baseline by **+{_elev_rel}% + {_elev_abs:.0f} cases/day** for ≥ **{_min_reg} consecutive days**.
+   the local baseline by **+{_elev_rel}% + {_elev_abs:.3g} {_elev_unit}** for ≥ **{_min_reg} consecutive days**.
    Nearby elevated periods separated by ≤ **{_reg_gap} days** are merged into one region
    (one continuous epidemic envelope — e.g., the BA.1/BA.2 sub-waves of Omicron).
 4. **Valley splitting** — a merged region spanning two genuinely distinct surges (e.g.,
@@ -5491,23 +5505,19 @@ def render_county_factors_tab(
         )
 
     OUTCOME_OPTIONS = {
-        "Cases per 100k (cumulative)":   "cases_per_100k",
-        "Deaths per 100k (cumulative)":  "deaths_per_100k",
+        "Cases per 100k":                "cases_per_100k",
+        "Deaths per 100k":               "deaths_per_100k",
         "Case Fatality Rate (%)":        "case_fatality_rate",
         "Peak of Most Significant Wave — cases/100k":   "peak_wave_cases_per_100k",
         "Peak of Most Significant Wave — deaths/100k":  "peak_wave_deaths_per_100k",
         "Number of Case Waves":          "case_wave_count",
         # Vaccination outcomes (CDC county dataset)
-        "Vaccination Complete (%)":      "vax_complete_pct",
-        "At Least 1 Dose (%)":           "vax_dose1_pct",
+        **VAX_METRIC_COLS,
     }
 
     FACTOR_OPTIONS = {
         # Vaccination (CDC county-level dataset — as of May 2023)
-        "Vaccination Complete (%)":           "vax_complete_pct",
-        "At Least 1 Dose (%)":               "vax_dose1_pct",
-        "Booster Rate (%)":                  "vax_booster_pct",
-        "65+ Vaccination Rate (%)":          "vax_complete_65plus_pct",
+        **VAX_METRIC_COLS,
         # Healthcare access
         "Primary Care Physicians per 100k":  "pcp_per_100k",
         "Total Active MDs per 100k":         "total_md_per_100k",
@@ -5533,7 +5543,7 @@ def render_county_factors_tab(
         "RUCC Code (1=most metro → 9=most rural)": "rucc_code",
     }
     if _has_political:
-        FACTOR_OPTIONS["2020 Presidential Margin (D−R pts, state-level)"] = "pres_2020_margin_d"
+        FACTOR_OPTIONS["2020 Presidential Margin"] = "pres_2020_margin_d"
 
     WAVE_OUTCOMES = {"peak_wave_cases_per_100k", "peak_wave_deaths_per_100k", "case_wave_count"}
 
@@ -6757,7 +6767,7 @@ def render_modeling_tab(master_county_df, locations) -> None:
 
     # SECTION 5 — VACCINATION EFFICACY ANALYSIS
 
-    _vax_eff_cols = ["vax_complete_pct", "vax_dose1_pct", "vax_booster_pct"]
+    _vax_eff_cols = list(VAX_METRIC_COLS.values())
     _vax_eff_present = [c for c in _vax_eff_cols if c in plot_df.columns]
 
     if _vax_eff_present:
@@ -6789,7 +6799,7 @@ def render_modeling_tab(master_county_df, locations) -> None:
             _ve_color_by = st.selectbox(
                 "Color by",
                 ["Metro/Nonmetro", "Census Region"]
-                + (["Governor Party (state-level)"] if "governor_party" in plot_df.columns else [])
+                + (["Governor Party"] if "governor_party" in plot_df.columns else [])
                 + ["None"],
                 key="ve_color_by",
             )
@@ -6799,7 +6809,7 @@ def render_modeling_tab(master_county_df, locations) -> None:
             _ve_cols_needed.append("rucc_group")
         if _ve_color_by == "Census Region" and "census_region_name" in plot_df.columns:
             _ve_cols_needed.append("census_region_name")
-        if _ve_color_by == "Governor Party (state-level)" and "governor_party" in plot_df.columns:
+        if _ve_color_by == "Governor Party" and "governor_party" in plot_df.columns:
             _ve_cols_needed.append("governor_party")
 
         _ve_df = plot_df[[c for c in _ve_cols_needed if c in plot_df.columns]].dropna(
@@ -6824,7 +6834,7 @@ def render_modeling_tab(master_county_df, locations) -> None:
                 _ve_color_col = "rucc_group"
             elif _ve_color_by == "Census Region" and "census_region_name" in _ve_df.columns:
                 _ve_color_col = "census_region_name"
-            elif _ve_color_by == "Governor Party (state-level)" and "governor_party" in _ve_df.columns:
+            elif _ve_color_by == "Governor Party" and "governor_party" in _ve_df.columns:
                 _ve_color_col = "governor_party"
 
             _ve_hover = (
