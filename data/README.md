@@ -4,10 +4,10 @@ The dashboard reads every dataset from this `data/` directory, at the exact path
 
 ## Quick setup — data supplement
 
-Download **[covid_data_supplement_v2.zip](https://github.com/snyderstack/covid_dashboard/releases/download/v2.0-data/covid_data_supplement_v2.zip)** (220 MB, from release [Data supplement v2.0](https://github.com/snyderstack/covid_dashboard/releases/tag/v2.0-data)) and unzip it **in the repository root** (the folder containing `app.py`). The archive already contains the `data/…` paths, so every file lands where the loaders expect it. It also includes `DATA_SUPPLEMENT_README.txt` (the same file list as a text file) and the HRSA data use agreement for the AHRF files.
+Download **[covid_data_supplement_v2.1.zip](https://github.com/snyderstack/covid_dashboard/releases/download/v2.1-data/covid_data_supplement_v2.1.zip)** (220 MB, from release [Data supplement v2.1](https://github.com/snyderstack/covid_dashboard/releases/tag/v2.1-data)) and unzip it **in the repository root** (the folder containing `app.py`). The archive already contains the `data/…` paths, so every file lands where the loaders expect it. It also includes a copy of `data/state_political.csv`, `DATA_SUPPLEMENT_README.txt` (the same file list as a text file), and the HRSA data use agreement for the AHRF files. Those two files are also in the repository, with identical content, so use `-o` to overwrite without being asked.
 
 ```bash
-unzip covid_data_supplement_v2.zip   # run from the repository root
+unzip -o covid_data_supplement_v2.1.zip   # run from the repository root
 ```
 
 ## All data files
@@ -20,7 +20,7 @@ unzip covid_data_supplement_v2.zip   # run from the repository root
 | AHRF 2022–2023 (CSV) | `data/ahrf2023.csv` | 38 MB | Yes | HRSA AHRF — ⟨paste link⟩ | `ahrf_loader` | County Factors, Statistical Modeling, Metro/Nonmetro (RUCC) |
 | AHRF 2019–2020 SAS layout | `data/AHRF_2019-2020/DOC/AHRF2019-2020.sas` | 1.1 MB | Yes | HRSA AHRF 2019–2020 release — ⟨paste link⟩ | `ahrf_loader` | Parsing `AHRF2020.asc` (below) |
 | County boundaries (GeoJSON) | `data/geojson-counties-fips.json` | 3.1 MB | Yes | [Plotly datasets](https://raw.githubusercontent.com/plotly/datasets/master/geojson-counties-fips.json) — auto-downloaded on first launch if missing | `tools.load_county_geojson` | Offline maps, hotspot analysis, bordering counties |
-| State political context (Jan 2021) | `data/state_political.csv` | 8 KB | Yes | ⟨paste link / source⟩ | `tools.load_state_political` | Overview political section, map political metrics, margin predictor |
+| State political context (Jan 2021) | `data/state_political.csv` | 5 KB | Yes (also in supplement zip) | ⟨paste link / source⟩ | `tools.load_state_political` | Overview political section, map political metrics, margin predictor |
 | CDC county vaccinations | `data/COVID-19_Vaccinations_in_the_United_States,County_20260623.csv` | 635 MB | No — supplement zip | [CDC data.cdc.gov](https://data.cdc.gov/Vaccinations/COVID-19-Vaccinations-in-the-United-States-County/8xkx-amqh) (export as CSV) — ⟨paste link⟩ | `vaccination_loader` | All vaccination features |
 | AHRF 2020–2021 (SAS) | `data/AHRF_2020-2021_SAS/AHRF2021.sas7bdat` | 184 MB | No — supplement zip | HRSA AHRF 2020–2021 SAS release — ⟨paste link⟩ | `ahrf_loader` | Supplementary 2019–2021 AHRF columns |
 | AHRF 2019–2020 (ASCII) | `data/AHRF2020.asc` | 98 MB | No — supplement zip | HRSA AHRF 2019–2020 ASCII release — ⟨paste link⟩ | `ahrf_loader` | Supplementary 2018–2020 variables (HPSA, physician counts) |
