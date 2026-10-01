@@ -1,0 +1,19 @@
+variant,factor,coef_per_sd,se,ci95_lo,ci95_hi,p,n,sig_bonf
+main (weights 1/SE^2),log10 population density (per sq mi),-0.00602796,0.0135472,-0.0325799,0.020524,0.656348,915,False
+main (weights 1/SE^2),Primary care physicians per 100k,0.00165003,0.0134999,-0.0248092,0.0281093,0.90272,915,False
+main (weights 1/SE^2),% aged 65+,0.0247659,0.00991944,0.00532418,0.0442077,0.0125353,915,False
+main (weights 1/SE^2),Poverty rate (%),-0.00542805,0.0131255,-0.0311536,0.0202975,0.679204,915,False
+main (weights 1/SE^2),% uninsured (under 65),-0.0373296,0.0165068,-0.0696824,-0.00497691,0.0237301,915,False
+main (weights 1/SE^2),"2020 presidential margin, D-R (state)",0.0111849,0.013085,-0.0144612,0.036831,0.392668,915,False
+(a) unweighted,log10 population density (per sq mi),-0.03263,0.0146159,-0.0612767,-0.00398336,0.0255819,915,False
+(a) unweighted,Primary care physicians per 100k,-0.00786484,0.0178744,-0.042898,0.0271684,0.659933,915,False
+(a) unweighted,% aged 65+,0.0334803,0.0168057,0.000541697,0.0664189,0.0463495,915,False
+(a) unweighted,Poverty rate (%),-0.000662331,0.0174604,-0.0348841,0.0335595,0.969741,915,False
+(a) unweighted,% uninsured (under 65),-0.015345,0.0181262,-0.0508716,0.0201817,0.397238,915,False
+(a) unweighted,"2020 presidential margin, D-R (state)",0.00370861,0.0160215,-0.0276929,0.0351101,0.816944,915,False
+(b) weights capped at 95th pct,log10 population density (per sq mi),-0.00294245,0.0118076,-0.0260849,0.0202,0.803206,915,False
+(b) weights capped at 95th pct,Primary care physicians per 100k,0.00752124,0.0118539,-0.0157119,0.0307544,0.525757,915,False
+(b) weights capped at 95th pct,% aged 65+,0.0259577,0.0109972,0.00440364,0.0475118,0.0182554,915,False
+(b) weights capped at 95th pct,Poverty rate (%),-0.00564631,0.0123887,-0.0299277,0.0186351,0.64856,915,False
+(b) weights capped at 95th pct,% uninsured (under 65),-0.0326047,0.016308,-0.0645679,-0.000641584,0.0455753,915,False
+(b) weights capped at 95th pct,"2020 presidential margin, D-R (state)",0.00895268,0.0103035,-0.0112418,0.0291472,0.384904,915,False

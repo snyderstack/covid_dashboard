@@ -1,0 +1,25 @@
+variant,factor,coef_per_sd,se,ci95_lo,ci95_hi,p,n,sig_bonf
+main,log10 population density (per sq mi),-0.00602796,0.0135472,-0.0325799,0.020524,0.656348,915,False
+main,Primary care physicians per 100k,0.00165003,0.0134999,-0.0248092,0.0281093,0.90272,915,False
+main,% aged 65+,0.0247659,0.00991944,0.00532418,0.0442077,0.0125353,915,False
+main,Poverty rate (%),-0.00542805,0.0131255,-0.0311536,0.0202975,0.679204,915,False
+main,% uninsured (under 65),-0.0373296,0.0165068,-0.0696824,-0.00497691,0.0237301,915,False
+main,"2020 presidential margin, D-R (state)",0.0111849,0.013085,-0.0144612,0.036831,0.392668,915,False
+(i) conservative_also_found,log10 population density (per sq mi),0.00305793,0.0193734,-0.0349132,0.0410291,0.874582,536,False
+(i) conservative_also_found,Primary care physicians per 100k,-0.00848379,0.0204636,-0.0485917,0.0316241,0.67845,536,False
+(i) conservative_also_found,% aged 65+,0.0152102,0.0133892,-0.0110322,0.0414526,0.255955,536,False
+(i) conservative_also_found,Poverty rate (%),-0.00369451,0.0183442,-0.0396485,0.0322595,0.840386,536,False
+(i) conservative_also_found,% uninsured (under 65),-0.0464852,0.0239803,-0.0934856,0.000515261,0.052565,536,False
+(i) conservative_also_found,"2020 presidential margin, D-R (state)",0.0207592,0.0186911,-0.0158746,0.057393,0.266721,536,False
+(ii) excl. smallest pop tercile,log10 population density (per sq mi),0.00452519,0.0155467,-0.0259457,0.0349961,0.770997,617,False
+(ii) excl. smallest pop tercile,Primary care physicians per 100k,0.00583332,0.0149305,-0.0234298,0.0350965,0.696019,617,False
+(ii) excl. smallest pop tercile,% aged 65+,0.0236913,0.011375,0.0013967,0.0459858,0.0372739,617,False
+(ii) excl. smallest pop tercile,Poverty rate (%),-0.00260436,0.0138729,-0.0297948,0.0245861,0.851089,617,False
+(ii) excl. smallest pop tercile,% uninsured (under 65),-0.0474829,0.0207375,-0.0881276,-0.00683813,0.0220381,617,False
+(ii) excl. smallest pop tercile,"2020 presidential margin, D-R (state)",0.0229071,0.017405,-0.0112059,0.0570202,0.188131,617,False
+(iii) excl. r_nonpositive,log10 population density (per sq mi),-0.0177767,0.0129179,-0.0430953,0.00754182,0.16878,804,False
+(iii) excl. r_nonpositive,Primary care physicians per 100k,-0.00634252,0.0159346,-0.0375738,0.0248887,0.690605,804,False
+(iii) excl. r_nonpositive,% aged 65+,0.0271103,0.0135256,0.000600594,0.05362,0.0450306,804,False
+(iii) excl. r_nonpositive,Poverty rate (%),-0.000727865,0.0106718,-0.0216441,0.0201884,0.945623,804,False
+(iii) excl. r_nonpositive,% uninsured (under 65),-0.032871,0.0161003,-0.064427,-0.001315,0.0411873,804,False
+(iii) excl. r_nonpositive,"2020 presidential margin, D-R (state)",0.00646661,0.0128997,-0.0188163,0.0317495,0.616159,804,False

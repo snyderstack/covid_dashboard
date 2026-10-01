@@ -1,0 +1,16 @@
+Step 3 notes
+============
+- R_eff = 1 + r/gamma, so R_eff - 1 scales by 1/gamma for every county; WLS
+  coefficients scale with 1/gamma and p-values are invariant to gamma.
+  gamma is therefore not varied in the robustness tables.
+- Poverty rate (AHRF pers_povty_pct_20) is used because median household income
+  is not in the AHRF file (only median family income).
+- % uninsured is AHRF pers_noins_lt65_pct_20: % of persons under 65 without
+  health insurance, 2020 (SAHIE).
+- Population density is AHRF/master-table pop_density_per_sqmi (2020 Census
+  population / 2020 land area), log10-transformed.
+- Presidential margin is state-level (tools.load_state_political), shared by all
+  counties in a state; SEs are clustered by state (51 clusters incl. DC).
+- Weighted R^2 = 1 - sum w e^2 / sum w (y - weighted mean)^2.
+- Joint test (model b, state-clustered): F(6, 50) = 2.995, p = 0.01406.
+- Associations are county-level (ecological).

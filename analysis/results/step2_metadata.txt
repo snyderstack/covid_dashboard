@@ -1,0 +1,44 @@
+Step 2 metadata
+===============
+Quantity: R_eff, effective reproduction number at wave onset, from the
+exponential growth rate r.
+Growth rate r: Poisson GLM, log link, on RAW daily new case counts
+  (prepare_daily_per_capita 'Daily Cases': cumulative differences, negatives
+  clipped to 0), log E[cases_t] = a + r*t + day-of-week fixed effects, over a
+  fixed 14-day window from the growth start. Dispersion = Pearson
+  chi2/df; if > 2, SEs are quasi-Poisson (scale = Pearson chi2/df).
+  deviance_df is reported as a goodness-of-fit statistic and not filtered on.
+  SIR formula:  R_eff = 1 + r/gamma,                1/gamma = 7 days
+  SEIR formula: R_eff = (1 + r/sigma)(1 + r/gamma), 1/sigma = 3 days
+  SE(R_eff, SIR formula) = SE(r)/gamma; SEIR SE by the delta method.
+
+Smoothing: centered 7-day moving average for all counties (lag_analysis.prepare_daily_per_capita / wave_analysis.smooth_series).
+  The wave detector is run with the same 7-day window. The dashboard itself
+  auto-selects 3/5/7/14 days per county; numbers here therefore differ from
+  the dashboard's Wave Analysis tab for counties where it picks another window.
+
+Wave detection: wave_analysis.calculate_wave_metrics, 'standard' preset.
+First major wave (MAIN dataset): earliest standard wave with onset before 2021-01-01 whose
+  peak is >= 50% of the county's largest pre-2021 standard-wave peak (peak = smoothed per-100k value on the peak date).
+  conservative_also_found: the 'conservative' preset also reports a wave with
+  onset before 2021-01-01 (robustness subset for Step 3).
+
+Growth start: day of the minimum smoothed value within [onset, onset +
+  floor((peak - onset)/2)]. The window ends at the detected peak if the 14-day
+  window would run past it (window_truncated_at_peak).
+  Day-of-week effects are used only for windows >= 12 days (8 parameters);
+  shorter windows are fit with the trend only (dow_effects = False).
+Filter: drop only if the window has < 30 total cases or < 7 days
+  ('rise too short'). r <= 0 is kept, flagged r_nonpositive; R_eff < 1 allowed.
+ols_* columns: earlier estimator (OLS of ln smoothed per-100k series, growth
+  start to rise time-midpoint), kept for comparison only; not used to filter.
+
+Excluded counties (status = excluded): 54 with no standard wave starting
+  before 2021-01-01; listed in step2_reff_main.csv with the onset and peak of
+  their first standard wave of any date and their 2020 maximum smoothed value.
+  1 of them have a first standard wave starting 2021-01-01..07 and
+  peaking within 2 days of onset; these 1-2 day 'waves' appear to be holiday
+  reporting artifacts: Marion County WV.
+  The rest have a first standard wave starting later in 2021 or after.
+
+Unit of analysis: county. Associations are ecological.

@@ -1,0 +1,7 @@
+factor,column,spearman_rho,spearman_p,spearman_n,spearman_sig_bonf,wls_coef_per_sd,wls_se,wls_ci95_lo,wls_ci95_hi,wls_p,wls_n,wls_n_states,wls_sig_bonf
+log10 population density (per sq mi),log10_pop_density,0.0231314,0.484654,915,False,-0.00602796,0.0135472,-0.0325799,0.020524,0.656348,915,51,False
+Primary care physicians per 100k,pcp_per_100k,-0.0005608,0.986484,915,False,0.00165003,0.0134999,-0.0248092,0.0281093,0.90272,915,51,False
+% aged 65+,pct_pop_65plus,0.0410221,0.215086,915,False,0.0247659,0.00991944,0.00532418,0.0442077,0.0125353,915,51,False
+Poverty rate (%),poverty_pct,0.0757169,0.0219915,915,False,-0.00542805,0.0131255,-0.0311536,0.0202975,0.679204,915,51,False
+% uninsured (under 65),uninsured_lt65_pct,-0.0159079,0.630822,915,False,-0.0373296,0.0165068,-0.0696824,-0.00497691,0.0237301,915,51,False
+"2020 presidential margin, D-R (state)",pres2020_margin_d,0.0535048,0.10579,915,False,0.0111849,0.013085,-0.0144612,0.036831,0.392668,915,51,False

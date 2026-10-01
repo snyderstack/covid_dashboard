@@ -1,0 +1,4 @@
+# Extra packages for the thesis scripts in analysis/ (on top of ../requirements.txt)
+matplotlib>=3.8
+scipy>=1.9.0
+statsmodels>=0.14
