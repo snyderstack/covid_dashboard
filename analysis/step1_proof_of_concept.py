@@ -32,6 +32,10 @@ COUNTIES = [
     ("Lancaster County",   "NE", "mid-size"),
 ]
 
+# Late-December reporting gap (zero reports, then a catch-up spike) to annotate
+GAP_COUNTY = "Maricopa County"
+GAP_WINDOW = (pd.Timestamp("2020-12-15"), pd.Timestamp("2021-01-10"))
+
 DISAGREE_FRAC = 0.30   # flag if |Reff_sir - Reff_growth| / Reff_growth exceeds this
 POOR_R2 = 0.80         # flag SIR fit with R^2 below this
 
@@ -98,6 +102,21 @@ def analyze(cases, pop_df, gamma, sigma):
     return pd.DataFrame(rows), panels
 
 
+def annotate_gap(ax, ts):
+    """Arrow to the late-December dip in the smoothed series (holiday reporting gap)."""
+    win = ts[ts["Date"].between(*GAP_WINDOW)]
+    if win.empty:
+        return
+    dip = win.loc[win["Per100k MA"].idxmin()]
+    # Headroom above the catch-up spike; the arrow drops straight into the dip
+    ax.set_ylim(0, ts["Per100k MA"].max() * 1.3)
+    ax.annotate("holiday reporting gap", xy=(dip["Date"], dip["Per100k MA"]),
+                xytext=(dip["Date"], 0.90), textcoords=("data", "axes fraction"),
+                fontsize=6.5, color=INK_2, ha="center", va="bottom",
+                arrowprops=dict(arrowstyle="->", color=INK_2, lw=0.7,
+                                shrinkA=2, shrinkB=2))
+
+
 def plot(panels, path_stem):
     plt.rcParams.update({
         "font.size": 9, "axes.titlesize": 9.5, "axes.labelsize": 9,
@@ -108,7 +127,7 @@ def plot(panels, path_stem):
     n = len(panels)
     ncol = 3
     nrow = int(np.ceil(n / ncol))
-    fig, axes = plt.subplots(nrow, ncol, figsize=(7.2, 2.35 * nrow), squeeze=False)
+    fig, axes = plt.subplots(nrow, ncol, figsize=(7.2, 2.6 * nrow), squeeze=False)
     for ax, (county, state, ts, wave, g, s) in zip(axes.flat, panels):
         # Context: 21 days either side of the fitted wave
         lo = max(wave["start_idx"] - 21, 0)
@@ -121,8 +140,11 @@ def plot(panels, path_stem):
                 label="SIR fit")
         ax.set_title(f"{county.replace(' County', '')}, {state}\n"
                      f"$R_{{eff}}^{{SIR}}$ = {s['Reff_sir']:.2f}  "
-                     f"($R_{{eff}}^{{growth}}$ = {g['Reff_sir_formula']:.2f})", color=INK)
+                     f"($R_{{eff}}^{{growth}}$ = {g['Reff_sir_formula']:.2f})\n"
+                     f"attack rate {s['attack_rate']:.0%}", color=INK)
         ax.set_ylim(bottom=0)
+        if county == GAP_COUNTY:
+            annotate_gap(ax, ts.iloc[lo:hi + 1])
         ax.xaxis.set_major_locator(mdates.AutoDateLocator(minticks=3, maxticks=4))
         ax.xaxis.set_major_formatter(mdates.DateFormatter("%b\n%Y"))
         ax.grid(axis="y", color="#e6e5e1", lw=0.6)
@@ -143,6 +165,23 @@ def plot(panels, path_stem):
     plt.close(fig)
 
 
+def caption(df, gamma):
+    ar = ", ".join(f"{r.county.replace(' County', '')} {r.sir_final_attack_rate:.0%}"
+                   for r in df.itertuples())
+    return (
+        "Observed daily cases per 100k (centered 7-day moving average, blue) and the "
+        f"least-squares SIR fit (dashed orange; 1/gamma = {1 / gamma:g} days, fitted "
+        "transmission rate, initial infected fraction and reporting fraction) for the "
+        "first major pre-2021 wave in five example counties, shown with 21 days either "
+        "side of the fitted wave. Shading: 14-day window of the Poisson growth-rate fit. "
+        "Titles give the SIR-implied final attack rate (share of the population ever "
+        f"infected if the wave ran to completion: {ar}) and R_eff from the SIR fit and "
+        "from the growth rate (1 + r/gamma). In Maricopa the smoothed series drops to "
+        "zero in late December and then spikes: a holiday reporting gap (no reports "
+        "over the holidays, then a catch-up), not a real change in incidence."
+    )
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--gamma-days", type=float, default=R.INFECTIOUS_PERIOD_DAYS,
@@ -159,7 +198,9 @@ def main():
 
     csv_path = os.path.join(R.RES_DIR, "step1_reff_poc.csv")
     df.to_csv(csv_path, index=False, float_format="%.6g")
-    plot(panels, os.path.join(R.FIG_DIR, "step1_sir_fits"))
+    stem = os.path.join(R.FIG_DIR, "step1_sir_fits")
+    plot(panels, stem)
+    R.write_caption(stem, caption(df, gamma))
 
     show = df[["county", "wave_onset", "wave_peak", "growth_win_start",
                "growth_win_end", "window_cases", "dispersion_pearson",

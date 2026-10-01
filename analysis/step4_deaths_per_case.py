@@ -31,11 +31,13 @@ Run from the repo root (after step2 and step3):
 
 import argparse
 import os
+import textwrap
 import warnings
 
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt            # noqa: E402
+import matplotlib.ticker                   # noqa: E402
 import numpy as np                         # noqa: E402
 import pandas as pd                        # noqa: E402
 import statsmodels.api as sm               # noqa: E402
@@ -62,6 +64,11 @@ SECONDARY = [
 ]
 BONF_SECONDARY = 0.05 / len(SECONDARY)
 MONTHS = pd.period_range("2020-03", "2020-12", freq="M")
+N_BOOT = 1000           # bootstrap resamples (counties) for figure CIs
+N_AGE_BINS = 10         # equal-count bins of % aged 65+ in the age figure
+BOOT_SEED = 20201231
+# Bonferroni-adjusted two-sided normal quantile for the forest plot (coverage 1 - 0.05/6)
+Z_BONF = stats.norm.ppf(1 - BONF / 2)
 
 INK, INK_2, GRID = "#0b0b0b", "#52514e", "#e6e5e1"
 DOT, LINE = "#2a78d6", "#eb6834"
@@ -163,6 +170,42 @@ def factor_table(d, factors, y, offset_col, bonf, family="qp", label=""):
     return pd.DataFrame(rows)
 
 
+def mutually_adjusted(d_reff, d_dpc, y):
+    """All six factors in one model with onset-month FE and state-clustered SEs:
+    R_eff by WLS (weights 1/SE^2, Step 3 sample) and deaths per case by
+    quasi-Poisson (offset log cases, Step 4 sample)."""
+    cols = [x for x, *_ in FACTORS]
+    names = dict((x, name) for x, name, *_ in FACTORS)
+    rows = []
+
+    sub = d_reff.dropna(subset=["Reff", "Reff_se"] + cols)
+    sub = sub[sub.Reff_se > 0]
+    X = _X(sub, cols, True)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        res = sm.WLS(sub.Reff, X, weights=1 / sub.Reff_se ** 2).fit(
+            cov_type="cluster", cov_kwds={"groups": pd.factorize(sub.state)[0]})
+    ci = res.conf_int()
+    for c in cols:
+        rows.append({"outcome": "R_eff (WLS)", "factor": names[c], "column": c,
+                     "unit": "change in R_eff per 1 SD", "estimate": res.params[c],
+                     "ci95_lo": ci.loc[c, 0], "ci95_hi": ci.loc[c, 1], "p": res.pvalues[c],
+                     "n": len(sub), "n_states": sub.state.nunique()})
+
+    res, sub, _ = fit(d_dpc, cols, y, "cases_wave")
+    ci = res.conf_int()
+    for c in cols:
+        rows.append({"outcome": "deaths per case (quasi-Poisson)", "factor": names[c],
+                     "column": c, "unit": "% change in deaths per case per 1 SD",
+                     "estimate": 100 * np.expm1(res.params[c]),
+                     "ci95_lo": 100 * np.expm1(ci.loc[c, 0]),
+                     "ci95_hi": 100 * np.expm1(ci.loc[c, 1]), "p": res.pvalues[c],
+                     "n": len(sub), "n_states": sub.state.nunique()})
+    out = pd.DataFrame(rows)
+    out["sig_bonf"] = out.p < BONF
+    return out
+
+
 def decomposition(d, y, offset_col):
     cols = [x for x, *_ in FACTORS]
     sub = d.dropna(subset=[y, offset_col] + cols).copy()
@@ -245,62 +288,103 @@ def pooled_by_month(d, y):
 
 # ---- figures ---------------------------------------------------------------
 
+def boot_ratio_ci(num, den, rng, n_boot=N_BOOT):
+    """Percentile 95% CI of sum(num)/sum(den), resampling rows (counties)."""
+    num, den = np.asarray(num, float), np.asarray(den, float)
+    idx = rng.integers(0, len(num), size=(n_boot, len(num)))
+    ratios = num[idx].sum(axis=1) / den[idx].sum(axis=1)
+    return np.percentile(ratios, [2.5, 97.5])
+
+
 def save(fig, stem):
     for ext in ("png", "pdf"):
         fig.savefig(f"{stem}.{ext}", dpi=300)
     plt.close(fig)
 
 
+FOREST_CAPTION = (f"Bars: Bonferroni-adjusted {100 * (1 - BONF):.1f}% CIs ({len(FACTORS)} tests). "
+                  f"Filled points: p < {BONF:.4f}. Each factor estimated in a separate model "
+                  "with onset-month fixed effects; SEs clustered by state.")
+
+
 def forest(s3, s4, stem):
+    """Bonferroni-adjusted CIs (estimate +/- Z_BONF * clustered SE; the Step 4
+    interval is formed on the log scale and transformed)."""
     labels = [name for _, name, _ in FACTORS]
     s3 = s3.set_index("factor").loc[labels]
     s4 = s4.set_index("factor").loc[labels]
     ypos = np.arange(len(labels))[::-1]
-    fig, axes = plt.subplots(1, 2, figsize=(7.4, 3.2), sharey=True)
+    fig, axes = plt.subplots(1, 2, figsize=(7.4, 3.4), sharey=True)
+    pct = lambda b: 100 * np.expm1(b)              # noqa: E731
     panels = [
-        (axes[0], s3.wls_coef_per_sd, s3.wls_ci95_lo, s3.wls_ci95_hi,
+        (axes[0], s3.wls_coef_per_sd, s3.wls_coef_per_sd - Z_BONF * s3.wls_se,
+         s3.wls_coef_per_sd + Z_BONF * s3.wls_se, s3.wls_p,
          "Step 3: $R_{eff}$\n(change per 1 SD)"),
-        (axes[1], s4.pct_change_per_sd, s4.ci95_lo, s4.ci95_hi,
+        (axes[1], s4.pct_change_per_sd, pct(s4.log_coef - Z_BONF * s4.log_se),
+         pct(s4.log_coef + Z_BONF * s4.log_se), s4.p,
          "Step 4: deaths per case\n(% change per 1 SD)"),
     ]
-    for ax, est, lo, hi, title in panels:
+    for ax, est, lo, hi, p, title in panels:
         ax.axvline(0, color=INK_2, lw=0.8, ls=":")
-        ax.errorbar(est, ypos, xerr=[est - lo, hi - est], fmt="o", color=DOT,
-                    ecolor=DOT, elinewidth=1.6, capsize=0, ms=5)
+        ax.errorbar(est, ypos, xerr=[est - lo, hi - est], fmt="none",
+                    ecolor=DOT, elinewidth=1.6, capsize=0)
+        sig = (p < BONF).values
+        ax.scatter(est[sig], ypos[sig], s=30, color=DOT, edgecolor=DOT, lw=1.2, zorder=3)
+        ax.scatter(est[~sig], ypos[~sig], s=30, color="white", edgecolor=DOT, lw=1.2,
+                   zorder=3)
         ax.set_title(title, color=INK)
+        ax.xaxis.set_major_locator(matplotlib.ticker.MaxNLocator(5))
         ax.grid(axis="x", color=GRID, lw=0.5)
         ax.set_axisbelow(True)
     axes[0].set_yticks(ypos)
     axes[0].set_yticklabels(labels)
-    fig.text(0.5, 0.005, "Points: estimates; bars: 95% CI (unadjusted for multiple testing). "
-             "Both models include onset-month fixed effects; SEs clustered by state.",
+    fig.text(0.5, 0.005, FOREST_CAPTION.replace(" Each factor", "\nEach factor"),
              ha="center", va="bottom", fontsize=7, color=INK_2)
-    fig.tight_layout(rect=(0, 0.04, 1, 1))
+    fig.tight_layout(rect=(0, 0.07, 1, 1))
     save(fig, stem)
+    R.write_caption(stem, (
+        "Association of each county factor with growth-rate R_eff (left; change in R_eff per "
+        "1 SD, WLS with weights 1/SE²) and with deaths per case in the same wave (right; % "
+        "change per 1 SD, quasi-Poisson with log(cases) offset). " + FOREST_CAPTION))
 
 
-def pooled_figure(pooled, stem):
+def pooled_figure(pooled, d, y, stem):
     p = pooled[pooled.onset_month != "all"].dropna(subset=["deaths_per_case"])
     overall = pooled.loc[pooled.onset_month == "all", "deaths_per_case"].iloc[0]
-    fig, ax = plt.subplots(figsize=(5.6, 3.0))
+    # 95% CIs: bootstrap over counties within each onset month
+    rng = np.random.default_rng(BOOT_SEED)
+    m = pd.to_datetime(d.wave_onset).dt.to_period("M").astype(str)
+    ci = np.array([boot_ratio_ci(d.loc[m == mo, y], d.loc[m == mo, "cases_wave"], rng)
+                   for mo in p.onset_month])
+    fig, ax = plt.subplots(figsize=(5.6, 3.2))
     x = pd.to_datetime(p.onset_month)
-    ax.plot(x, 100 * p.deaths_per_case, color=DOT, lw=2, marker="o", ms=5)
-    for xi, yi, n in zip(x, 100 * p.deaths_per_case, p.n_counties):
-        ax.annotate(f"n={n}", (xi, yi), xytext=(0, 6), textcoords="offset points",
-                    ha="center", fontsize=7, color=INK_2)
+    yv = 100 * p.deaths_per_case.values
+    ax.errorbar(x, yv, yerr=[yv - 100 * ci[:, 0], 100 * ci[:, 1] - yv], fmt="none",
+                ecolor=DOT, elinewidth=1.1, capsize=2.5, zorder=2)
+    ax.plot(x, yv, color=DOT, lw=2, marker="o", ms=5, zorder=3)
     ax.axhline(100 * overall, color=INK_2, lw=0.8, ls="--")
+    # n per month goes under the month tick labels, clear of the data
+    ax.set_xticks(x)
+    ax.set_xticklabels([f"{t:%b}\nn={n}" for t, n in zip(x, p.n_counties)])
     ax.annotate(f"all waves: {100 * overall:.2f}%", (x.iloc[1], 100 * overall),
                 xytext=(0, -11), textcoords="offset points", ha="left", fontsize=7.5,
                 color=INK_2)
     ax.set_ylabel(f"Pooled deaths per case (%), lag {LAG} d")
     ax.set_xlabel("Wave onset month (2020)")
     ax.set_ylim(bottom=0)
-    ax.xaxis.set_major_formatter(matplotlib.dates.DateFormatter("%b"))
+    ax.tick_params(axis="x", labelsize=7.5)
     ax.grid(axis="y", color=GRID, lw=0.5)
     ax.set_axisbelow(True)
     ax.set_title("Sum of deaths / sum of cases, first major wave", color=INK)
     fig.tight_layout()
     save(fig, stem)
+    R.write_caption(stem, (
+        f"Pooled deaths per case (sum of deaths over [onset + {LAG}, end + {LAG}] days / sum of "
+        "cases over [onset, end]) for counties' first major pre-2021 wave, by wave onset "
+        f"month; n = counties per month. Error bars: 95% percentile CIs from {N_BOOT:,} "
+        "bootstrap resamples of counties within each month. Dashed line: pooled value over "
+        f"all {int(pooled.loc[pooled.onset_month == 'all', 'n_counties'].iloc[0])} counties "
+        f"({100 * overall:.2f}%)."))
 
 
 def age_scatter(d, y, stem):
@@ -312,11 +396,27 @@ def age_scatter(d, y, stem):
     sub["oe"] = sub[y] / sub.expected
     curve = sm.GLM(sub[y], sm.add_constant(sub.pct_pop_65plus), family=sm.families.Poisson(),
                    offset=np.log(sub.expected)).fit()
-    fig, ax = plt.subplots(figsize=(5.2, 3.4))
+    # Binned means: equal-count bins of % aged 65+, pooled observed / expected
+    sub["age_bin"] = pd.qcut(sub.pct_pop_65plus, N_AGE_BINS, labels=False)
+    rng = np.random.default_rng(BOOT_SEED)
+    bins = []
+    for _, g in sub.groupby("age_bin"):
+        lo, hi = boot_ratio_ci(g[y], g.expected, rng)
+        bins.append({"x": g.pct_pop_65plus.mean(), "oe": g[y].sum() / g.expected.sum(),
+                     "lo": lo, "hi": hi})
+    bins = pd.DataFrame(bins)
+    x1, x99 = np.percentile(sub.pct_pop_65plus, [1, 99])
+
+    fig, ax = plt.subplots(figsize=(5.2, 4.0))
     size = 2 + 150 * sub.cases_wave / sub.cases_wave.max()
-    ax.scatter(sub.pct_pop_65plus, sub.oe, s=size, color=DOT, alpha=0.35, lw=0)
-    xs = np.linspace(sub.pct_pop_65plus.min(), sub.pct_pop_65plus.max(), 60)
-    ax.plot(xs, np.exp(curve.params.iloc[0] + curve.params.iloc[1] * xs), color=LINE, lw=1.8)
+    ax.scatter(sub.pct_pop_65plus, sub.oe, s=size, color=DOT, alpha=0.35, lw=0,
+               label="County (area ∝ cases)")
+    xs = np.linspace(x1, x99, 60)
+    ax.plot(xs, np.exp(curve.params.iloc[0] + curve.params.iloc[1] * xs), color=LINE, lw=1.8,
+            label="Poisson fit (1st-99th pct.)")
+    ax.errorbar(bins.x, bins.oe, yerr=[bins.oe - bins.lo, bins.hi - bins.oe], fmt="D",
+                ms=4.5, color=INK, mfc="white", mec=INK, mew=1.1, ecolor=INK,
+                elinewidth=1, capsize=2, zorder=4, label=f"Binned mean ({N_AGE_BINS} bins), 95% CI")
     ax.axhline(1, color=INK_2, lw=0.8, ls=":")
     ax.set_ylim(0, np.nanpercentile(sub.oe, 99) * 1.05)
     ax.set_xlabel("% aged 65+")
@@ -324,12 +424,32 @@ def age_scatter(d, y, stem):
     ax.set_title("Deaths per case vs % aged 65+", color=INK)
     ax.grid(color=GRID, lw=0.5)
     ax.set_axisbelow(True)
-    fig.text(0.5, 0.005, "Expected = Poisson model with onset-month effects and log(cases) offset. "
-             "Point area proportional to cases in the wave; line: Poisson fit. "
-             "y-axis: up to the 99th percentile.",
-             ha="center", va="bottom", fontsize=6.3, color=INK_2, wrap=True)
-    fig.tight_layout(rect=(0, 0.05, 1, 1))
+    # Legend below the axes so it covers no data
+    leg = ax.legend(frameon=False, loc="upper center", bbox_to_anchor=(0.5, -0.17),
+                    ncol=3, fontsize=7, handlelength=1.6, columnspacing=1.2)
+    leg.legend_handles[0].set_alpha(0.8)
+    leg.legend_handles[0].set_sizes([30])
+    note = ("Expected = Poisson model with onset-month effects and log(cases) offset. "
+            "Point area proportional to cases in the wave. Line: Poisson fit, drawn from the "
+            f"1st to 99th percentile of % aged 65+. Diamonds: pooled observed / expected in "
+            f"{N_AGE_BINS} equal-count bins, 95% CIs from {N_BOOT:,} bootstrap resamples of "
+            "counties. y-axis: up to the 99th percentile.")
+    fig.text(0.5, 0.005, textwrap.fill(note, 95), ha="center", va="bottom", fontsize=6.3,
+             color=INK_2)
+    fig.tight_layout(rect=(0, 0.10, 1, 1))
     save(fig, stem)
+    n_off = int((sub.oe > ax.get_ylim()[1]).sum())
+    R.write_caption(stem, (
+        "Deaths per case against % of residents aged 65+, adjusted for wave onset month: "
+        "each county's observed deaths divided by the deaths expected from a Poisson model "
+        f"with onset-month effects and a log(cases) offset ({len(sub)} counties). Point area "
+        "is proportional to cases in the wave. Orange line: Poisson fit of observed deaths on "
+        "% aged 65+ with log(expected) as offset, drawn only from the 1st to the 99th "
+        f"percentile of % aged 65+ ({x1:.1f}% to {x99:.1f}%). Diamonds: pooled observed / "
+        f"expected (sum of deaths / sum of expected) in {N_AGE_BINS} equal-count bins of % "
+        "aged 65+, plotted at each bin's mean, with 95% percentile CIs from "
+        f"{N_BOOT:,} bootstrap resamples of counties within the bin. Dotted line: observed = "
+        f"expected. The y-axis stops at the 99th percentile; {n_off} counties lie above it."))
 
 
 # ---- main ------------------------------------------------------------------
@@ -353,6 +473,7 @@ def main():
     # deaths per 100k: death count with log(population) offset
     p100k = factor_table(d, FACTORS, y, "population", BONF, label="deaths per 100k")
     decomp, joint = decomposition(d, y, "cases_wave")
+    mutual = mutually_adjusted(d_all, d, y)
     rob = robustness(d, LAG)
     pooled = pooled_by_month(d, y)
     both = d.dropna(subset=["Reff", f"dpc_lag{LAG}"])
@@ -360,7 +481,8 @@ def main():
 
     for name, t in [("step4_main_results", main_t), ("step4_secondary_factors", sec_t),
                     ("step4_deaths_per100k", p100k), ("step4_decomposition", decomp),
-                    ("step4_robustness", rob), ("step4_pooled_by_month", pooled)]:
+                    ("step4_robustness", rob), ("step4_pooled_by_month", pooled),
+                    ("step4_mutually_adjusted", mutual)]:
         t.to_csv(os.path.join(R.RES_DIR, f"{name}.csv"), index=False, float_format="%.6g")
 
     with open(os.path.join(R.RES_DIR, "step4_notes.txt"), "w") as f:
@@ -393,7 +515,7 @@ def main():
     })
     s3 = pd.read_csv(os.path.join(R.RES_DIR, "step3_main_results.csv"))
     forest(s3, main_t, os.path.join(R.FIG_DIR, "step4_forest_reff_vs_dpc"))
-    pooled_figure(pooled, os.path.join(R.FIG_DIR, "step4_pooled_dpc_by_month"))
+    pooled_figure(pooled, d, y, os.path.join(R.FIG_DIR, "step4_pooled_dpc_by_month"))
     age_scatter(d, y, os.path.join(R.FIG_DIR, "step4_dpc_vs_age65_month_adjusted"))
 
     fmt = lambda v: f"{v:.4g}"                     # noqa: E731
@@ -402,7 +524,7 @@ def main():
     print(f"overlap flag (end >= next onset): {int(d.death_window_overlap.sum())}; "
           f"strict (end+{LAG} >= next onset): {int(d[f'death_window_overlap_strict_lag{LAG}'].sum())}")
     with pd.option_context("display.width", 250, "display.max_columns", 20):
-        for t in (main_t, sec_t, p100k, decomp, rob, pooled):
+        for t in (main_t, sec_t, p100k, decomp, rob, pooled, mutual):
             print(t.drop(columns=[c for c in ("column",) if c in t]).to_string(index=False, float_format=fmt))
             print()
     print("joint test:", joint)

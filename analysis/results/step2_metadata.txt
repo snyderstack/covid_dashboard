@@ -30,6 +30,10 @@ Growth start: day of the minimum smoothed value within [onset, onset +
   shorter windows are fit with the trend only (dow_effects = False).
 Filter: drop only if the window has < 30 total cases or < 7 days
   ('rise too short'). r <= 0 is kept, flagged r_nonpositive; R_eff < 1 allowed.
+Wave-level SE rule: fits with SE(R_eff, SIR formula) > 1 are treated
+  as failed and left out of step2_reff_vs_onset and the monthly medians (53
+  waves). They stay in step2_reff_wave_level.csv with status 'ok'; the MAIN
+  dataset (and Steps 3-4) do not use this rule (they weight by 1/SE^2).
 ols_* columns: earlier estimator (OLS of ln smoothed per-100k series, growth
   start to rise time-midpoint), kept for comparison only; not used to filter.
 

@@ -32,6 +32,7 @@ import os
 
 import matplotlib
 matplotlib.use("Agg")
+import matplotlib.collections               # noqa: E402
 import matplotlib.dates as mdates          # noqa: E402
 import matplotlib.pyplot as plt            # noqa: E402
 import numpy as np                         # noqa: E402
@@ -48,6 +49,11 @@ GRID = "#e6e5e1"
 MAIN_COLOR = "#2a78d6"
 OTHER_COLOR = "#a9a8a3"
 TREND_COLOR = "#eb6834"
+
+# Wave-level fits with SE(R_eff, SIR formula) above this are treated as failed
+# fits and left out of the onset figure and the monthly medians.
+MAX_REFF_SE = 1.0
+YMAX = 4.0          # axis limit for R_eff in both Step 2 figures
 
 
 def quality(g):
@@ -140,14 +146,23 @@ def describe(x):
             "q3": x.quantile(.75), "min": x.min(), "max": x.max()}
 
 
-def monthly_medians(wl):
-    ok = wl[wl.status == "ok"].copy()
+def se_ok(wl):
+    """status == 'ok' wave-level fits with SE(R_eff) <= MAX_REFF_SE."""
+    ok = wl[wl.status == "ok"]
+    return ok[ok.Reff_sir_formula_se <= MAX_REFF_SE]
+
+
+def monthly_medians(ok):
+    """Monthly median and IQR of R_eff for the given wave-level fits."""
+    ok = ok.copy()
     ok["month"] = pd.to_datetime(ok.wave_onset).dt.to_period("M")
     rows = []
     for m in MONTHS:
         sub = ok[ok.month == m]
         rows.append({"onset_month": str(m), "n_waves": len(sub),
                      "median_Reff_sir_formula": sub.Reff_sir_formula.median(),
+                     "q1_Reff_sir_formula": sub.Reff_sir_formula.quantile(.25),
+                     "q3_Reff_sir_formula": sub.Reff_sir_formula.quantile(.75),
                      "median_Reff_seir_formula": sub.Reff_seir_formula.median()})
     return pd.DataFrame(rows)
 
@@ -171,25 +186,41 @@ def plot_histogram(main_ok, gamma_days, stem):
     x = main_ok.Reff_sir_formula.values
     med = float(np.median(x))
     fig, ax = plt.subplots(figsize=(4.8, 3.2))
-    bins = np.arange(np.floor(x.min() * 20) / 20, x.max() + 0.05, 0.05)
+    # Same 0.05-wide bins as before, restricted to the plotted range 0..YMAX
+    bins = np.arange(0, YMAX + 0.025, 0.05)
     ax.hist(x, bins=bins, color=MAIN_COLOR, edgecolor="white", linewidth=0.6)
     ax.axvline(1, color=INK_2, lw=0.8, ls=":")
+    ax.annotate(r"$R_{eff}$ = 1 (growth threshold)", xy=(1, 1),
+                xycoords=("data", "axes fraction"), xytext=(-3, -4),
+                textcoords="offset points", rotation=90, ha="right", va="top",
+                fontsize=7.5, color=INK_2)
     ax.axvline(med, color=INK, lw=1.2, ls="--")
     ax.annotate(f"median = {med:.2f}", xy=(med, 1), xycoords=("data", "axes fraction"),
                 xytext=(4, -4), textcoords="offset points", va="top", color=INK)
     ax.set_xlabel(r"$R_{eff}$ at wave onset ($1 + r/\gamma$, Poisson GLM $r$, "
                   rf"$1/\gamma$ = {gamma_days:g} d)")
     ax.set_ylabel("Counties")
+    ax.set_xlim(0, YMAX)
     ax.set_title(f"First major wave, counties ≥ 50k population (n = {len(x)})",
                  color=INK)
     ax.grid(axis="y", color=GRID, lw=0.6)
     ax.set_axisbelow(True)
     fig.tight_layout()
     save(fig, stem)
+    below, above = int((x < 0).sum()), int((x > YMAX).sum())
+    R.write_caption(stem, (
+        f"Distribution of growth-rate R_eff (1 + r/gamma, 1/gamma = {gamma_days:g} days, r from "
+        "a Poisson GLM on daily counts with day-of-week effects over a 14-day window) at the "
+        f"onset of the first major pre-2021 wave, {len(x)} counties with population ≥ 50,000. "
+        f"Dashed line: median ({med:.2f}). Dotted line: R_eff = 1, the growth threshold. "
+        f"The x-axis is cut at 0 and {YMAX:g}; {below + above} counties fall outside "
+        f"({below} below 0, {above} above {YMAX:g}). Values below 0 are noisy estimates of "
+        "near-zero growth: when r is close to zero its sampling error can push 1 + r/gamma "
+        "below 0, which has no physical meaning."))
 
 
-def plot_vs_onset(wl_ok, monthly, stem):
-    fig, ax = plt.subplots(figsize=(7.0, 3.6))
+def plot_vs_onset(wl_ok, monthly, n_excluded, stem):
+    fig, ax = plt.subplots(figsize=(7.0, 4.0))
     other = wl_ok[~wl_ok.is_main_wave]
     main = wl_ok[wl_ok.is_main_wave]
     ax.scatter(pd.to_datetime(other.wave_onset), other.Reff_sir_formula, s=9,
@@ -198,9 +229,13 @@ def plot_vs_onset(wl_ok, monthly, stem):
                color=MAIN_COLOR, alpha=0.75, lw=0, label=f"First major wave (n = {len(main)})")
     mm = monthly.dropna(subset=["median_Reff_sir_formula"])
     mid = pd.to_datetime(mm.onset_month) + pd.Timedelta(days=14)
+    ax.fill_between(mid, mm.q1_Reff_sir_formula, mm.q3_Reff_sir_formula,
+                    color=TREND_COLOR, alpha=0.2, lw=0, zorder=0.5,
+                    label="Monthly IQR (all waves)")
     ax.plot(mid, mm.median_Reff_sir_formula, color=TREND_COLOR, lw=2,
             marker="o", ms=4, label="Monthly median (all waves)")
     ax.axhline(1, color=INK_2, lw=0.6, ls=":")
+    ax.set_ylim(0, YMAX)
     ax.set_ylabel(r"$R_{eff}$ at wave onset ($1 + r/\gamma$, Poisson GLM)")
     ax.set_xlabel("Wave onset date")
     ax.xaxis.set_major_locator(mdates.MonthLocator())
@@ -209,12 +244,30 @@ def plot_vs_onset(wl_ok, monthly, stem):
     ax.set_title("Growth-rate $R_{eff}$ by wave onset date, 2020", color=INK)
     ax.grid(axis="y", color=GRID, lw=0.6)
     ax.set_axisbelow(True)
-    ax.legend(frameon=False, loc="upper right")
+    # Legend below the axes; scatter entries drawn opaque and larger so the
+    # markers are legible
+    leg = ax.legend(frameon=False, loc="upper center", bbox_to_anchor=(0.5, -0.17),
+                    ncol=2, handlelength=2.2, columnspacing=2.0)
+    for h in leg.legend_handles:
+        if isinstance(h, matplotlib.collections.PathCollection):
+            h.set_alpha(1)
+            h.set_sizes([24])
     fig.tight_layout()
     save(fig, stem)
+    y = wl_ok.Reff_sir_formula
+    below, above = int((y < 0).sum()), int((y > YMAX).sum())
+    R.write_caption(stem, (
+        "Growth-rate R_eff (1 + r/gamma, 1/gamma = 7 days) at wave onset against onset date, "
+        f"for every standard-preset wave with onset in 2020 ({len(wl_ok)} waves: "
+        f"{len(main)} first major waves in blue, {len(other)} other waves in gray). "
+        f"Fits with SE(R_eff) > {MAX_REFF_SE:g} are treated as failed and excluded "
+        f"({n_excluded} waves). Orange line: monthly median of all waves, plotted at "
+        "mid-month; shaded band: monthly interquartile range. Dotted line: R_eff = 1. "
+        f"The y-axis is cut at 0 and {YMAX:g}; {below + above} waves fall outside "
+        f"({below} below 0, {above} above {YMAX:g})."))
 
 
-def write_metadata(path, main, wl, gamma, sigma):
+def write_metadata(path, main, wl, gamma, sigma, n_se_excl):
     ex = main[main.status == "excluded"]
     jan2 = ex[pd.to_datetime(ex.first_std_wave_onset).between("2021-01-01", "2021-01-07")]
     jan2_short = jan2[(pd.to_datetime(jan2.first_std_wave_peak)
@@ -255,6 +308,10 @@ def write_metadata(path, main, wl, gamma, sigma):
         "  shorter windows are fit with the trend only (dow_effects = False).",
         f"Filter: drop only if the window has < {R.MIN_WINDOW_CASES} total cases or < {R.MIN_FIT_DAYS} days",
         "  ('rise too short'). r <= 0 is kept, flagged r_nonpositive; R_eff < 1 allowed.",
+        f"Wave-level SE rule: fits with SE(R_eff, SIR formula) > {MAX_REFF_SE:g} are treated",
+        f"  as failed and left out of step2_reff_vs_onset and the monthly medians ({n_se_excl}",
+        "  waves). They stay in step2_reff_wave_level.csv with status 'ok'; the MAIN",
+        "  dataset (and Steps 3-4) do not use this rule (they weight by 1/SE^2).",
         "ols_* columns: earlier estimator (OLS of ln smoothed per-100k series, growth",
         "  start to rise time-midpoint), kept for comparison only; not used to filter.",
         "",
@@ -284,7 +341,10 @@ def main():
     os.makedirs(R.RES_DIR, exist_ok=True)
     cases, _deaths, pop_df = R.load_all()
     main_df, wl = analyze(cases, pop_df, gamma, sigma)
-    monthly = monthly_medians(wl)
+    wl_se = se_ok(wl)
+    monthly = monthly_medians(wl_se)
+    monthly_all = monthly_medians(wl[wl.status == "ok"])   # before the SE rule
+    n_se_excl = int((wl.status == "ok").sum() - len(wl_se))
 
     main_df.to_csv(os.path.join(R.RES_DIR, "step2_reff_main.csv"), index=False,
                    float_format="%.6g")
@@ -292,12 +352,13 @@ def main():
               float_format="%.6g")
     monthly.to_csv(os.path.join(R.RES_DIR, "step2_monthly_median_reff.csv"),
                    index=False, float_format="%.4g")
-    write_metadata(os.path.join(R.RES_DIR, "step2_metadata.txt"), main_df, wl, gamma, sigma)
+    write_metadata(os.path.join(R.RES_DIR, "step2_metadata.txt"), main_df, wl, gamma, sigma,
+                   n_se_excl)
 
     style()
     main_ok = main_df[main_df.status == "ok"]
     plot_histogram(main_ok, args.gamma_days, os.path.join(R.FIG_DIR, "step2_reff_histogram"))
-    plot_vs_onset(wl[wl.status == "ok"], monthly, os.path.join(R.FIG_DIR, "step2_reff_vs_onset"))
+    plot_vs_onset(wl_se, monthly, n_se_excl, os.path.join(R.FIG_DIR, "step2_reff_vs_onset"))
 
     for name, df in (("MAIN", main_df), ("WAVE-LEVEL", wl)):
         fitted = df[df.status != "excluded"]
@@ -329,6 +390,19 @@ def main():
               f"median difference (Poisson - OLS) {(both.r_per_day - both.ols_r_per_day).median():.4f}")
     print("\nmonthly medians (wave-level, by onset month):")
     print(monthly.to_string(index=False, float_format=lambda v: f"{v:.3f}"))
+    excl = wl[(wl.status == "ok") & (wl.Reff_sir_formula_se > MAX_REFF_SE)]
+    print(f"\nSE(R_eff) > {MAX_REFF_SE:g} rule: {n_se_excl} wave-level fits excluded "
+          f"({int(excl.is_main_wave.sum())} of them first major waves, which stay in Step 3)")
+    print(excl[["county", "state", "wave_number", "is_main_wave", "wave_onset",
+                "Reff_sir_formula", "Reff_sir_formula_se"]].to_string(index=False))
+    cmp_ = monthly_all[["onset_month", "n_waves", "median_Reff_sir_formula"]].merge(
+        monthly[["onset_month", "n_waves", "median_Reff_sir_formula"]],
+        on="onset_month", suffixes=("_before", "_after"))
+    cmp_["change"] = cmp_.median_Reff_sir_formula_after - cmp_.median_Reff_sir_formula_before
+    print("monthly median before/after the SE rule:")
+    print(cmp_.to_string(index=False, float_format=lambda v: f"{v:.4f}"))
+    print(f"max |change| = {cmp_.change.abs().max():.4f}; months changing by > 0.02: "
+          f"{list(cmp_.onset_month[cmp_.change.abs() > 0.02]) or 'none'}")
 
 
 if __name__ == "__main__":

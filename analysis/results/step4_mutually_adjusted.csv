@@ -1,0 +1,13 @@
+outcome,factor,column,unit,estimate,ci95_lo,ci95_hi,p,n,n_states,sig_bonf
+R_eff (WLS),log10 population density (per sq mi),log10_pop_density,change in R_eff per 1 SD,-0.00578935,-0.0330301,0.0214513,0.677013,915,51,False
+R_eff (WLS),Primary care physicians per 100k,pcp_per_100k,change in R_eff per 1 SD,-0.00205558,-0.0289951,0.024884,0.881118,915,51,False
+R_eff (WLS),% aged 65+,pct_pop_65plus,change in R_eff per 1 SD,0.0236826,0.00839275,0.0389725,0.00239895,915,51,True
+R_eff (WLS),Poverty rate (%),poverty_pct,change in R_eff per 1 SD,0.00859254,-0.018225,0.03541,0.530012,915,51,False
+R_eff (WLS),% uninsured (under 65),uninsured_lt65_pct,change in R_eff per 1 SD,-0.0410841,-0.0814468,-0.000721429,0.0460433,915,51,False
+R_eff (WLS),"2020 presidential margin, D-R (state)",pres2020_margin_d,change in R_eff per 1 SD,0.00436208,-0.0212266,0.0299508,0.738294,915,51,False
+deaths per case (quasi-Poisson),log10 population density (per sq mi),log10_pop_density,% change in deaths per case per 1 SD,5.58818,-2.03319,13.8025,0.154861,915,51,False
+deaths per case (quasi-Poisson),Primary care physicians per 100k,pcp_per_100k,% change in deaths per case per 1 SD,-5.76913,-10.07,-1.26262,0.0126643,915,51,False
+deaths per case (quasi-Poisson),% aged 65+,pct_pop_65plus,% change in deaths per case per 1 SD,19.1665,11.5284,27.3277,2.12247e-07,915,51,True
+deaths per case (quasi-Poisson),Poverty rate (%),poverty_pct,% change in deaths per case per 1 SD,18.3077,14.6498,22.0823,9.44246e-26,915,51,True
+deaths per case (quasi-Poisson),% uninsured (under 65),uninsured_lt65_pct,% change in deaths per case per 1 SD,1.48251,-5.28951,8.73874,0.676205,915,51,False
+deaths per case (quasi-Poisson),"2020 presidential margin, D-R (state)",pres2020_margin_d,% change in deaths per case per 1 SD,5.88198,0.519707,11.5303,0.0311266,915,51,False

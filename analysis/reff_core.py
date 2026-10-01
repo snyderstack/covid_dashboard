@@ -119,6 +119,26 @@ MIN_WINDOW_CASES = 30                 # Poisson GLM: drop if fewer total cases i
 MIN_DOW_DAYS = 12                     # day-of-week effects only for windows this long
 OVERDISPERSION_LIMIT = 2.0            # Pearson chi2/df above this -> quasi-Poisson SEs
 MIN_POPULATION = 50_000
+CAPTIONS_PATH = os.path.join(FIG_DIR, "CAPTIONS.md")
+
+
+def write_caption(stem, text):
+    """Store the caption for figure `stem` in figures/CAPTIONS.md, replacing
+    any earlier caption for the same figure (one '## stem' section each)."""
+    name = os.path.basename(stem)
+    sections = {}
+    if os.path.exists(CAPTIONS_PATH):
+        with open(CAPTIONS_PATH) as f:
+            body = f.read().split("\n## ")[1:]
+        for sec in body:
+            key, _, val = sec.partition("\n")
+            sections[key.strip()] = val.strip()
+    sections[name] = " ".join(text.split())
+    with open(CAPTIONS_PATH, "w") as f:
+        f.write("# Figure captions\n\nWritten by the analysis scripts; "
+                "numbers are regenerated with each run.\n")
+        for key in sorted(sections):
+            f.write(f"\n## {key}\n\n{sections[key]}\n")
 
 
 # ---- data ------------------------------------------------------------------

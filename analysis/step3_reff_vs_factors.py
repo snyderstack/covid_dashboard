@@ -364,7 +364,9 @@ def style():
     })
 
 
-def scatter_figure(d, ycol, ylabel, stem, results, line_note):
+def scatter_figure(d, ycol, ylabel, stem, results, line_note, titles="spearman"):
+    """titles: "spearman" (unadjusted Spearman for raw R_eff) or "wls" (the
+    month-adjusted WLS result from the main table)."""
     fig, axes = plt.subplots(2, 3, figsize=(7.2, 5.0), sharey=True)
     for ax, (x, _label, xlabel) in zip(axes.flat, FACTORS):
         sub = d.dropna(subset=[ycol, "Reff_se", x])
@@ -378,8 +380,12 @@ def scatter_figure(d, ycol, ylabel, stem, results, line_note):
         xs = np.linspace(sub[x].min(), sub[x].max(), 50)
         ax.plot(xs, fit.params.iloc[0] + fit.params.iloc[1] * xs, color=LINE, lw=1.8)
         row = results.set_index("column").loc[x]
-        ax.set_title(f"ρ = {row.spearman_rho:.2f}, p = {row.spearman_p:.2g} (n = {int(row.spearman_n)})",
-                     color=INK)
+        if titles == "wls":
+            ax.set_title(f"coef per SD = {row.wls_coef_per_sd:+.3f}, p = {row.wls_p:.2g}",
+                         color=INK, fontsize=8)
+        else:
+            ax.set_title(f"ρ = {row.spearman_rho:.2f}, p = {row.spearman_p:.2g} "
+                         f"(n = {int(row.spearman_n)})", color=INK)
         ax.set_xlabel(xlabel)
         ax.grid(color=GRID, lw=0.5)
         ax.set_axisbelow(True)
@@ -388,8 +394,11 @@ def scatter_figure(d, ycol, ylabel, stem, results, line_note):
     lo, hi = np.nanpercentile(d[ycol], [0.5, 99.5])
     pad = 0.05 * (hi - lo)
     axes.flat[0].set_ylim(lo - pad, hi + pad)
+    title_note = ("Titles: month-adjusted WLS coefficient per SD and p (state-clustered SEs), "
+                  "as in the Step 3 main table." if titles == "wls"
+                  else "Titles: unadjusted Spearman for raw R_eff.")
     fig.text(0.5, 0.005, "Point area proportional to WLS weight 1/SE²; " + line_note
-             + "\nTitles: unadjusted Spearman for raw R_eff. y-axis: central 99% of values.",
+             + "\n" + title_note + " y-axis: central 99% of values.",
              ha="center", va="bottom", fontsize=7, color=INK_2)
     fig.tight_layout(rect=(0, 0.05, 1, 1))
     for ext in ("png", "pdf"):
@@ -425,7 +434,16 @@ def main():
                    "line: WLS fit without month effects.")
     scatter_figure(d, "Reff_month_adj", r"Month-adjusted $R_{eff}$ (residual)",
                    os.path.join(R.FIG_DIR, "step3_factor_scatter_month_adjusted"), res,
-                   "line: WLS fit of month-adjusted R_eff on the factor.")
+                   "line: WLS fit of month-adjusted R_eff on the factor.", titles="wls")
+    R.write_caption(os.path.join(R.FIG_DIR, "step3_factor_scatter_month_adjusted"), (
+        "Month-adjusted R_eff (residual from a WLS model of R_eff on onset-month fixed "
+        f"effects, weights 1/SE²) against each of the six county factors, {len(d)} counties. "
+        "Point area is proportional to the weight; line: WLS fit of the residual on the raw "
+        "factor. Panel titles give the month-adjusted WLS result for that factor from the "
+        "Step 3 main table: change in R_eff per 1 SD of the factor (R_eff ~ z(factor) + "
+        "onset-month fixed effects, weights 1/SE²) and its p-value with SEs clustered by "
+        f"state. Bonferroni threshold for six tests: p < {BONF:.4f}. y-axis: central 99% "
+        "of values."))
     uninsured_figure(d, os.path.join(R.FIG_DIR, "step3_uninsured_onset_confounding"))
 
     w = 1 / d.Reff_se ** 2
