@@ -1,0 +1,15 @@
+Step 4 notes
+============
+Outcome: deaths summed over [onset + 14, end + 14] days / cases summed over [onset, end]; raw daily counts from lag_analysis.prepare_daily_per_capita
+  (cumulative differences, negatives clipped to 0). Zero-death counties kept.
+Dropped: cases_wave < 50: 0 counties.
+Model: Poisson GLM, log link, offset log(cases_wave), onset-month FE + one standardized factor; quasi-Poisson scale (Pearson chi2/df); state-clustered SEs.
+  Effect: 100*(exp(b)-1) % change in deaths per case per 1 SD.
+Secondary factors (Bonferroni 0.05/2):
+  ICU beds per 100k: AHRF stgh_med_surg_icu_beds_21 (med-surg ICU beds, short-term general hospitals, 2021) per 100k 2020 Census population (master table)
+  SNF beds per 100k: AHRF snf_beds_21 (skilled nursing facility beds, 2021) per 100k 2020 Census population (master table)
+Deaths per 100k: same model with deaths as outcome and log(population) offset (USAFacts population).
+death_window_overlap: end + LAG >= next standard-wave onset + LAG (i.e. end >= next onset).
+death_window_overlap_strict_lagL: end + L >= next standard-wave onset.
+Joint test, model (b): F(6, 50) = 30.835, p = 3.497e-15.
+Associations are county-level (ecological).

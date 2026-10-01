@@ -104,7 +104,8 @@ def load_factors(cases, deaths, pop_df):
     pol = load_state_political()[["state_abbr", "pres_2020_margin_d"]].rename(
         columns={"state_abbr": "state", "pres_2020_margin_d": "pres2020_margin_d"})
 
-    f = master[["countyFIPS", "pop_density_per_sqmi", "pcp_per_100k", "pct_pop_65plus"]].merge(
+    f = master[["countyFIPS", "pop_density_per_sqmi", "pcp_per_100k", "pct_pop_65plus",
+                "icu_beds_per_100k", "snf_beds_per_100k"]].merge(
         extra[["countyFIPS", "uninsured_lt65_pct", "poverty_pct"]], on="countyFIPS", how="left")
     dens = pd.to_numeric(f["pop_density_per_sqmi"], errors="coerce")
     f["log10_pop_density"] = np.where(dens > 0, np.log10(dens.where(dens > 0)), np.nan)

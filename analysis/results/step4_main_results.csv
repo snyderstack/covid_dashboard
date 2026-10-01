@@ -1,0 +1,7 @@
+variant,factor,column,pct_change_per_sd,ci95_lo,ci95_hi,p,log_coef,log_se,n,dispersion,sig_bonf
+main,log10 population density (per sq mi),log10_pop_density,0.961765,-9.83519,13.0516,0.86826,0.00957169,0.0577065,915,36.2461,False
+main,Primary care physicians per 100k,pcp_per_100k,-6.67656,-11.0874,-2.04687,0.00515577,-0.0690989,0.0247034,915,34.6939,True
+main,% aged 65+,pct_pop_65plus,13.1829,6.24582,20.5729,0.000124361,0.123835,0.0322708,915,33.4662,True
+main,Poverty rate (%),poverty_pct,17.151,13.0181,21.4349,5.70415e-18,0.158293,0.0183245,915,29.1,True
+main,% uninsured (under 65),uninsured_lt65_pct,4.40694,0.183949,8.80795,0.040638,0.043126,0.0210658,915,35.2469,False
+main,"2020 presidential margin, D-R (state)",pres2020_margin_d,2.25941,-2.1519,6.8696,0.320677,0.0223427,0.0224987,915,36.1496,False

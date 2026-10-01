@@ -1,0 +1,55 @@
+variant,factor,column,pct_change_per_sd,ci95_lo,ci95_hi,p,log_coef,log_se,n,dispersion,sig_bonf
+"main (LAG 14, quasi-Poisson)",log10 population density (per sq mi),log10_pop_density,0.961765,-9.83519,13.0516,0.86826,0.00957169,0.0577065,915,36.2461,False
+"main (LAG 14, quasi-Poisson)",Primary care physicians per 100k,pcp_per_100k,-6.67656,-11.0874,-2.04687,0.00515577,-0.0690989,0.0247034,915,34.6939,True
+"main (LAG 14, quasi-Poisson)",% aged 65+,pct_pop_65plus,13.1829,6.24582,20.5729,0.000124361,0.123835,0.0322708,915,33.4662,True
+"main (LAG 14, quasi-Poisson)",Poverty rate (%),poverty_pct,17.151,13.0181,21.4349,5.70415e-18,0.158293,0.0183245,915,29.1,True
+"main (LAG 14, quasi-Poisson)",% uninsured (under 65),uninsured_lt65_pct,4.40694,0.183949,8.80795,0.040638,0.043126,0.0210658,915,35.2469,False
+"main (LAG 14, quasi-Poisson)","2020 presidential margin, D-R (state)",pres2020_margin_d,2.25941,-2.1519,6.8696,0.320677,0.0223427,0.0224987,915,36.1496,False
+(i) LAG = 7,log10 population density (per sq mi),log10_pop_density,1.32163,-9.7772,13.7858,0.824462,0.0131298,0.0591938,915,35.86,False
+(i) LAG = 7,Primary care physicians per 100k,pcp_per_100k,-6.79692,-11.4379,-1.91271,0.00691243,-0.0703894,0.0260602,915,34.2855,True
+(i) LAG = 7,% aged 65+,pct_pop_65plus,13.0525,6.13219,20.424,0.000140877,0.122682,0.0322286,915,33.0474,True
+(i) LAG = 7,Poverty rate (%),poverty_pct,17.4904,13.2574,21.8817,7.32945e-18,0.161187,0.0187217,915,28.6399,True
+(i) LAG = 7,% uninsured (under 65),uninsured_lt65_pct,4.69397,0.169688,9.4226,0.0418322,0.0458713,0.0225391,915,34.8574,False
+(i) LAG = 7,"2020 presidential margin, D-R (state)",pres2020_margin_d,2.47222,-1.95997,7.10477,0.279014,0.0244215,0.0225595,915,35.7319,False
+(ii) LAG = 21,log10 population density (per sq mi),log10_pop_density,0.550887,-9.79538,12.0838,0.921008,0.00549375,0.0554006,915,36.3617,False
+(ii) LAG = 21,Primary care physicians per 100k,pcp_per_100k,-6.81812,-11.086,-2.34536,0.00315605,-0.0706169,0.0239208,915,34.8621,True
+(ii) LAG = 21,% aged 65+,pct_pop_65plus,13.3254,6.48025,20.6107,8.31298e-05,0.125093,0.0317884,915,33.5336,True
+(ii) LAG = 21,Poverty rate (%),poverty_pct,16.9985,12.8699,21.2781,1.08091e-17,0.156991,0.0183294,915,29.5928,True
+(ii) LAG = 21,% uninsured (under 65),uninsured_lt65_pct,4.35657,0.393359,8.47623,0.0308734,0.0426434,0.0197542,915,35.4179,False
+(ii) LAG = 21,"2020 presidential margin, D-R (state)",pres2020_margin_d,2.18144,-2.22623,6.78782,0.337445,0.0215799,0.0224972,915,36.3102,False
+(iii) conservative_also_found,log10 population density (per sq mi),log10_pop_density,4.54154,-9.80519,21.1703,0.555377,0.0444143,0.0753139,536,44.5403,False
+(iii) conservative_also_found,Primary care physicians per 100k,pcp_per_100k,-7.70176,-13.7937,-1.17936,0.0214198,-0.0801451,0.0348381,536,41.8845,False
+(iii) conservative_also_found,% aged 65+,pct_pop_65plus,10.5264,2.67144,18.9824,0.00779369,0.100085,0.0376133,536,42.2518,True
+(iii) conservative_also_found,Poverty rate (%),poverty_pct,19.4476,14.9717,24.0978,7.53431e-20,0.177708,0.0194862,536,33.5312,True
+(iii) conservative_also_found,% uninsured (under 65),uninsured_lt65_pct,5.48937,0.319674,10.9255,0.0371188,0.05344,0.0256374,536,42.5762,False
+(iii) conservative_also_found,"2020 presidential margin, D-R (state)",pres2020_margin_d,2.9228,-1.38386,7.41754,0.186506,0.028809,0.0218087,536,44.121,False
+(iv) excl. smallest pop tercile,log10 population density (per sq mi),log10_pop_density,3.57131,-8.05001,16.6614,0.563352,0.0350902,0.0607233,617,47.2812,False
+(iv) excl. smallest pop tercile,Primary care physicians per 100k,pcp_per_100k,-6.15645,-11.0475,-0.996436,0.0199837,-0.0635412,0.0273101,617,45.5666,False
+(iv) excl. smallest pop tercile,% aged 65+,pct_pop_65plus,12.9911,5.71081,20.7729,0.000325265,0.122139,0.0339814,617,44.0273,True
+(iv) excl. smallest pop tercile,Poverty rate (%),poverty_pct,16.6537,12.4724,20.9904,1.32574e-16,0.154039,0.0186235,617,37.6092,True
+(iv) excl. smallest pop tercile,% uninsured (under 65),uninsured_lt65_pct,4.21599,-0.0754188,8.6917,0.0542547,0.0412954,0.0214544,617,45.9736,False
+(iv) excl. smallest pop tercile,"2020 presidential margin, D-R (state)",pres2020_margin_d,2.98914,-1.55862,7.74699,0.20117,0.0294534,0.0230424,617,47.1068,False
+(v) excl. onset < 2020-05-01,log10 population density (per sq mi),log10_pop_density,-5.71857,-10.4738,-0.710822,0.025739,-0.058886,0.0264048,838,29.4035,False
+(v) excl. onset < 2020-05-01,Primary care physicians per 100k,pcp_per_100k,-5.13516,-8.74413,-1.38347,0.00772283,-0.0527171,0.019789,838,30.0852,True
+(v) excl. onset < 2020-05-01,% aged 65+,pct_pop_65plus,14.5437,7.51209,22.0353,2.65946e-05,0.135787,0.0323238,838,27.6678,True
+(v) excl. onset < 2020-05-01,Poverty rate (%),poverty_pct,16.9637,11.5572,22.6322,8.62377e-11,0.156693,0.0241464,838,25.4785,True
+(v) excl. onset < 2020-05-01,% uninsured (under 65),uninsured_lt65_pct,4.95758,1.17237,8.88441,0.00982552,0.0483861,0.0187404,838,29.842,False
+(v) excl. onset < 2020-05-01,"2020 presidential margin, D-R (state)",pres2020_margin_d,2.32881,-2.09425,6.95169,0.307183,0.0230211,0.0225443,838,30.9958,False
+(vi) negative binomial,log10 population density (per sq mi),log10_pop_density,-6.04948,-10.5183,-1.35752,0.0120845,-0.0624019,0.0248646,915,,False
+(vi) negative binomial,Primary care physicians per 100k,pcp_per_100k,-5.55229,-9.00454,-1.96907,0.00264077,-0.0571238,0.0189987,915,,True
+(vi) negative binomial,% aged 65+,pct_pop_65plus,16.8645,9.17096,25.1002,7.28017e-06,0.155845,0.0347454,915,,True
+(vi) negative binomial,Poverty rate (%),poverty_pct,14.5791,9.74299,19.6283,6.19364e-10,0.136095,0.0220026,915,,True
+(vi) negative binomial,% uninsured (under 65),uninsured_lt65_pct,8.08881,2.37516,14.1213,0.00499875,0.077783,0.0277092,915,,True
+(vi) negative binomial,"2020 presidential margin, D-R (state)",pres2020_margin_d,1.54865,-3.85938,7.26088,0.582056,0.0153678,0.027922,915,,False
+(vii) excl. death-window overlap,log10 population density (per sq mi),log10_pop_density,0.961765,-9.83519,13.0516,0.86826,0.00957169,0.0577065,915,36.2461,False
+(vii) excl. death-window overlap,Primary care physicians per 100k,pcp_per_100k,-6.67656,-11.0874,-2.04687,0.00515577,-0.0690989,0.0247034,915,34.6939,True
+(vii) excl. death-window overlap,% aged 65+,pct_pop_65plus,13.1829,6.24582,20.5729,0.000124361,0.123835,0.0322708,915,33.4662,True
+(vii) excl. death-window overlap,Poverty rate (%),poverty_pct,17.151,13.0181,21.4349,5.70415e-18,0.158293,0.0183245,915,29.1,True
+(vii) excl. death-window overlap,% uninsured (under 65),uninsured_lt65_pct,4.40694,0.183949,8.80795,0.040638,0.043126,0.0210658,915,35.2469,False
+(vii) excl. death-window overlap,"2020 presidential margin, D-R (state)",pres2020_margin_d,2.25941,-2.1519,6.8696,0.320677,0.0223427,0.0224987,915,36.1496,False
+(vii-b) excl. strict overlap (end+LAG >= next onset),log10 population density (per sq mi),log10_pop_density,2.12645,-10.2573,16.219,0.749696,0.0210415,0.0659527,754,35.4788,False
+(vii-b) excl. strict overlap (end+LAG >= next onset),Primary care physicians per 100k,pcp_per_100k,-6.05743,-10.9905,-0.850914,0.0231791,-0.0624866,0.0275214,754,34.1331,False
+(vii-b) excl. strict overlap (end+LAG >= next onset),% aged 65+,pct_pop_65plus,14.2263,6.49261,22.5217,0.000200318,0.133012,0.0357691,754,31.7645,True
+(vii-b) excl. strict overlap (end+LAG >= next onset),Poverty rate (%),poverty_pct,16.6189,12.8867,20.4744,1.96654e-20,0.153741,0.0165953,754,28.8882,True
+(vii-b) excl. strict overlap (end+LAG >= next onset),% uninsured (under 65),uninsured_lt65_pct,3.08991,-0.976902,7.32374,0.138365,0.0304313,0.0205353,754,35.0745,False
+(vii-b) excl. strict overlap (end+LAG >= next onset),"2020 presidential margin, D-R (state)",pres2020_margin_d,2.43734,-2.01454,7.09149,0.288122,0.0240811,0.0226699,754,35.3317,False
