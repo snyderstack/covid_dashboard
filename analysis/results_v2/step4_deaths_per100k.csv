@@ -1,0 +1,7 @@
+variant,factor,column,pct_change_per_sd,ci95_lo,ci95_hi,p,log_coef,log_se,n,dispersion,p_t,ci95_t_lo,ci95_t_hi,t_df,n_states,sig_bonf,sig_bonf_t
+deaths per 100k,log10 population density (per sq mi),log10_pop_density,6.98736,-6.00173,21.7713,0.306434,0.0675405,0.0660391,913,88.0232,0.311357,-6.30291,22.1627,50,51,False,False
+deaths per 100k,Primary care physicians per 100k,pcp_per_100k,-15.5608,-20.6819,-10.1092,1.16681e-07,-0.169139,0.0319213,913,80.5256,2.63004e-06,-20.8048,-9.96962,50,51,True,True
+deaths per 100k,% aged 65+,pct_pop_65plus,4.82604,-3.82083,14.2503,0.283255,0.047132,0.043924,913,86.5199,0.288407,-4.02591,14.4944,50,51,False,False
+deaths per 100k,Poverty rate (%),poverty_pct,25.2232,17.6084,33.3311,2.11113e-12,0.224928,0.0320094,913,74.0332,5.44597e-09,17.4256,33.5386,50,51,True,True
+deaths per 100k,% uninsured (under 65),uninsured_lt65_pct,12.4023,5.1824,20.1178,0.000557233,0.116914,0.0338723,913,84.9115,0.00114226,5.00941,20.3157,50,51,True,True
+deaths per 100k,"2020 presidential margin, D-R (state)",pres2020_margin_d,-1.41536,-9.41887,7.29533,0.741421,-0.0142547,0.0431996,913,87.0878,0.742799,-9.60883,7.52081,50,51,False,False

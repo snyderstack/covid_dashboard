@@ -7,8 +7,8 @@ Run from the repo root:
     venv/bin/python analysis/first_wave_eligibility.py [--peak-frac 0.5]
 
 Outputs
-    analysis/results/first_wave_eligibility.csv          (one row per county)
-    analysis/results/first_wave_exclusions_by_state.csv
+    analysis/results_v2/first_wave_eligibility.csv          (one row per county)
+    analysis/results_v2/first_wave_exclusions_by_state.csv
 
 Exit status 2 if any state has more than STATE_STOP_PCT % of its counties
 excluded (the stop condition agreed for the analysis).

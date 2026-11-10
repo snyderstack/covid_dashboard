@@ -38,7 +38,9 @@ Smoothing window
 Growth start
     The day of minimum smoothed value within [onset, onset + floor((peak -
     onset) / 2)] (the first half of the rise), so a flat stretch after the
-    detected onset is skipped.
+    detected onset is skipped. Smoothed values are rounded to
+    SMOOTH_ROUND_DECIMALS (6) decimals first and the LAST day at the minimum
+    is taken, so floating-point near-ties do not depend on library versions.
 Growth rate r - primary estimator (fit_growth_poisson)
     Poisson GLM, log link, on RAW daily new case counts (the "Daily Cases"
     column of prepare_daily_per_capita: cumulative-count differences with
@@ -86,6 +88,7 @@ import warnings
 
 import numpy as np
 import pandas as pd
+from scipy import stats
 from scipy.integrate import solve_ivp
 from scipy.optimize import brentq, least_squares
 import statsmodels.api as sm
@@ -100,8 +103,12 @@ from lag_analysis import get_county_population, prepare_daily_per_capita  # noqa
 from wave_analysis import calculate_wave_metrics, estimate_optimal_smoothing  # noqa: E402
 
 ANALYSIS_DIR = os.path.dirname(os.path.abspath(__file__))
-FIG_DIR = os.path.join(ANALYSIS_DIR, "figures")
-RES_DIR = os.path.join(ANALYSIS_DIR, "results")
+# Output folders. analysis/results and analysis/figures hold the original
+# (pre-tie-break) outputs and are never written to; the defaults below are the
+# v2 folders. REFF_RESULTS_DIR / REFF_FIGURES_DIR (names or paths relative to
+# analysis/) redirect a run, e.g. for the population-cutoff check.
+FIG_DIR = os.path.join(ANALYSIS_DIR, os.environ.get("REFF_FIGURES_DIR", "figures_v2"))
+RES_DIR = os.path.join(ANALYSIS_DIR, os.environ.get("REFF_RESULTS_DIR", "results_v2"))
 
 # ---- parameters (change here or pass explicitly) ---------------------------
 INFECTIOUS_PERIOD_DAYS = 7.0          # 1/gamma
@@ -118,8 +125,11 @@ GROWTH_WINDOW_DAYS = 14               # Poisson GLM window length (days)
 MIN_WINDOW_CASES = 30                 # Poisson GLM: drop if fewer total cases in window
 MIN_DOW_DAYS = 12                     # day-of-week effects only for windows this long
 OVERDISPERSION_LIMIT = 2.0            # Pearson chi2/df above this -> quasi-Poisson SEs
-MIN_POPULATION = 50_000
+MIN_POPULATION = int(os.environ.get("REFF_MIN_POPULATION", 50_000))
+SMOOTH_ROUND_DECIMALS = 6             # growth start: round smoothed values before the argmin
 CAPTIONS_PATH = os.path.join(FIG_DIR, "CAPTIONS.md")
+N_BOOT_STATE = 2000                   # state-level block bootstrap resamples (main models)
+BOOT_STATE_SEED = 20201231
 
 
 def write_caption(stem, text):
@@ -139,6 +149,48 @@ def write_caption(stem, text):
                 "numbers are regenerated with each run.\n")
         for key in sorted(sections):
             f.write(f"\n## {key}\n\n{sections[key]}\n")
+
+
+# ---- inference helpers (Steps 3-5) ------------------------------------------
+
+def t_inference(coef, se, n_clusters, level=0.95):
+    """
+    p-value and CI for a cluster-robust estimate using a t distribution with
+    n_clusters - 1 df instead of the normal. Returns (p_t, ci_lo, ci_hi, df).
+    """
+    df = int(n_clusters) - 1
+    p = 2 * stats.t.sf(np.abs(coef / se), df)
+    q = stats.t.ppf(0.5 + level / 2, df)
+    return p, coef - q * se, coef + q * se, df
+
+
+def state_block_bootstrap(sub, statistic, n_boot=N_BOOT_STATE, seed=BOOT_STATE_SEED,
+                          level=0.95):
+    """
+    State-level block bootstrap: draw len(states) states with replacement,
+    stack all their counties (a state drawn twice appears twice) and evaluate
+    statistic(resampled_df) -> float. Returns (ci_lo, ci_hi, se, n_ok):
+    percentile CI, SD of the draws and the number of resamples that fitted.
+    """
+    sub = sub.reset_index(drop=True)
+    blocks = [np.asarray(ix) for ix in sub.groupby("state").indices.values()]
+    rng = np.random.default_rng(seed)
+    draws = []
+    for _ in range(n_boot):
+        pick = rng.integers(0, len(blocks), len(blocks))
+        rows = np.concatenate([blocks[k] for k in pick])
+        try:
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                v = float(statistic(sub.iloc[rows].reset_index(drop=True)))
+        except Exception:                          # noqa: BLE001
+            continue
+        if np.isfinite(v):
+            draws.append(v)
+    draws = np.asarray(draws)
+    a = (1 - level) / 2
+    lo, hi = np.percentile(draws, [100 * a, 100 * (1 - a)])
+    return lo, hi, float(draws.std(ddof=1)), len(draws)
 
 
 # ---- data ------------------------------------------------------------------
@@ -256,14 +308,15 @@ def first_major_wave(ts, ma_window, population, sensitivity=WAVE_SENSITIVITY,
 def growth_window(ts, wave):
     """
     (start_idx, end_idx) inclusive. End = time midpoint of the rise; start =
-    argmin of the smoothed series over [onset, end].
+    the last day at the minimum of the smoothed series over [onset, end],
+    after rounding it to SMOOTH_ROUND_DECIMALS decimals (ties -> latest day).
     """
     s, p = wave["start_idx"], wave["peak_idx"]
     e = s + (p - s) // 2
-    y = ts["Per100k MA"].values[s:e + 1].astype(float)
+    y = np.round(ts["Per100k MA"].values[s:e + 1].astype(float), SMOOTH_ROUND_DECIMALS)
     if np.all(~np.isfinite(y)):
         return s, e
-    return s + int(np.nanargmin(y)), e
+    return s + int(np.flatnonzero(y == np.nanmin(y))[-1]), e
 
 
 def reff_seir(r, gamma=GAMMA, sigma=SIGMA):

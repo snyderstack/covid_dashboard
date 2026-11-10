@@ -7,8 +7,8 @@ Run from the repo root:
     venv/bin/python analysis/step1_proof_of_concept.py [--gamma-days 7] [--latent-days 3]
 
 Outputs
-    analysis/results/step1_reff_poc.csv
-    analysis/figures/step1_sir_fits.png / .pdf
+    analysis/results_v2/step1_reff_poc.csv
+    analysis/figures_v2/step1_sir_fits.png / .pdf
 """
 
 import argparse

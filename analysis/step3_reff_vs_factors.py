@@ -1,7 +1,7 @@
 """
 Step 3 - R_eff (growth rate, SIR formula) vs six pre-chosen county factors.
 
-Uses the MAIN dataset from Step 2 (analysis/results/step2_reff_main.csv,
+Uses the MAIN dataset from Step 2 (analysis/results_v2/step2_reff_main.csv,
 status == "ok") joined to the dashboard's master county table
 (county_features.create_master_county_table with ahrf_loader's AHRF table)
 and state political data (tools.load_state_political).
@@ -21,6 +21,13 @@ Per factor:
      within each model's sample. Coefficient = change in R_eff per 1 SD.
 Bonferroni threshold 0.05/6.
 
+Inference: every state-clustered estimate is reported with the normal-based
+p-value and 95% CI (statsmodels default) and, next to it, a p-value and CI
+from a t distribution with (clusters - 1) df (50 with all 51 states):
+columns *_p_t, *_ci95_t_lo/hi, sig_bonf_t. The main table also has a
+state-level block bootstrap (reff_core.state_block_bootstrap, 2,000 resamples
+of states, percentile 95% CI; the factor is re-standardized in each resample).
+
 Robustness (WLS only): conservative_also_found subset; smallest population
 tercile removed; r_nonpositive waves removed. Weight robustness: unweighted,
 and weights capped at their 95th percentile. (gamma is not varied: R_eff - 1
@@ -36,15 +43,15 @@ Run from the repo root (after step2):
     venv/bin/python analysis/step3_reff_vs_factors.py
 
 Outputs
-    analysis/results/step3_analysis_table.csv
-    analysis/results/step3_main_results.csv
-    analysis/results/step3_robustness.csv
-    analysis/results/step3_weight_robustness.csv
-    analysis/results/step3_variance_decomposition.csv
-    analysis/results/step3_notes.txt
-    analysis/figures/step3_uninsured_onset_confounding.png / .pdf
-    analysis/figures/step3_factor_scatter.png / .pdf
-    analysis/figures/step3_factor_scatter_month_adjusted.png / .pdf
+    analysis/results_v2/step3_analysis_table.csv
+    analysis/results_v2/step3_main_results.csv
+    analysis/results_v2/step3_robustness.csv
+    analysis/results_v2/step3_weight_robustness.csv
+    analysis/results_v2/step3_variance_decomposition.csv
+    analysis/results_v2/step3_notes.txt
+    analysis/figures_v2/step3_uninsured_added_variable.png / .pdf
+    analysis/figures_v2/step3_factor_scatter.png / .pdf
+    analysis/figures_v2/step3_factor_scatter_month_adjusted.png / .pdf
 """
 
 import os
@@ -176,9 +183,20 @@ def wls(d, x, month_fe=True, standardize=True, weights="inverse_variance"):
         res = sm.WLS(sub[Y], X, weights=weights_for(sub, weights)).fit(
             cov_type="cluster", cov_kwds={"groups": pd.factorize(sub.state)[0]})
     lo, hi = res.conf_int().loc["z"]
+    p_t, lo_t, hi_t, df_t = R.t_inference(res.params["z"], res.bse["z"], sub.state.nunique())
     return {"coef": res.params["z"], "se": res.bse["z"], "p": res.pvalues["z"],
-            "ci_lo": lo, "ci_hi": hi,
-            "n": len(sub), "n_states": sub.state.nunique(), "res": res, "sub": sub}
+            "ci_lo": lo, "ci_hi": hi, "p_t": p_t, "ci_t_lo": lo_t, "ci_t_hi": hi_t,
+            "df_t": df_t, "n": len(sub), "n_states": sub.state.nunique(),
+            "res": res, "sub": sub, "weights": weights, "month_fe": month_fe,
+            "standardize": standardize}
+
+
+def wls_bootstrap(w, x):
+    """State block-bootstrap percentile CI for the coefficient of a wls() fit."""
+    def stat(bs):
+        X = _design(bs, x, w["month_fe"], w["standardize"])
+        return sm.WLS(bs[Y], X, weights=weights_for(bs, w["weights"])).fit().params["z"]
+    return R.state_block_bootstrap(w["sub"], stat)
 
 
 def month_adjusted(d):
@@ -200,13 +218,19 @@ def main_results(d):
     for x, label, _ in FACTORS:
         rho, p_s, n_s = spearman(d, x)
         w = wls(d, x)
+        b_lo, b_hi, b_se, b_n = wls_bootstrap(w, x)
         rows.append({"factor": label, "column": x,
                      "spearman_rho": rho, "spearman_p": p_s, "spearman_n": n_s,
                      "spearman_sig_bonf": p_s < BONF,
                      "wls_coef_per_sd": w["coef"], "wls_se": w["se"],
                      "wls_ci95_lo": w["ci_lo"], "wls_ci95_hi": w["ci_hi"], "wls_p": w["p"],
                      "wls_n": w["n"], "wls_n_states": w["n_states"],
-                     "wls_sig_bonf": w["p"] < BONF})
+                     "wls_sig_bonf": w["p"] < BONF,
+                     "wls_p_t": w["p_t"], "wls_ci95_t_lo": w["ci_t_lo"],
+                     "wls_ci95_t_hi": w["ci_t_hi"], "wls_t_df": w["df_t"],
+                     "wls_sig_bonf_t": w["p_t"] < BONF,
+                     "wls_boot_ci95_lo": b_lo, "wls_boot_ci95_hi": b_hi,
+                     "wls_boot_se": b_se, "wls_boot_n": b_n})
     return pd.DataFrame(rows)
 
 
@@ -236,7 +260,10 @@ def _variant_table(variants):
             rows.append({"variant": name, "factor": label, "coef_per_sd": w["coef"],
                          "se": w["se"], "ci95_lo": w["ci_lo"], "ci95_hi": w["ci_hi"],
                          "p": w["p"], "n": w["n"],
-                         "sig_bonf": w["p"] < BONF})
+                         "sig_bonf": w["p"] < BONF,
+                         "p_t": w["p_t"], "ci95_t_lo": w["ci_t_lo"], "ci95_t_hi": w["ci_t_hi"],
+                         "t_df": w["df_t"], "n_states": w["n_states"],
+                         "sig_bonf_t": w["p_t"] < BONF})
     return pd.DataFrame(rows)
 
 
@@ -300,35 +327,59 @@ def variance_decomposition(d):
 
 
 def uninsured_figure(d, stem):
+    """
+    Two panels: R_eff vs % uninsured (unadjusted), and the added-variable plot
+    for % uninsured given onset month: both R_eff and % uninsured residualized
+    on onset-month fixed effects (WLS, weights 1/SE^2). By Frisch-Waugh-Lovell
+    the AV-plot slope equals the % uninsured coefficient of the month-adjusted
+    WLS model (per percentage point).
+    """
     x, xlabel = "uninsured_lt65_pct", "% uninsured (under 65, 2020)"
-    sub = d.dropna(subset=[Y, "Reff_se", x, "Reff_month_adj"])
+    sub = d.dropna(subset=[Y, "Reff_se", x]).copy()
     sub = sub[sub.Reff_se > 0]
     w = 1 / sub.Reff_se ** 2
+    M = _design(sub, None, month_fe=True)
+    for col, out in ((Y, "y_res"), (x, "x_res")):
+        sub[out] = sm.WLS(sub[col], M, weights=w).fit().resid
+    full = wls(d, x, standardize=False)
     size = 2 + 120 * w / w.max()
-    fig, axes = plt.subplots(1, 2, figsize=(7.2, 3.1))
-    panels = [(Y, r"$R_{eff}$ (growth rate, $1/\gamma$ = 7 d)", "Unadjusted"),
-              ("Reff_month_adj", r"Month-adjusted $R_{eff}$ (residual)",
-               "Adjusted for onset month")]
-    for ax, (ycol, ylabel, title) in zip(axes, panels):
-        ax.scatter(sub[x], sub[ycol], s=size, color=DOT, alpha=0.35, lw=0)
-        fit = sm.WLS(sub[ycol], sm.add_constant(sub[x]), weights=w).fit()
-        xs = np.linspace(sub[x].min(), sub[x].max(), 50)
+    fig, axes = plt.subplots(1, 2, figsize=(7.2, 3.2))
+    panels = [(x, Y, xlabel, r"$R_{eff}$ (growth rate, $1/\gamma$ = 7 d)",
+               "Unadjusted"),
+              ("x_res", "y_res", "% uninsured, residual on onset month (pp)",
+               r"$R_{eff}$, residual on onset month",
+               "Added-variable plot (onset month)")]
+    for ax, (xc, yc, xl, yl, title) in zip(axes, panels):
+        ax.scatter(sub[xc], sub[yc], s=size, color=DOT, alpha=0.35, lw=0)
+        fit = sm.WLS(sub[yc], sm.add_constant(sub[xc]), weights=w).fit()
+        xs = np.linspace(*np.nanpercentile(sub[xc], [0.5, 99.5]), 50)
         ax.plot(xs, fit.params.iloc[0] + fit.params.iloc[1] * xs, color=LINE, lw=1.8)
-        ax.set_title(f"{title}: slope {fit.params.iloc[1]:+.4f} per pp", color=INK)
-        ax.set_xlabel(xlabel)
-        ax.set_ylabel(ylabel)
-        lo, hi = np.nanpercentile(sub[ycol], [0.5, 99.5])
-        pad = 0.05 * (hi - lo)
-        ax.set_ylim(lo - pad, hi + pad)
+        ax.set_title(f"{title}\nslope {fit.params.iloc[1]:+.4f} per pp", color=INK)
+        ax.set_xlabel(xl)
+        ax.set_ylabel(yl)
+        for setlim, col in ((ax.set_xlim, xc), (ax.set_ylim, yc)):
+            lo, hi = np.nanpercentile(sub[col], [0.5, 99.5])
+            pad = 0.05 * (hi - lo)
+            setlim(lo - pad, hi + pad)
         ax.grid(color=GRID, lw=0.5)
         ax.set_axisbelow(True)
-    fig.text(0.5, 0.005, "Point area proportional to WLS weight 1/SE²; lines: WLS fits "
-             "(no clustering). y-axis: central 99% of values.",
+    fig.text(0.5, 0.005, "Point area proportional to WLS weight 1/SE²; lines: WLS fits. "
+             "Residuals from WLS on onset-month fixed effects. Axes: central 99% of values.",
              ha="center", va="bottom", fontsize=7, color=INK_2)
     fig.tight_layout(rect=(0, 0.04, 1, 1))
     for ext in ("png", "pdf"):
         fig.savefig(f"{stem}.{ext}", dpi=300)
     plt.close(fig)
+    R.write_caption(stem, (
+        f"Why compare within onset months: R_eff against % uninsured (under 65), {len(sub)} "
+        "counties. Left: raw values, WLS line without month effects. Right: added-variable "
+        "plot; R_eff and % uninsured are each residualized on onset-month fixed effects (WLS, "
+        "weights 1/SE²) and the residuals plotted against each other. The right-hand slope "
+        f"({full['coef']:+.4f} R_eff per percentage point) equals the month-adjusted WLS "
+        "coefficient (Frisch-Waugh-Lovell); state-clustered p = "
+        f"{full['p']:.2g} (normal), {full['p_t']:.2g} (t, {full['df_t']} df). Point area is "
+        "proportional to the weight; axes show the central 99% of values."))
+    return full["coef"]
 
 
 def write_notes(path, joint):
@@ -348,7 +399,10 @@ def write_notes(path, joint):
         "  counties in a state; SEs are clustered by state (51 clusters incl. DC).",
         "- Weighted R^2 = 1 - sum w e^2 / sum w (y - weighted mean)^2.",
         f"- Joint test (model b, state-clustered): F({joint['df_num']}, {joint['df_denom']}) = "
-        f"{joint['F']:.3f}, p = {joint['p']:.4g}.",
+        f"{joint['F']:.3f}, p = {joint['p']:.4g}. The denominator df is already",
+        "  clusters - 1, so this test needs no separate t/F version.",
+        "- *_p_t / *_ci95_t_*: t distribution with (clusters - 1) df for the clustered",
+        "  estimates; wls_boot_*: state block bootstrap, 2,000 resamples, percentile CI.",
         "- Associations are county-level (ecological).",
     ]
     with open(path, "w") as f:
@@ -444,7 +498,8 @@ def main():
         "onset-month fixed effects, weights 1/SE²) and its p-value with SEs clustered by "
         f"state. Bonferroni threshold for six tests: p < {BONF:.4f}. y-axis: central 99% "
         "of values."))
-    uninsured_figure(d, os.path.join(R.FIG_DIR, "step3_uninsured_onset_confounding"))
+    av_slope = uninsured_figure(d, os.path.join(R.FIG_DIR, "step3_uninsured_added_variable"))
+    print(f"uninsured added-variable slope per pp: {av_slope:.6f}")
 
     w = 1 / d.Reff_se ** 2
     top = w.sort_values(ascending=False)

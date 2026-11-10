@@ -25,6 +25,12 @@ Primary model
   clustered by state. Effect = 100 * (exp(b) - 1) % change in deaths per
   case per 1 SD.
 
+Inference: every state-clustered estimate has the normal-based p and 95% CI
+and, next to them, p_t / ci95_t_* from a t distribution with (clusters - 1)
+df. The six main models also get a state-level block bootstrap (2,000
+resamples of states, percentile 95% CI on the % scale, factor re-standardized
+in each resample).
+
 Run from the repo root (after step2 and step3):
     venv/bin/python analysis/step4_deaths_per_case.py [--lag 14]
 """
@@ -152,21 +158,40 @@ def fit(d, xcols, y, offset_col, family="qp", month_fe=True, state_fe=False):
     return res, sub, disp
 
 
-def effect(res, col, n, disp=np.nan):
+def effect(res, col, n, disp=np.nan, n_states=None):
     b = res.params[col]
     lo, hi = res.conf_int().loc[col]
-    return {"pct_change_per_sd": 100 * np.expm1(b), "ci95_lo": 100 * np.expm1(lo),
-            "ci95_hi": 100 * np.expm1(hi), "p": res.pvalues[col], "log_coef": b,
-            "log_se": res.bse[col], "n": n, "dispersion": disp}
+    out = {"pct_change_per_sd": 100 * np.expm1(b), "ci95_lo": 100 * np.expm1(lo),
+           "ci95_hi": 100 * np.expm1(hi), "p": res.pvalues[col], "log_coef": b,
+           "log_se": res.bse[col], "n": n, "dispersion": disp}
+    if n_states is not None:
+        p_t, lo_t, hi_t, df_t = R.t_inference(b, res.bse[col], n_states)
+        out.update({"p_t": p_t, "ci95_t_lo": 100 * np.expm1(lo_t),
+                    "ci95_t_hi": 100 * np.expm1(hi_t), "t_df": df_t, "n_states": n_states})
+    return out
 
 
-def factor_table(d, factors, y, offset_col, bonf, family="qp", label=""):
+def fit_bootstrap(sub, x, y, offset_col):
+    """State block-bootstrap percentile CI (% scale) for one-factor Poisson/quasi-
+    Poisson (same point estimate) with onset-month FE."""
+    def stat(bs):
+        X = _X(bs, [x], True)
+        return sm.GLM(bs[y], X, family=sm.families.Poisson(),
+                      offset=np.log(bs[offset_col])).fit().params[x]
+    lo, hi, se, n_ok = R.state_block_bootstrap(sub, stat)
+    return {"boot_ci95_lo": 100 * np.expm1(lo), "boot_ci95_hi": 100 * np.expm1(hi),
+            "boot_log_se": se, "boot_n": n_ok}
+
+
+def factor_table(d, factors, y, offset_col, bonf, family="qp", label="", bootstrap=False):
     rows = []
     for x, name, *_ in factors:
         res, sub, disp = fit(d, [x], y, offset_col, family)
-        e = effect(res, x, len(sub), disp)
+        e = effect(res, x, len(sub), disp, n_states=sub.state.nunique())
+        if bootstrap:
+            e.update(fit_bootstrap(sub, x, y, offset_col))
         rows.append({"variant": label, "factor": name, "column": x, **e,
-                     "sig_bonf": e["p"] < bonf})
+                     "sig_bonf": e["p"] < bonf, "sig_bonf_t": e["p_t"] < bonf})
     return pd.DataFrame(rows)
 
 
@@ -186,23 +211,31 @@ def mutually_adjusted(d_reff, d_dpc, y):
         res = sm.WLS(sub.Reff, X, weights=1 / sub.Reff_se ** 2).fit(
             cov_type="cluster", cov_kwds={"groups": pd.factorize(sub.state)[0]})
     ci = res.conf_int()
+    G = sub.state.nunique()
     for c in cols:
+        p_t, lo_t, hi_t, df_t = R.t_inference(res.params[c], res.bse[c], G)
         rows.append({"outcome": "R_eff (WLS)", "factor": names[c], "column": c,
                      "unit": "change in R_eff per 1 SD", "estimate": res.params[c],
                      "ci95_lo": ci.loc[c, 0], "ci95_hi": ci.loc[c, 1], "p": res.pvalues[c],
-                     "n": len(sub), "n_states": sub.state.nunique()})
+                     "n": len(sub), "n_states": G, "p_t": p_t, "ci95_t_lo": lo_t,
+                     "ci95_t_hi": hi_t, "t_df": df_t})
 
     res, sub, _ = fit(d_dpc, cols, y, "cases_wave")
     ci = res.conf_int()
+    G = sub.state.nunique()
     for c in cols:
+        p_t, lo_t, hi_t, df_t = R.t_inference(res.params[c], res.bse[c], G)
         rows.append({"outcome": "deaths per case (quasi-Poisson)", "factor": names[c],
                      "column": c, "unit": "% change in deaths per case per 1 SD",
                      "estimate": 100 * np.expm1(res.params[c]),
                      "ci95_lo": 100 * np.expm1(ci.loc[c, 0]),
                      "ci95_hi": 100 * np.expm1(ci.loc[c, 1]), "p": res.pvalues[c],
-                     "n": len(sub), "n_states": sub.state.nunique()})
+                     "n": len(sub), "n_states": G, "p_t": p_t,
+                     "ci95_t_lo": 100 * np.expm1(lo_t), "ci95_t_hi": 100 * np.expm1(hi_t),
+                     "t_df": df_t})
     out = pd.DataFrame(rows)
     out["sig_bonf"] = out.p < BONF
+    out["sig_bonf_t"] = out.p_t < BONF
     return out
 
 
@@ -468,7 +501,7 @@ def main():
     d.to_csv(os.path.join(R.RES_DIR, "step4_analysis_table.csv"), index=False,
              float_format="%.6g")
 
-    main_t = factor_table(d, FACTORS, y, "cases_wave", BONF, label="main")
+    main_t = factor_table(d, FACTORS, y, "cases_wave", BONF, label="main", bootstrap=True)
     sec_t = factor_table(d, SECONDARY, y, "cases_wave", BONF_SECONDARY, label="secondary")
     # deaths per 100k: death count with log(population) offset
     p100k = factor_table(d, FACTORS, y, "population", BONF, label="deaths per 100k")
@@ -503,7 +536,10 @@ def main():
             "next onset).",
             "death_window_overlap_strict_lagL: end + L >= next standard-wave onset.",
             f"Joint test, model (b): F({joint['df_num']}, {joint['df_denom']}) = {joint['F']:.3f}, "
-            f"p = {joint['p']:.4g}.",
+            f"p = {joint['p']:.4g} (denominator df = clusters - 1 already).",
+            "p_t / ci95_t_*: t distribution with (clusters - 1) df for the state-clustered "
+            "estimates; boot_*: state block bootstrap (main table), 2,000 resamples, "
+            "percentile CI.",
             "Associations are county-level (ecological).",
         ]) + "\n")
 

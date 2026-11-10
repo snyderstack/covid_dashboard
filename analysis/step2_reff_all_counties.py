@@ -1,5 +1,6 @@
 """
-Step 2 - growth-rate R_eff for every county with population >= 50,000.
+Step 2 - growth-rate R_eff for every county with population >= R.MIN_POPULATION
+(50,000; REFF_MIN_POPULATION overrides).
 
 Two datasets:
   MAIN        one row per county (all counties >= 50k, including excluded
@@ -19,12 +20,12 @@ Run from the repo root:
     venv/bin/python analysis/step2_reff_all_counties.py [--gamma-days 7] [--latent-days 3]
 
 Outputs
-    analysis/results/step2_reff_main.csv
-    analysis/results/step2_reff_wave_level.csv
-    analysis/results/step2_monthly_median_reff.csv
-    analysis/results/step2_metadata.txt
-    analysis/figures/step2_reff_histogram.png / .pdf
-    analysis/figures/step2_reff_vs_onset.png / .pdf
+    analysis/results_v2/step2_reff_main.csv
+    analysis/results_v2/step2_reff_wave_level.csv
+    analysis/results_v2/step2_monthly_median_reff.csv
+    analysis/results_v2/step2_metadata.txt
+    analysis/figures_v2/step2_reff_histogram.png / .pdf
+    analysis/figures_v2/step2_reff_vs_onset.png / .pdf
 """
 
 import argparse
@@ -201,7 +202,7 @@ def plot_histogram(main_ok, gamma_days, stem):
                   rf"$1/\gamma$ = {gamma_days:g} d)")
     ax.set_ylabel("Counties")
     ax.set_xlim(0, YMAX)
-    ax.set_title(f"First major wave, counties ≥ 50k population (n = {len(x)})",
+    ax.set_title(f"First major wave, counties ≥ {R.MIN_POPULATION // 1000}k population (n = {len(x)})",
                  color=INK)
     ax.grid(axis="y", color=GRID, lw=0.6)
     ax.set_axisbelow(True)
@@ -211,7 +212,7 @@ def plot_histogram(main_ok, gamma_days, stem):
     R.write_caption(stem, (
         f"Distribution of growth-rate R_eff (1 + r/gamma, 1/gamma = {gamma_days:g} days, r from "
         "a Poisson GLM on daily counts with day-of-week effects over a 14-day window) at the "
-        f"onset of the first major pre-2021 wave, {len(x)} counties with population ≥ 50,000. "
+        f"onset of the first major pre-2021 wave, {len(x)} counties with population ≥ {R.MIN_POPULATION:,}. "
         f"Dashed line: median ({med:.2f}). Dotted line: R_eff = 1, the growth threshold. "
         f"The x-axis is cut at 0 and {YMAX:g}; {below + above} counties fall outside "
         f"({below} below 0, {above} above {YMAX:g}). Values below 0 are noisy estimates of "

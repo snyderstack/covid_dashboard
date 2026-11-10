@@ -1,0 +1,13 @@
+outcome,factor,column,unit,estimate,ci95_lo,ci95_hi,p,n,n_states,p_t,ci95_t_lo,ci95_t_hi,t_df,sig_bonf,sig_bonf_t
+R_eff (WLS),log10 population density (per sq mi),log10_pop_density,change in R_eff per 1 SD,-0.0136245,-0.0429585,0.0157095,0.36265,913,51,0.367018,-0.0436858,0.0164368,50,False,False
+R_eff (WLS),Primary care physicians per 100k,pcp_per_100k,change in R_eff per 1 SD,-0.00837154,-0.0361133,0.0193703,0.554218,913,51,0.556883,-0.0368012,0.0200581,50,False,False
+R_eff (WLS),% aged 65+,pct_pop_65plus,change in R_eff per 1 SD,0.0255323,0.0109917,0.040073,0.000578381,913,51,0.00117709,0.0106312,0.0404335,50,True,True
+R_eff (WLS),Poverty rate (%),poverty_pct,change in R_eff per 1 SD,0.00391107,-0.0238486,0.0316707,0.78244,913,51,0.783578,-0.0245369,0.032359,50,False,False
+R_eff (WLS),% uninsured (under 65),uninsured_lt65_pct,change in R_eff per 1 SD,-0.0521202,-0.0828382,-0.0214023,0.000882483,913,51,0.00165882,-0.0835999,-0.0206406,50,True,True
+R_eff (WLS),"2020 presidential margin, D-R (state)",pres2020_margin_d,change in R_eff per 1 SD,0.00113372,-0.0255469,0.0278143,0.933626,913,51,0.933959,-0.0262084,0.0284758,50,False,False
+deaths per case (quasi-Poisson),log10 population density (per sq mi),log10_pop_density,% change in deaths per case per 1 SD,5.58506,-2.0293,13.7912,0.154704,913,51,0.160914,-2.21094,14.0026,50,False,False
+deaths per case (quasi-Poisson),Primary care physicians per 100k,pcp_per_100k,% change in deaths per case per 1 SD,-5.76863,-10.0696,-1.26191,0.0126758,913,51,0.0160329,-10.1737,-1.14748,50,False,False
+deaths per case (quasi-Poisson),% aged 65+,pct_pop_65plus,% change in deaths per case per 1 SD,19.1644,11.5286,27.323,2.11123e-07,913,51,3.85416e-06,11.3457,27.5323,50,True,True
+deaths per case (quasi-Poisson),Poverty rate (%),poverty_pct,% change in deaths per case per 1 SD,18.359,14.666,22.171,1.97671e-25,913,51,3.93369e-14,14.5759,22.2671,50,True,True
+deaths per case (quasi-Poisson),% uninsured (under 65),uninsured_lt65_pct,% change in deaths per case per 1 SD,1.44174,-5.2956,8.65839,0.683099,913,51,0.684842,-5.45684,8.84369,50,False,False
+deaths per case (quasi-Poisson),"2020 presidential margin, D-R (state)",pres2020_margin_d,% change in deaths per case per 1 SD,5.8943,0.519062,11.557,0.0311815,913,51,0.0360232,0.389314,11.7012,50,False,False

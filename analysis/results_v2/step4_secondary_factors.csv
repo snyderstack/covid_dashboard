@@ -1,0 +1,3 @@
+variant,factor,column,pct_change_per_sd,ci95_lo,ci95_hi,p,log_coef,log_se,n,dispersion,p_t,ci95_t_lo,ci95_t_hi,t_df,n_states,sig_bonf,sig_bonf_t
+secondary,ICU beds per 100k,icu_beds_per_100k,0.0917158,-4.14109,4.51143,0.966831,0.000916738,0.0220461,913,36.1796,0.966997,-4.24373,4.62346,50,51,False,False
+secondary,SNF beds per 100k,snf_beds_per_100k,13.4006,6.92806,20.2649,2.74177e-05,0.125756,0.0299854,913,33.3761,0.000111876,6.77236,20.4403,50,51,True,True
