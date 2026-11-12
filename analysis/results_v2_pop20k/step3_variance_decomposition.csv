@@ -1,4 +1,4 @@
 model,weighted_r2,n_params,n
-(a) onset-month FE only,0.194971,10,1635
-(b) month FE + six factors,0.220071,16,1635
-(c) month FE + state FE,0.2697,60,1635
+(a) onset-month FE only,0.183874,10,1636
+(b) month FE + six factors,0.201239,16,1636
+(c) month FE + state FE,0.253069,60,1636

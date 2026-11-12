@@ -38,6 +38,13 @@ Samples: every variant starts from the Step 3 / Step 4 county sample (Step 2
 status ok; Step 4 also cases_wave >= 50). Refit variants keep the counties
 whose refit is ok (Step 2 rules) and, for deaths per case, cases_wave >= 50.
 
+Influence (step5_influence.csv): for every R_eff version above plus the Step 3
+robustness versions (conservative subset, smallest tercile removed,
+r_nonpositive removed, weights capped at the 95th percentile): the largest
+single-county share of the total weight, and the estimate and p after
+dropping each of the five highest-weight counties one at a time. sig_flip
+marks a change in sig_bonf_t.
+
 Estimates: R_eff rows are the change in R_eff per 1 SD; deaths-per-case rows
 are the log rate-ratio per 1 SD (100*(exp(estimate)-1) = % change), with se
 on the same scale.
@@ -48,6 +55,7 @@ Run from the repo root (after steps 2-4):
 Outputs
     analysis/results_v2/step5_stress_tests.csv
     analysis/results_v2/step5_refit_table.csv      per-county refits used above
+    analysis/results_v2/step5_influence.csv        top-5 weight drop-one check
     analysis/results_v2/step5_compare.csv          only with --compare
     analysis/figures_v2/step5_stress_tests.png / .pdf
 """
@@ -156,20 +164,10 @@ def rows_from(res, sub, traits, outcome, model):
     return out
 
 
-def tau2_mm(y, X, v):
-    """Method-of-moments (DerSimonian-Laird) residual heterogeneity for a
-    meta-regression of y on X with sampling variances v."""
-    w = 1 / v
-    res = sm.WLS(y, X, weights=w).fit()
-    Q = float(np.sum(w * res.resid ** 2))
-    Xa, W = X.to_numpy(float), w.to_numpy(float)
-    XtWX_inv = np.linalg.pinv(Xa.T @ (Xa * W[:, None]))
-    denom = W.sum() - np.trace(XtWX_inv @ (Xa.T @ (Xa * (W ** 2)[:, None])))
-    return max(0.0, (Q - (len(y) - np.linalg.matrix_rank(Xa))) / denom)
-
-
-def reff_model(d, traits, model, y="Reff", se="Reff_se", fe=("onset_month",),
-               weights="inverse_variance"):
+def fit_reff(d, traits, y="Reff", se="Reff_se", fe=("onset_month",),
+             weights="inverse_variance"):
+    """WLS of R_eff on z-scored traits + FE, state-clustered SEs.
+    Returns (results, sample, weights)."""
     sub = d.dropna(subset=[y, se] + list(traits))
     sub = sub[sub[se] > 0]
     X = design(sub, list(traits), fe)
@@ -177,13 +175,20 @@ def reff_model(d, traits, model, y="Reff", se="Reff_se", fe=("onset_month",),
     if weights == "unweighted":
         w = pd.Series(1.0, index=sub.index)
     elif weights == "random_effects":
-        w = 1 / (v + tau2_mm(sub[y], X, v))
+        w = 1 / (v + R.tau2_mm(sub[y], X, v))
+    elif weights == "capped95":
+        w = (1 / v).clip(upper=(1 / v).quantile(0.95))
     else:
         w = 1 / v
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         res = sm.WLS(sub[y], X, weights=w).fit(
             cov_type="cluster", cov_kwds={"groups": pd.factorize(sub.state)[0]})
+    return res, sub, w
+
+
+def reff_model(d, traits, model, **kw):
+    res, sub, _ = fit_reff(d, traits, **kw)
     return rows_from(res, sub, traits, "Reff", model)
 
 
@@ -212,39 +217,101 @@ def each_within_state(fn, d, model, **kw):
 
 # ---- variants ----------------------------------------------------------------
 
-def reff_variants(d, rf):
+def reff_specs(d, rf):
+    """
+    Every R_eff model version as (model, data, traits, fit_reff kwargs);
+    single-trait versions contribute one spec per trait.
+    """
     g = R.INFECTIOUS_PERIOD_DAYS
     d = add_period_keys(d)
     within = [x for x in TRAITS if x != STATE_LEVEL]
-    out = []
-    out += each(reff_model, d, "main")
-    out += reff_model(d, TRAITS, "all_six")
-    out += each_within_state(reff_model, d, "state_fe")
-    out += reff_model(d, within, "all_six_state_fe", fe=("onset_month", "state"))
-    out += each(reff_model, d, "half_month_fe", fe=("onset_half_month",))
-    out += each(reff_model, d, "iso_week_fe", fe=("onset_iso_week",))
-    out += each(reff_model, d, "re_weights", weights="random_effects")
-    out += reff_model(d, TRAITS, "re_weights_all_six", weights="random_effects")
-    out += each(reff_model, d, "unweighted", weights="unweighted")
+    specs = []
+
+    def each_trait(model, data, traits=TRAITS, **kw):
+        specs.extend((model, data, [x], kw) for x in traits)
+
+    each_trait("main", d)
+    specs.append(("all_six", d, TRAITS, {}))
+    each_trait("state_fe", d, within, fe=("onset_month", "state"))
+    specs.append(("all_six_state_fe", d, within, {"fe": ("onset_month", "state")}))
+    each_trait("half_month_fe", d, fe=("onset_half_month",))
+    each_trait("iso_week_fe", d, fe=("onset_iso_week",))
+    each_trait("re_weights", d, weights="random_effects")
+    specs.append(("re_weights_all_six", d, TRAITS, {"weights": "random_effects"}))
+    each_trait("unweighted", d, weights="unweighted")
 
     m = d.merge(rf, on="countyFIPS", how="left")
     for name in ("no_dow", *[f"window_{W}" for W in WINDOWS]):
-        v = m.assign(Reff=1 + m[f"{name}_r"] * g, Reff_se=m[f"{name}_r_se"] * g)
-        out += each(reff_model, v, name)
-    ols = d[d.ols_ok.astype(bool)].assign(Reff=lambda t: 1 + t.ols_r_per_day * g,
-                                          Reff_se=lambda t: t.ols_r_se * g)
-    out += each(reff_model, ols, "ols_smoothed")
+        each_trait(name, m.assign(Reff=1 + m[f"{name}_r"] * g, Reff_se=m[f"{name}_r_se"] * g))
+    each_trait("ols_smoothed", d[d.ols_ok.astype(bool)].assign(
+        Reff=lambda t: 1 + t.ols_r_per_day * g, Reff_se=lambda t: t.ols_r_se * g))
     for name in ("first_wave", "largest_wave"):
         v = m.assign(Reff=1 + m[f"{name}_r"] * g, Reff_se=m[f"{name}_r_se"] * g,
                      wave_onset=m[f"{name}_onset"])
-        out += each(reff_model, add_period_keys(v), name)
+        each_trait(name, add_period_keys(v))
 
     w = d[d.Reff_se <= 1].copy()
     lo, hi = w.Reff.quantile([0.01, 0.99])
     w["Reff"] = w.Reff.clip(lo, hi)
-    out += each(reff_model, w, "winsorized_se_le1")
-    out += each(reff_model, d[pd.to_datetime(d.wave_onset) >= MAY], "onset_from_may")
-    return out
+    each_trait("winsorized_se_le1", w)
+    each_trait("onset_from_may", d[pd.to_datetime(d.wave_onset) >= MAY])
+    return specs
+
+
+def step3_robustness_specs(d):
+    """Step 3 robustness / weight-robustness versions not in the stress table
+    (influence check only)."""
+    d = add_period_keys(d)
+    specs = []
+    for model, data, kw in [
+            ("s3_conservative_also_found", d[d.conservative_also_found.astype(bool)], {}),
+            ("s3_excl_smallest_pop_tercile", d[d.pop_tercile > 1], {}),
+            ("s3_excl_r_nonpositive", d[~d.r_nonpositive.astype(bool)], {}),
+            ("s3_weights_capped95", d, {"weights": "capped95"})]:
+        specs.extend((model, data, [x], kw) for x in TRAITS)
+    return specs
+
+
+def reff_variants(d, rf):
+    return [r for model, data, traits, kw in reff_specs(d, rf)
+            for r in reff_model(data, traits, model, **kw)]
+
+
+def influence(specs, n_drop=5):
+    """
+    For each R_eff model: largest single-county share of the total weight, and
+    the estimate and p after dropping each of the n_drop highest-weight
+    counties one at a time (weights, incl. tau^2, recomputed after the drop).
+    One row per (model, trait, dropped county).
+    """
+    rows = []
+    for model, data, traits, kw in specs:
+        res, sub, w = fit_reff(data, traits, **kw)
+        G = sub.state.nunique()
+        share = (w / w.sum()).sort_values(ascending=False)
+        full = {x: (res.params[x], res.pvalues[x],
+                    R.t_inference(res.params[x], res.bse[x], G)[0]) for x in traits}
+        for rank, (ix, sh) in enumerate(share.head(n_drop).items(), 1):
+            fips = sub.at[ix, "countyFIPS"]
+            r2, s2, _ = fit_reff(data[data.countyFIPS != fips], traits, **kw)
+            G2 = s2.state.nunique()
+            for x in traits:
+                est, p, p_t = full[x]
+                p_t2 = R.t_inference(r2.params[x], r2.bse[x], G2)[0]
+                rows.append({
+                    "model": model, "trait": x, "n": len(sub),
+                    "max_weight_share": share.iloc[0],
+                    "max_weight_county": f"{sub.at[share.index[0], 'county']}, "
+                                         f"{sub.at[share.index[0], 'state']}",
+                    "estimate": est, "p_normal": p, "p_t": p_t, "sig_bonf_t": p_t < BONF,
+                    "drop_rank": rank, "dropped_fips": fips,
+                    "dropped_county": f"{sub.at[ix, 'county']}, {sub.at[ix, 'state']}",
+                    "dropped_weight_share": sh,
+                    "estimate_drop": r2.params[x], "p_normal_drop": r2.pvalues[x],
+                    "p_t_drop": p_t2, "sig_bonf_t_drop": p_t2 < BONF,
+                    "sig_flip": (p_t < BONF) != (p_t2 < BONF),
+                })
+    return pd.DataFrame(rows)
 
 
 def severity_variants(d, rf):
@@ -358,6 +425,9 @@ def main():
     rf.to_csv(rf_path, index=False, float_format="%.6g")
 
     t = pd.DataFrame(reff_variants(d3, rf) + severity_variants(d4, rf))
+    infl = influence(reff_specs(d3, rf) + step3_robustness_specs(d3))
+    infl.to_csv(os.path.join(R.RES_DIR, "step5_influence.csv"), index=False,
+                float_format="%.6g")
     t.to_csv(os.path.join(R.RES_DIR, "step5_stress_tests.csv"), index=False,
              float_format="%.6g")
     plt.rcParams.update({
@@ -370,6 +440,14 @@ def main():
 
     with pd.option_context("display.width", 200, "display.max_rows", 500):
         print(t.to_string(index=False, float_format=lambda v: f"{v:.4g}"))
+    flips = infl[infl.sig_flip]
+    print(f"\ninfluence: {infl[['model', 'trait']].drop_duplicates().shape[0]} model x trait "
+          f"estimates; largest single-county weight share "
+          f"{infl.max_weight_share.max():.1%}; Bonferroni flips after one drop: {len(flips)}")
+    if len(flips):
+        print(flips[["model", "trait", "dropped_county", "dropped_weight_share", "p_t",
+                     "p_t_drop", "estimate", "estimate_drop"]]
+              .to_string(index=False, float_format=lambda v: f"{v:.4g}"))
     if args.compare:
         c = compare(t, args.compare)
         c.to_csv(os.path.join(R.RES_DIR, "step5_compare.csv"), index=False,

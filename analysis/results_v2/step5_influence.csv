@@ -1,0 +1,651 @@
+model,trait,n,max_weight_share,max_weight_county,estimate,p_normal,p_t,sig_bonf_t,drop_rank,dropped_fips,dropped_county,dropped_weight_share,estimate_drop,p_normal_drop,p_t_drop,sig_bonf_t_drop,sig_flip
+main,log10_pop_density,915,0.0214356,"St. Louis County, MO",-0.00514775,0.703711,0.705322,False,1,29189,"St. Louis County, MO",0.0214356,0.00201382,0.85432,0.855063,False,False
+main,log10_pop_density,915,0.0214356,"St. Louis County, MO",-0.00514775,0.703711,0.705322,False,2,06111,"Ventura County, CA",0.0204726,-0.00513371,0.705518,0.707117,False,False
+main,log10_pop_density,915,0.0214356,"St. Louis County, MO",-0.00514775,0.703711,0.705322,False,3,09009,"New Haven County, CT",0.0184866,-0.00589981,0.670793,0.672617,False,False
+main,log10_pop_density,915,0.0214356,"St. Louis County, MO",-0.00514775,0.703711,0.705322,False,4,44007,"Providence County, RI",0.0178343,-0.00834689,0.543453,0.546203,False,False
+main,log10_pop_density,915,0.0214356,"St. Louis County, MO",-0.00514775,0.703711,0.705322,False,5,06013,"Contra Costa County, CA",0.0153874,-0.00245658,0.864834,0.865521,False,False
+main,pcp_per_100k,915,0.0214356,"St. Louis County, MO",0.002518,0.850958,0.851718,False,1,29189,"St. Louis County, MO",0.0214356,0.0116022,0.341799,0.346372,False,False
+main,pcp_per_100k,915,0.0214356,"St. Louis County, MO",0.002518,0.850958,0.851718,False,2,06111,"Ventura County, CA",0.0204726,0.00243575,0.855619,0.856355,False,False
+main,pcp_per_100k,915,0.0214356,"St. Louis County, MO",0.002518,0.850958,0.851718,False,3,09009,"New Haven County, CT",0.0184866,0.00236582,0.860085,0.860797,False,False
+main,pcp_per_100k,915,0.0214356,"St. Louis County, MO",0.002518,0.850958,0.851718,False,4,44007,"Providence County, RI",0.0178343,0.000727795,0.95671,0.956927,False,False
+main,pcp_per_100k,915,0.0214356,"St. Louis County, MO",0.002518,0.850958,0.851718,False,5,06013,"Contra Costa County, CA",0.0153874,0.00470354,0.733868,0.735292,False,False
+main,pct_pop_65plus,915,0.0214356,"St. Louis County, MO",0.0248745,0.0120583,0.0153388,False,1,29189,"St. Louis County, MO",0.0214356,0.0276554,0.00877855,0.0115963,False,False
+main,pct_pop_65plus,915,0.0214356,"St. Louis County, MO",0.0248745,0.0120583,0.0153388,False,2,06111,"Ventura County, CA",0.0204726,0.0250917,0.0117784,0.0150232,False,False
+main,pct_pop_65plus,915,0.0214356,"St. Louis County, MO",0.0248745,0.0120583,0.0153388,False,3,09009,"New Haven County, CT",0.0184866,0.0247249,0.0122819,0.0155905,False,False
+main,pct_pop_65plus,915,0.0214356,"St. Louis County, MO",0.0248745,0.0120583,0.0153388,False,4,44007,"Providence County, RI",0.0178343,0.0263894,0.00740341,0.00999119,False,False
+main,pct_pop_65plus,915,0.0214356,"St. Louis County, MO",0.0248745,0.0120583,0.0153388,False,5,06013,"Contra Costa County, CA",0.0153874,0.0241385,0.013451,0.0169003,False,False
+main,poverty_pct,915,0.0214356,"St. Louis County, MO",-0.00536882,0.678759,0.680531,False,1,29189,"St. Louis County, MO",0.0214356,-0.00962155,0.421036,0.424845,False,False
+main,poverty_pct,915,0.0214356,"St. Louis County, MO",-0.00536882,0.678759,0.680531,False,2,06111,"Ventura County, CA",0.0204726,-0.00524809,0.685894,0.687619,False,False
+main,poverty_pct,915,0.0214356,"St. Louis County, MO",-0.00536882,0.678759,0.680531,False,3,09009,"New Haven County, CT",0.0184866,-0.00536587,0.678347,0.680121,False,False
+main,poverty_pct,915,0.0214356,"St. Louis County, MO",-0.00536882,0.678759,0.680531,False,4,44007,"Providence County, RI",0.0178343,-0.00656653,0.604393,0.606678,False,False
+main,poverty_pct,915,0.0214356,"St. Louis County, MO",-0.00536882,0.678759,0.680531,False,5,06013,"Contra Costa County, CA",0.0153874,-0.00757366,0.575215,0.577718,False,False
+main,uninsured_lt65_pct,915,0.0214356,"St. Louis County, MO",-0.0367725,0.0251348,0.0296134,False,1,29189,"St. Louis County, MO",0.0214356,-0.0354945,0.0269614,0.0315586,False,False
+main,uninsured_lt65_pct,915,0.0214356,"St. Louis County, MO",-0.0367725,0.0251348,0.0296134,False,2,06111,"Ventura County, CA",0.0204726,-0.0369496,0.0241768,0.0285898,False,False
+main,uninsured_lt65_pct,915,0.0214356,"St. Louis County, MO",-0.0367725,0.0251348,0.0296134,False,3,09009,"New Haven County, CT",0.0184866,-0.0363471,0.028934,0.0336503,False,False
+main,uninsured_lt65_pct,915,0.0214356,"St. Louis County, MO",-0.0367725,0.0251348,0.0296134,False,4,44007,"Providence County, RI",0.0178343,-0.0335864,0.0397073,0.0449436,False,False
+main,uninsured_lt65_pct,915,0.0214356,"St. Louis County, MO",-0.0367725,0.0251348,0.0296134,False,5,06013,"Contra Costa County, CA",0.0153874,-0.0395538,0.0167942,0.0205988,False,False
+main,pres2020_margin_d,915,0.0214356,"St. Louis County, MO",0.0102381,0.425434,0.429203,False,1,29189,"St. Louis County, MO",0.0214356,0.00303121,0.772525,0.77372,False,False
+main,pres2020_margin_d,915,0.0214356,"St. Louis County, MO",0.0102381,0.425434,0.429203,False,2,06111,"Ventura County, CA",0.0204726,0.00996191,0.44777,0.451335,False,False
+main,pres2020_margin_d,915,0.0214356,"St. Louis County, MO",0.0102381,0.425434,0.429203,False,3,09009,"New Haven County, CT",0.0184866,0.00965509,0.449767,0.453313,False,False
+main,pres2020_margin_d,915,0.0214356,"St. Louis County, MO",0.0102381,0.425434,0.429203,False,4,44007,"Providence County, RI",0.0178343,0.00719918,0.552985,0.555659,False,False
+main,pres2020_margin_d,915,0.0214356,"St. Louis County, MO",0.0102381,0.425434,0.429203,False,5,06013,"Contra Costa County, CA",0.0153874,0.0120343,0.341098,0.345677,False,False
+all_six,log10_pop_density,915,0.0214356,"St. Louis County, MO",-0.00504122,0.715271,0.716809,False,1,29189,"St. Louis County, MO",0.0214356,0.00128529,0.903466,0.903952,False,False
+all_six,pcp_per_100k,915,0.0214356,"St. Louis County, MO",-0.00104241,0.938349,0.938658,False,1,29189,"St. Louis County, MO",0.0214356,0.00701715,0.602208,0.604509,False,False
+all_six,pct_pop_65plus,915,0.0214356,"St. Louis County, MO",0.02397,0.00215601,0.00347639,True,1,29189,"St. Louis County, MO",0.0214356,0.0279431,0.000173265,0.000452785,True,False
+all_six,poverty_pct,915,0.0214356,"St. Louis County, MO",0.00882374,0.514228,0.517216,False,1,29189,"St. Louis County, MO",0.0214356,0.00494465,0.695546,0.697209,False,False
+all_six,uninsured_lt65_pct,915,0.0214356,"St. Louis County, MO",-0.0406179,0.0482855,0.0538203,False,1,29189,"St. Louis County, MO",0.0214356,-0.0372286,0.0660285,0.0719726,False,False
+all_six,pres2020_margin_d,915,0.0214356,"St. Louis County, MO",0.00323338,0.801268,0.8023,False,1,29189,"St. Louis County, MO",0.0214356,-0.00573688,0.55748,0.560119,False,False
+all_six,log10_pop_density,915,0.0214356,"St. Louis County, MO",-0.00504122,0.715271,0.716809,False,2,06111,"Ventura County, CA",0.0204726,-0.00479473,0.732884,0.734314,False,False
+all_six,pcp_per_100k,915,0.0214356,"St. Louis County, MO",-0.00104241,0.938349,0.938658,False,2,06111,"Ventura County, CA",0.0204726,-0.00127453,0.924576,0.924955,False,False
+all_six,pct_pop_65plus,915,0.0214356,"St. Louis County, MO",0.02397,0.00215601,0.00347639,True,2,06111,"Ventura County, CA",0.0204726,0.0242044,0.00219681,0.00353156,True,False
+all_six,poverty_pct,915,0.0214356,"St. Louis County, MO",0.00882374,0.514228,0.517216,False,2,06111,"Ventura County, CA",0.0204726,0.00920102,0.496263,0.499401,False,False
+all_six,uninsured_lt65_pct,915,0.0214356,"St. Louis County, MO",-0.0406179,0.0482855,0.0538203,False,2,06111,"Ventura County, CA",0.0204726,-0.0413619,0.0435108,0.0488898,False,False
+all_six,pres2020_margin_d,915,0.0214356,"St. Louis County, MO",0.00323338,0.801268,0.8023,False,2,06111,"Ventura County, CA",0.0204726,0.00254841,0.846091,0.846877,False,False
+all_six,log10_pop_density,915,0.0214356,"St. Louis County, MO",-0.00504122,0.715271,0.716809,False,3,09009,"New Haven County, CT",0.0184866,-0.00536903,0.702295,0.703915,False,False
+all_six,pcp_per_100k,915,0.0214356,"St. Louis County, MO",-0.00104241,0.938349,0.938658,False,3,09009,"New Haven County, CT",0.0184866,-0.000910989,0.945901,0.946172,False,False
+all_six,pct_pop_65plus,915,0.0214356,"St. Louis County, MO",0.02397,0.00215601,0.00347639,True,3,09009,"New Haven County, CT",0.0184866,0.0237798,0.00239512,0.00379788,True,False
+all_six,poverty_pct,915,0.0214356,"St. Louis County, MO",0.00882374,0.514228,0.517216,False,3,09009,"New Haven County, CT",0.0184866,0.00866234,0.521723,0.524648,False,False
+all_six,uninsured_lt65_pct,915,0.0214356,"St. Louis County, MO",-0.0406179,0.0482855,0.0538203,False,3,09009,"New Haven County, CT",0.0184866,-0.0403826,0.0507392,0.0563453,False,False
+all_six,pres2020_margin_d,915,0.0214356,"St. Louis County, MO",0.00323338,0.801268,0.8023,False,3,09009,"New Haven County, CT",0.0184866,0.00299897,0.813624,0.814587,False,False
+all_six,log10_pop_density,915,0.0214356,"St. Louis County, MO",-0.00504122,0.715271,0.716809,False,4,44007,"Providence County, RI",0.0178343,-0.00747464,0.589158,0.591555,False,False
+all_six,pcp_per_100k,915,0.0214356,"St. Louis County, MO",-0.00104241,0.938349,0.938658,False,4,44007,"Providence County, RI",0.0178343,-0.00109013,0.935118,0.935443,False,False
+all_six,pct_pop_65plus,915,0.0214356,"St. Louis County, MO",0.02397,0.00215601,0.00347639,True,4,44007,"Providence County, RI",0.0178343,0.0241418,0.00166154,0.00279584,True,False
+all_six,poverty_pct,915,0.0214356,"St. Louis County, MO",0.00882374,0.514228,0.517216,False,4,44007,"Providence County, RI",0.0178343,0.0060658,0.64431,0.646312,False,False
+all_six,uninsured_lt65_pct,915,0.0214356,"St. Louis County, MO",-0.0406179,0.0482855,0.0538203,False,4,44007,"Providence County, RI",0.0178343,-0.0377418,0.0669406,0.0729001,False,False
+all_six,pres2020_margin_d,915,0.0214356,"St. Louis County, MO",0.00323338,0.801268,0.8023,False,4,44007,"Providence County, RI",0.0178343,0.0012478,0.920276,0.920676,False,False
+all_six,log10_pop_density,915,0.0214356,"St. Louis County, MO",-0.00504122,0.715271,0.716809,False,5,06013,"Contra Costa County, CA",0.0153874,-0.00316799,0.826669,0.827561,False,False
+all_six,pcp_per_100k,915,0.0214356,"St. Louis County, MO",-0.00104241,0.938349,0.938658,False,5,06013,"Contra Costa County, CA",0.0153874,-1.18205e-05,0.999295,0.999299,False,False
+all_six,pct_pop_65plus,915,0.0214356,"St. Louis County, MO",0.02397,0.00215601,0.00347639,True,5,06013,"Contra Costa County, CA",0.0153874,0.0238232,0.00247731,0.00390742,True,False
+all_six,poverty_pct,915,0.0214356,"St. Louis County, MO",0.00882374,0.514228,0.517216,False,5,06013,"Contra Costa County, CA",0.0153874,0.00732112,0.594605,0.596962,False,False
+all_six,uninsured_lt65_pct,915,0.0214356,"St. Louis County, MO",-0.0406179,0.0482855,0.0538203,False,5,06013,"Contra Costa County, CA",0.0153874,-0.0410572,0.0460985,0.0515649,False,False
+all_six,pres2020_margin_d,915,0.0214356,"St. Louis County, MO",0.00323338,0.801268,0.8023,False,5,06013,"Contra Costa County, CA",0.0153874,0.00433452,0.733649,0.735075,False,False
+state_fe,log10_pop_density,915,0.0214356,"St. Louis County, MO",-0.00139444,0.916781,0.917199,False,1,29189,"St. Louis County, MO",0.0214356,0.00223084,0.855789,0.856524,False,False
+state_fe,log10_pop_density,915,0.0214356,"St. Louis County, MO",-0.00139444,0.916781,0.917199,False,2,06111,"Ventura County, CA",0.0204726,-0.00112511,0.93396,0.934291,False,False
+state_fe,log10_pop_density,915,0.0214356,"St. Louis County, MO",-0.00139444,0.916781,0.917199,False,3,09009,"New Haven County, CT",0.0184866,-0.00235092,0.863059,0.863755,False,False
+state_fe,log10_pop_density,915,0.0214356,"St. Louis County, MO",-0.00139444,0.916781,0.917199,False,4,44007,"Providence County, RI",0.0178343,-0.00190609,0.887041,0.887612,False,False
+state_fe,log10_pop_density,915,0.0214356,"St. Louis County, MO",-0.00139444,0.916781,0.917199,False,5,06013,"Contra Costa County, CA",0.0153874,0.00133418,0.926594,0.926962,False,False
+state_fe,pcp_per_100k,915,0.0214356,"St. Louis County, MO",0.00729845,0.61547,0.617675,False,1,29189,"St. Louis County, MO",0.0214356,0.0128381,0.377716,0.381937,False,False
+state_fe,pcp_per_100k,915,0.0214356,"St. Louis County, MO",0.00729845,0.61547,0.617675,False,2,06111,"Ventura County, CA",0.0204726,0.00732341,0.615361,0.617567,False,False
+state_fe,pcp_per_100k,915,0.0214356,"St. Louis County, MO",0.00729845,0.61547,0.617675,False,3,09009,"New Haven County, CT",0.0184866,0.00681863,0.64073,0.642757,False,False
+state_fe,pcp_per_100k,915,0.0214356,"St. Louis County, MO",0.00729845,0.61547,0.617675,False,4,44007,"Providence County, RI",0.0178343,0.00687915,0.636751,0.638806,False,False
+state_fe,pcp_per_100k,915,0.0214356,"St. Louis County, MO",0.00729845,0.61547,0.617675,False,5,06013,"Contra Costa County, CA",0.0153874,0.00910206,0.545699,0.548431,False,False
+state_fe,pct_pop_65plus,915,0.0214356,"St. Louis County, MO",0.00399807,0.794424,0.795494,False,1,29189,"St. Louis County, MO",0.0214356,0.00612918,0.705114,0.706716,False,False
+state_fe,pct_pop_65plus,915,0.0214356,"St. Louis County, MO",0.00399807,0.794424,0.795494,False,2,06111,"Ventura County, CA",0.0204726,0.00370197,0.808376,0.809368,False,False
+state_fe,pct_pop_65plus,915,0.0214356,"St. Louis County, MO",0.00399807,0.794424,0.795494,False,3,09009,"New Haven County, CT",0.0184866,0.00448621,0.772103,0.773301,False,False
+state_fe,pct_pop_65plus,915,0.0214356,"St. Louis County, MO",0.00399807,0.794424,0.795494,False,4,44007,"Providence County, RI",0.0178343,0.0058084,0.710918,0.712484,False,False
+state_fe,pct_pop_65plus,915,0.0214356,"St. Louis County, MO",0.00399807,0.794424,0.795494,False,5,06013,"Contra Costa County, CA",0.0153874,0.00460592,0.767035,0.768262,False,False
+state_fe,poverty_pct,915,0.0214356,"St. Louis County, MO",0.00670924,0.561777,0.564383,False,1,29189,"St. Louis County, MO",0.0214356,0.00575062,0.61535,0.617556,False,False
+state_fe,poverty_pct,915,0.0214356,"St. Louis County, MO",0.00670924,0.561777,0.564383,False,2,06111,"Ventura County, CA",0.0204726,0.00721364,0.529065,0.531931,False,False
+state_fe,poverty_pct,915,0.0214356,"St. Louis County, MO",0.00670924,0.561777,0.564383,False,3,09009,"New Haven County, CT",0.0184866,0.00626642,0.587748,0.590156,False,False
+state_fe,poverty_pct,915,0.0214356,"St. Louis County, MO",0.00670924,0.561777,0.564383,False,4,44007,"Providence County, RI",0.0178343,0.00494747,0.663018,0.664894,False,False
+state_fe,poverty_pct,915,0.0214356,"St. Louis County, MO",0.00670924,0.561777,0.564383,False,5,06013,"Contra Costa County, CA",0.0153874,0.0041107,0.744974,0.746331,False,False
+state_fe,uninsured_lt65_pct,915,0.0214356,"St. Louis County, MO",0.00538849,0.829857,0.830731,False,1,29189,"St. Louis County, MO",0.0214356,-0.003571,0.884007,0.884593,False,False
+state_fe,uninsured_lt65_pct,915,0.0214356,"St. Louis County, MO",0.00538849,0.829857,0.830731,False,2,06111,"Ventura County, CA",0.0204726,0.00415109,0.870752,0.871408,False,False
+state_fe,uninsured_lt65_pct,915,0.0214356,"St. Louis County, MO",0.00538849,0.829857,0.830731,False,3,09009,"New Haven County, CT",0.0184866,0.00485441,0.846893,0.847675,False,False
+state_fe,uninsured_lt65_pct,915,0.0214356,"St. Louis County, MO",0.00538849,0.829857,0.830731,False,4,44007,"Providence County, RI",0.0178343,0.00278903,0.911746,0.91219,False,False
+state_fe,uninsured_lt65_pct,915,0.0214356,"St. Louis County, MO",0.00538849,0.829857,0.830731,False,5,06013,"Contra Costa County, CA",0.0153874,-0.000649453,0.980922,0.981018,False,False
+all_six_state_fe,log10_pop_density,915,0.0214356,"St. Louis County, MO",-0.00462984,0.688346,0.690055,False,1,29189,"St. Louis County, MO",0.0214356,-0.00224964,0.824655,0.825558,False,False
+all_six_state_fe,pcp_per_100k,915,0.0214356,"St. Louis County, MO",0.0106064,0.449437,0.452986,False,1,29189,"St. Louis County, MO",0.0214356,0.0144232,0.319959,0.324748,False,False
+all_six_state_fe,pct_pop_65plus,915,0.0214356,"St. Louis County, MO",0.00353374,0.822404,0.823319,False,1,29189,"St. Louis County, MO",0.0214356,0.00732876,0.649242,0.651211,False,False
+all_six_state_fe,poverty_pct,915,0.0214356,"St. Louis County, MO",0.00613295,0.630407,0.632506,False,1,29189,"St. Louis County, MO",0.0214356,0.0081674,0.525109,0.528007,False,False
+all_six_state_fe,uninsured_lt65_pct,915,0.0214356,"St. Louis County, MO",0.00470214,0.872027,0.872676,False,1,29189,"St. Louis County, MO",0.0214356,-0.00346918,0.906876,0.907345,False,False
+all_six_state_fe,log10_pop_density,915,0.0214356,"St. Louis County, MO",-0.00462984,0.688346,0.690055,False,2,06111,"Ventura County, CA",0.0204726,-0.00434532,0.714266,0.715811,False,False
+all_six_state_fe,pcp_per_100k,915,0.0214356,"St. Louis County, MO",0.0106064,0.449437,0.452986,False,2,06111,"Ventura County, CA",0.0204726,0.0102627,0.462527,0.465959,False,False
+all_six_state_fe,pct_pop_65plus,915,0.0214356,"St. Louis County, MO",0.00353374,0.822404,0.823319,False,2,06111,"Ventura County, CA",0.0204726,0.00340109,0.827893,0.828778,False,False
+all_six_state_fe,poverty_pct,915,0.0214356,"St. Louis County, MO",0.00613295,0.630407,0.632506,False,2,06111,"Ventura County, CA",0.0204726,0.00723967,0.56812,0.570677,False,False
+all_six_state_fe,uninsured_lt65_pct,915,0.0214356,"St. Louis County, MO",0.00470214,0.872027,0.872676,False,2,06111,"Ventura County, CA",0.0204726,0.00233342,0.936364,0.936682,False,False
+all_six_state_fe,log10_pop_density,915,0.0214356,"St. Louis County, MO",-0.00462984,0.688346,0.690055,False,3,09009,"New Haven County, CT",0.0184866,-0.00551704,0.640761,0.642788,False,False
+all_six_state_fe,pcp_per_100k,915,0.0214356,"St. Louis County, MO",0.0106064,0.449437,0.452986,False,3,09009,"New Haven County, CT",0.0184866,0.0103792,0.460352,0.463804,False,False
+all_six_state_fe,pct_pop_65plus,915,0.0214356,"St. Louis County, MO",0.00353374,0.822404,0.823319,False,3,09009,"New Haven County, CT",0.0184866,0.00361039,0.818861,0.819795,False,False
+all_six_state_fe,poverty_pct,915,0.0214356,"St. Louis County, MO",0.00613295,0.630407,0.632506,False,3,09009,"New Haven County, CT",0.0184866,0.00572596,0.652917,0.65486,False,False
+all_six_state_fe,uninsured_lt65_pct,915,0.0214356,"St. Louis County, MO",0.00470214,0.872027,0.872676,False,3,09009,"New Haven County, CT",0.0184866,0.00397082,0.892235,0.892779,False,False
+all_six_state_fe,log10_pop_density,915,0.0214356,"St. Louis County, MO",-0.00462984,0.688346,0.690055,False,4,44007,"Providence County, RI",0.0178343,-0.00478634,0.678311,0.680085,False,False
+all_six_state_fe,pcp_per_100k,915,0.0214356,"St. Louis County, MO",0.0106064,0.449437,0.452986,False,4,44007,"Providence County, RI",0.0178343,0.00997341,0.477292,0.480594,False,False
+all_six_state_fe,pct_pop_65plus,915,0.0214356,"St. Louis County, MO",0.00353374,0.822404,0.823319,False,4,44007,"Providence County, RI",0.0178343,0.00509234,0.749284,0.750616,False,False
+all_six_state_fe,poverty_pct,915,0.0214356,"St. Louis County, MO",0.00613295,0.630407,0.632506,False,4,44007,"Providence County, RI",0.0178343,0.00486258,0.700943,0.702571,False,False
+all_six_state_fe,uninsured_lt65_pct,915,0.0214356,"St. Louis County, MO",0.00470214,0.872027,0.872676,False,4,44007,"Providence County, RI",0.0178343,0.00275658,0.925741,0.926113,False,False
+all_six_state_fe,log10_pop_density,915,0.0214356,"St. Louis County, MO",-0.00462984,0.688346,0.690055,False,5,06013,"Contra Costa County, CA",0.0153874,-0.00214785,0.86534,0.866024,False,False
+all_six_state_fe,pcp_per_100k,915,0.0214356,"St. Louis County, MO",0.0106064,0.449437,0.452986,False,5,06013,"Contra Costa County, CA",0.0153874,0.0107468,0.442785,0.446394,False,False
+all_six_state_fe,pct_pop_65plus,915,0.0214356,"St. Louis County, MO",0.00353374,0.822404,0.823319,False,5,06013,"Contra Costa County, CA",0.0153874,0.00504102,0.756951,0.758237,False,False
+all_six_state_fe,poverty_pct,915,0.0214356,"St. Louis County, MO",0.00613295,0.630407,0.632506,False,5,06013,"Contra Costa County, CA",0.0153874,0.00488414,0.70573,0.707328,False,False
+all_six_state_fe,uninsured_lt65_pct,915,0.0214356,"St. Louis County, MO",0.00470214,0.872027,0.872676,False,5,06013,"Contra Costa County, CA",0.0153874,0.000994819,0.972868,0.973003,False,False
+half_month_fe,log10_pop_density,915,0.0214356,"St. Louis County, MO",-0.00663706,0.580777,0.583237,False,1,29189,"St. Louis County, MO",0.0214356,-0.00120124,0.912339,0.91278,False,False
+half_month_fe,log10_pop_density,915,0.0214356,"St. Louis County, MO",-0.00663706,0.580777,0.583237,False,2,06111,"Ventura County, CA",0.0204726,-0.00660728,0.584725,0.587156,False,False
+half_month_fe,log10_pop_density,915,0.0214356,"St. Louis County, MO",-0.00663706,0.580777,0.583237,False,3,09009,"New Haven County, CT",0.0184866,-0.00651488,0.5911,0.593483,False,False
+half_month_fe,log10_pop_density,915,0.0214356,"St. Louis County, MO",-0.00663706,0.580777,0.583237,False,4,44007,"Providence County, RI",0.0178343,-0.00899436,0.463251,0.466677,False,False
+half_month_fe,log10_pop_density,915,0.0214356,"St. Louis County, MO",-0.00663706,0.580777,0.583237,False,5,06013,"Contra Costa County, CA",0.0153874,-0.00393937,0.762539,0.763792,False,False
+half_month_fe,pcp_per_100k,915,0.0214356,"St. Louis County, MO",-0.00196248,0.868406,0.869074,False,1,29189,"St. Louis County, MO",0.0214356,0.00585527,0.616657,0.618853,False,False
+half_month_fe,pcp_per_100k,915,0.0214356,"St. Louis County, MO",-0.00196248,0.868406,0.869074,False,2,06111,"Ventura County, CA",0.0204726,-0.00202762,0.863905,0.864596,False,False
+half_month_fe,pcp_per_100k,915,0.0214356,"St. Louis County, MO",-0.00196248,0.868406,0.869074,False,3,09009,"New Haven County, CT",0.0184866,-0.00194341,0.86981,0.870471,False,False
+half_month_fe,pcp_per_100k,915,0.0214356,"St. Louis County, MO",-0.00196248,0.868406,0.869074,False,4,44007,"Providence County, RI",0.0178343,-0.00301365,0.800186,0.801224,False,False
+half_month_fe,pcp_per_100k,915,0.0214356,"St. Louis County, MO",-0.00196248,0.868406,0.869074,False,5,06013,"Contra Costa County, CA",0.0153874,0.00020297,0.986878,0.986943,False,False
+half_month_fe,pct_pop_65plus,915,0.0214356,"St. Louis County, MO",0.0259889,0.0111862,0.0143535,False,1,29189,"St. Louis County, MO",0.0214356,0.028492,0.00628734,0.00866725,False,False
+half_month_fe,pct_pop_65plus,915,0.0214356,"St. Louis County, MO",0.0259889,0.0111862,0.0143535,False,2,06111,"Ventura County, CA",0.0204726,0.0261586,0.0113164,0.0145009,False,False
+half_month_fe,pct_pop_65plus,915,0.0214356,"St. Louis County, MO",0.0259889,0.0111862,0.0143535,False,3,09009,"New Haven County, CT",0.0184866,0.0260646,0.0113082,0.0144917,False,False
+half_month_fe,pct_pop_65plus,915,0.0214356,"St. Louis County, MO",0.0259889,0.0111862,0.0143535,False,4,44007,"Providence County, RI",0.0178343,0.0272279,0.00677326,0.00924632,False,False
+half_month_fe,pct_pop_65plus,915,0.0214356,"St. Louis County, MO",0.0259889,0.0111862,0.0143535,False,5,06013,"Contra Costa County, CA",0.0153874,0.0253366,0.0124525,0.0157823,False,False
+half_month_fe,poverty_pct,915,0.0214356,"St. Louis County, MO",-0.00575914,0.642327,0.644343,False,1,29189,"St. Louis County, MO",0.0214356,-0.0090245,0.439956,0.443591,False,False
+half_month_fe,poverty_pct,915,0.0214356,"St. Louis County, MO",-0.00575914,0.642327,0.644343,False,2,06111,"Ventura County, CA",0.0204726,-0.00566725,0.647239,0.649221,False,False
+half_month_fe,poverty_pct,915,0.0214356,"St. Louis County, MO",-0.00575914,0.642327,0.644343,False,3,09009,"New Haven County, CT",0.0184866,-0.00576276,0.64245,0.644465,False,False
+half_month_fe,poverty_pct,915,0.0214356,"St. Louis County, MO",-0.00575914,0.642327,0.644343,False,4,44007,"Providence County, RI",0.0178343,-0.00663938,0.588278,0.590682,False,False
+half_month_fe,poverty_pct,915,0.0214356,"St. Louis County, MO",-0.00575914,0.642327,0.644343,False,5,06013,"Contra Costa County, CA",0.0153874,-0.0079545,0.543937,0.546683,False,False
+half_month_fe,uninsured_lt65_pct,915,0.0214356,"St. Louis County, MO",-0.0293271,0.0747528,0.080826,False,1,29189,"St. Louis County, MO",0.0214356,-0.0304054,0.0600862,0.0659182,False,False
+half_month_fe,uninsured_lt65_pct,915,0.0214356,"St. Louis County, MO",-0.0293271,0.0747528,0.080826,False,2,06111,"Ventura County, CA",0.0204726,-0.0295023,0.0724917,0.0785351,False,False
+half_month_fe,uninsured_lt65_pct,915,0.0214356,"St. Louis County, MO",-0.0293271,0.0747528,0.080826,False,3,09009,"New Haven County, CT",0.0184866,-0.0297228,0.0751266,0.0812045,False,False
+half_month_fe,uninsured_lt65_pct,915,0.0214356,"St. Louis County, MO",-0.0293271,0.0747528,0.080826,False,4,44007,"Providence County, RI",0.0178343,-0.0274735,0.0977333,0.103997,False,False
+half_month_fe,uninsured_lt65_pct,915,0.0214356,"St. Louis County, MO",-0.0293271,0.0747528,0.080826,False,5,06013,"Contra Costa County, CA",0.0153874,-0.0321448,0.0540755,0.05977,False,False
+half_month_fe,pres2020_margin_d,915,0.0214356,"St. Louis County, MO",-0.00511835,0.685309,0.687038,False,1,29189,"St. Louis County, MO",0.0214356,-0.00794497,0.51125,0.514262,False,False
+half_month_fe,pres2020_margin_d,915,0.0214356,"St. Louis County, MO",-0.00511835,0.685309,0.687038,False,2,06111,"Ventura County, CA",0.0204726,-0.00551774,0.670912,0.672735,False,False
+half_month_fe,pres2020_margin_d,915,0.0214356,"St. Louis County, MO",-0.00511835,0.685309,0.687038,False,3,09009,"New Haven County, CT",0.0184866,-0.00499927,0.693974,0.695647,False,False
+half_month_fe,pres2020_margin_d,915,0.0214356,"St. Louis County, MO",-0.00511835,0.685309,0.687038,False,4,44007,"Providence County, RI",0.0178343,-0.00674954,0.583956,0.586392,False,False
+half_month_fe,pres2020_margin_d,915,0.0214356,"St. Louis County, MO",-0.00511835,0.685309,0.687038,False,5,06013,"Contra Costa County, CA",0.0153874,-0.00322724,0.794661,0.79573,False,False
+iso_week_fe,log10_pop_density,915,0.0214356,"St. Louis County, MO",-0.00299532,0.769382,0.770595,False,1,29189,"St. Louis County, MO",0.0214356,0.00201119,0.826231,0.827125,False,False
+iso_week_fe,log10_pop_density,915,0.0214356,"St. Louis County, MO",-0.00299532,0.769382,0.770595,False,2,06111,"Ventura County, CA",0.0204726,-0.00380556,0.702815,0.704431,False,False
+iso_week_fe,log10_pop_density,915,0.0214356,"St. Louis County, MO",-0.00299532,0.769382,0.770595,False,3,09009,"New Haven County, CT",0.0184866,-0.00339072,0.746673,0.74802,False,False
+iso_week_fe,log10_pop_density,915,0.0214356,"St. Louis County, MO",-0.00299532,0.769382,0.770595,False,4,44007,"Providence County, RI",0.0178343,-0.00628222,0.54247,0.545228,False,False
+iso_week_fe,log10_pop_density,915,0.0214356,"St. Louis County, MO",-0.00299532,0.769382,0.770595,False,5,06013,"Contra Costa County, CA",0.0153874,-0.000306727,0.977359,0.977472,False,False
+iso_week_fe,pcp_per_100k,915,0.0214356,"St. Louis County, MO",0.00233358,0.851538,0.852295,False,1,29189,"St. Louis County, MO",0.0214356,0.00973912,0.415023,0.418889,False,False
+iso_week_fe,pcp_per_100k,915,0.0214356,"St. Louis County, MO",0.00233358,0.851538,0.852295,False,2,06111,"Ventura County, CA",0.0204726,0.00149076,0.905144,0.905621,False,False
+iso_week_fe,pcp_per_100k,915,0.0214356,"St. Louis County, MO",0.00233358,0.851538,0.852295,False,3,09009,"New Haven County, CT",0.0184866,0.00231917,0.852466,0.853218,False,False
+iso_week_fe,pcp_per_100k,915,0.0214356,"St. Louis County, MO",0.00233358,0.851538,0.852295,False,4,44007,"Providence County, RI",0.0178343,0.000684881,0.956837,0.957052,False,False
+iso_week_fe,pcp_per_100k,915,0.0214356,"St. Louis County, MO",0.00233358,0.851538,0.852295,False,5,06013,"Contra Costa County, CA",0.0153874,0.00483237,0.706777,0.708368,False,False
+iso_week_fe,pct_pop_65plus,915,0.0214356,"St. Louis County, MO",0.0219689,0.0734933,0.0795502,False,1,29189,"St. Louis County, MO",0.0214356,0.0248164,0.0515118,0.0571392,False,False
+iso_week_fe,pct_pop_65plus,915,0.0214356,"St. Louis County, MO",0.0219689,0.0734933,0.0795502,False,2,06111,"Ventura County, CA",0.0204726,0.0230624,0.0677942,0.0737676,False,False
+iso_week_fe,pct_pop_65plus,915,0.0214356,"St. Louis County, MO",0.0219689,0.0734933,0.0795502,False,3,09009,"New Haven County, CT",0.0184866,0.0220125,0.071012,0.0770346,False,False
+iso_week_fe,pct_pop_65plus,915,0.0214356,"St. Louis County, MO",0.0219689,0.0734933,0.0795502,False,4,44007,"Providence County, RI",0.0178343,0.0232769,0.0646233,0.0705428,False,False
+iso_week_fe,pct_pop_65plus,915,0.0214356,"St. Louis County, MO",0.0219689,0.0734933,0.0795502,False,5,06013,"Contra Costa County, CA",0.0153874,0.0216147,0.0784791,0.0845965,False,False
+iso_week_fe,poverty_pct,915,0.0214356,"St. Louis County, MO",-0.00324597,0.773548,0.774738,False,1,29189,"St. Louis County, MO",0.0214356,-0.00687927,0.500904,0.504003,False,False
+iso_week_fe,poverty_pct,915,0.0214356,"St. Louis County, MO",-0.00324597,0.773548,0.774738,False,2,06111,"Ventura County, CA",0.0204726,-0.00225365,0.841644,0.842455,False,False
+iso_week_fe,poverty_pct,915,0.0214356,"St. Louis County, MO",-0.00324597,0.773548,0.774738,False,3,09009,"New Haven County, CT",0.0184866,-0.00331988,0.768686,0.769903,False,False
+iso_week_fe,poverty_pct,915,0.0214356,"St. Louis County, MO",-0.00324597,0.773548,0.774738,False,4,44007,"Providence County, RI",0.0178343,-0.00416202,0.710796,0.712362,False,False
+iso_week_fe,poverty_pct,915,0.0214356,"St. Louis County, MO",-0.00324597,0.773548,0.774738,False,5,06013,"Contra Costa County, CA",0.0153874,-0.00554151,0.635144,0.63721,False,False
+iso_week_fe,uninsured_lt65_pct,915,0.0214356,"St. Louis County, MO",-0.0258609,0.116827,0.123134,False,1,29189,"St. Louis County, MO",0.0214356,-0.027615,0.0880168,0.0942221,False,False
+iso_week_fe,uninsured_lt65_pct,915,0.0214356,"St. Louis County, MO",-0.0258609,0.116827,0.123134,False,2,06111,"Ventura County, CA",0.0204726,-0.0250222,0.132772,0.139063,False,False
+iso_week_fe,uninsured_lt65_pct,915,0.0214356,"St. Louis County, MO",-0.0258609,0.116827,0.123134,False,3,09009,"New Haven County, CT",0.0184866,-0.0256665,0.125454,0.131758,False,False
+iso_week_fe,uninsured_lt65_pct,915,0.0214356,"St. Louis County, MO",-0.0258609,0.116827,0.123134,False,4,44007,"Providence County, RI",0.0178343,-0.0235841,0.159908,0.166092,False,False
+iso_week_fe,uninsured_lt65_pct,915,0.0214356,"St. Louis County, MO",-0.0258609,0.116827,0.123134,False,5,06013,"Contra Costa County, CA",0.0153874,-0.0284626,0.0885832,0.0947928,False,False
+iso_week_fe,pres2020_margin_d,915,0.0214356,"St. Louis County, MO",-0.00457037,0.733211,0.73464,False,1,29189,"St. Louis County, MO",0.0214356,-0.00734343,0.57173,0.574259,False,False
+iso_week_fe,pres2020_margin_d,915,0.0214356,"St. Louis County, MO",-0.00457037,0.733211,0.73464,False,2,06111,"Ventura County, CA",0.0204726,-0.0068439,0.624269,0.626411,False,False
+iso_week_fe,pres2020_margin_d,915,0.0214356,"St. Louis County, MO",-0.00457037,0.733211,0.73464,False,3,09009,"New Haven County, CT",0.0184866,-0.00502168,0.708715,0.710294,False,False
+iso_week_fe,pres2020_margin_d,915,0.0214356,"St. Louis County, MO",-0.00457037,0.733211,0.73464,False,4,44007,"Providence County, RI",0.0178343,-0.00829496,0.547489,0.550207,False,False
+iso_week_fe,pres2020_margin_d,915,0.0214356,"St. Louis County, MO",-0.00457037,0.733211,0.73464,False,5,06013,"Contra Costa County, CA",0.0153874,-0.00256991,0.84539,0.84618,False,False
+re_weights,log10_pop_density,915,0.00247002,"St. Louis County, MO",-0.0106086,0.374726,0.378976,False,1,29189,"St. Louis County, MO",0.00247002,-0.00955767,0.421388,0.425195,False,False
+re_weights,log10_pop_density,915,0.00247002,"St. Louis County, MO",-0.0106086,0.374726,0.378976,False,2,06111,"Ventura County, CA",0.0024662,-0.0107088,0.370481,0.374772,False,False
+re_weights,log10_pop_density,915,0.00247002,"St. Louis County, MO",-0.0106086,0.374726,0.378976,False,3,09009,"New Haven County, CT",0.00245712,-0.0108713,0.36481,0.369157,False,False
+re_weights,log10_pop_density,915,0.00247002,"St. Louis County, MO",-0.0106086,0.374726,0.378976,False,4,44007,"Providence County, RI",0.00245371,-0.0112545,0.347822,0.352336,False,False
+re_weights,log10_pop_density,915,0.00247002,"St. Louis County, MO",-0.0106086,0.374726,0.378976,False,5,06013,"Contra Costa County, CA",0.00243846,-0.0100282,0.405931,0.409882,False,False
+re_weights,pcp_per_100k,915,0.00246968,"St. Louis County, MO",0.00688562,0.577883,0.580365,False,1,29189,"St. Louis County, MO",0.00246968,0.00796523,0.523784,0.526693,False,False
+re_weights,pcp_per_100k,915,0.00246968,"St. Louis County, MO",0.00688562,0.577883,0.580365,False,2,06111,"Ventura County, CA",0.00246587,0.00687622,0.57902,0.581494,False,False
+re_weights,pcp_per_100k,915,0.00246968,"St. Louis County, MO",0.00688562,0.577883,0.580365,False,3,09009,"New Haven County, CT",0.00245678,0.00683107,0.581631,0.584084,False,False
+re_weights,pcp_per_100k,915,0.00246968,"St. Louis County, MO",0.00688562,0.577883,0.580365,False,4,44007,"Providence County, RI",0.00245338,0.00654949,0.597282,0.599619,False,False
+re_weights,pcp_per_100k,915,0.00246968,"St. Louis County, MO",0.00688562,0.577883,0.580365,False,5,06013,"Contra Costa County, CA",0.00243814,0.00734507,0.556438,0.559085,False,False
+re_weights,pct_pop_65plus,915,0.00248364,"St. Louis County, MO",0.0262878,0.0264086,0.0309708,False,1,29189,"St. Louis County, MO",0.00248364,0.0264482,0.0263105,0.0308665,False,False
+re_weights,pct_pop_65plus,915,0.00248364,"St. Louis County, MO",0.0262878,0.0264086,0.0309708,False,2,06111,"Ventura County, CA",0.00247975,0.0263543,0.0263344,0.0308919,False,False
+re_weights,pct_pop_65plus,915,0.00248364,"St. Louis County, MO",0.0262878,0.0264086,0.0309708,False,3,09009,"New Haven County, CT",0.00247049,0.0263068,0.0264276,0.0309911,False,False
+re_weights,pct_pop_65plus,915,0.00248364,"St. Louis County, MO",0.0262878,0.0264086,0.0309708,False,4,44007,"Providence County, RI",0.00246702,0.0265132,0.0255102,0.030014,False,False
+re_weights,pct_pop_65plus,915,0.00248364,"St. Louis County, MO",0.0262878,0.0264086,0.0309708,False,5,06013,"Contra Costa County, CA",0.0024515,0.0260694,0.0268683,0.0314597,False,False
+re_weights,poverty_pct,915,0.00247104,"St. Louis County, MO",-0.00465842,0.730883,0.732325,False,1,29189,"St. Louis County, MO",0.00247104,-0.00503054,0.709281,0.710857,False,False
+re_weights,poverty_pct,915,0.00247104,"St. Louis County, MO",-0.00465842,0.730883,0.732325,False,2,06111,"Ventura County, CA",0.00246722,-0.00465572,0.731656,0.733093,False,False
+re_weights,poverty_pct,915,0.00247104,"St. Louis County, MO",-0.00465842,0.730883,0.732325,False,3,09009,"New Haven County, CT",0.00245812,-0.0046618,0.731136,0.732577,False,False
+re_weights,poverty_pct,915,0.00247104,"St. Louis County, MO",-0.00465842,0.730883,0.732325,False,4,44007,"Providence County, RI",0.00245471,-0.00479771,0.723086,0.724576,False,False
+re_weights,poverty_pct,915,0.00247104,"St. Louis County, MO",-0.00465842,0.730883,0.732325,False,5,06013,"Contra Costa County, CA",0.00243944,-0.00505231,0.710246,0.711816,False,False
+re_weights,uninsured_lt65_pct,915,0.00249078,"St. Louis County, MO",-0.0253341,0.121993,0.1283,False,1,29189,"St. Louis County, MO",0.00249078,-0.0254184,0.120184,0.126492,False,False
+re_weights,uninsured_lt65_pct,915,0.00249078,"St. Louis County, MO",-0.0253341,0.121993,0.1283,False,2,06111,"Ventura County, CA",0.00248686,-0.0253201,0.122593,0.128899,False,False
+re_weights,uninsured_lt65_pct,915,0.00249078,"St. Louis County, MO",-0.0253341,0.121993,0.1283,False,3,09009,"New Haven County, CT",0.00247751,-0.0252242,0.124453,0.130758,False,False
+re_weights,uninsured_lt65_pct,915,0.00249078,"St. Louis County, MO",-0.0253341,0.121993,0.1283,False,4,44007,"Providence County, RI",0.00247401,-0.0248912,0.128613,0.134912,False,False
+re_weights,uninsured_lt65_pct,915,0.00249078,"St. Louis County, MO",-0.0253341,0.121993,0.1283,False,5,06013,"Contra Costa County, CA",0.00245834,-0.0257755,0.117488,0.123796,False,False
+re_weights,pres2020_margin_d,915,0.00247189,"St. Louis County, MO",0.0124998,0.226313,0.232002,False,1,29189,"St. Louis County, MO",0.00247189,0.0118105,0.250195,0.255665,False,False
+re_weights,pres2020_margin_d,915,0.00247189,"St. Louis County, MO",0.0124998,0.226313,0.232002,False,2,06111,"Ventura County, CA",0.00246806,0.012537,0.226011,0.231703,False,False
+re_weights,pres2020_margin_d,915,0.00247189,"St. Louis County, MO",0.0124998,0.226313,0.232002,False,3,09009,"New Haven County, CT",0.00245895,0.0124216,0.230448,0.2361,False,False
+re_weights,pres2020_margin_d,915,0.00247189,"St. Louis County, MO",0.0124998,0.226313,0.232002,False,4,44007,"Providence County, RI",0.00245553,0.0120195,0.244795,0.250316,False,False
+re_weights,pres2020_margin_d,915,0.00247189,"St. Louis County, MO",0.0124998,0.226313,0.232002,False,5,06013,"Contra Costa County, CA",0.00244025,0.0130098,0.204964,0.210835,False,False
+re_weights_all_six,log10_pop_density,915,0.0024838,"St. Louis County, MO",-0.0110483,0.27689,0.282104,False,1,29189,"St. Louis County, MO",0.0024838,-0.0100292,0.315329,0.320164,False,False
+re_weights_all_six,pcp_per_100k,915,0.0024838,"St. Louis County, MO",0.00625678,0.604394,0.606679,False,1,29189,"St. Louis County, MO",0.0024838,0.00706905,0.562581,0.56518,False,False
+re_weights_all_six,pct_pop_65plus,915,0.0024838,"St. Louis County, MO",0.0233273,0.0170014,0.0208262,False,1,29189,"St. Louis County, MO",0.0024838,0.0237825,0.0156191,0.019306,False,False
+re_weights_all_six,poverty_pct,915,0.0024838,"St. Louis County, MO",0.00364899,0.778833,0.779992,False,1,29189,"St. Louis County, MO",0.0024838,0.00334563,0.795785,0.796847,False,False
+re_weights_all_six,uninsured_lt65_pct,915,0.0024838,"St. Louis County, MO",-0.0243898,0.209416,0.215251,False,1,29189,"St. Louis County, MO",0.0024838,-0.024291,0.210962,0.216784,False,False
+re_weights_all_six,pres2020_margin_d,915,0.0024838,"St. Louis County, MO",0.00613967,0.609619,0.611866,False,1,29189,"St. Louis County, MO",0.0024838,0.00518791,0.664608,0.666473,False,False
+re_weights_all_six,log10_pop_density,915,0.0024838,"St. Louis County, MO",-0.0110483,0.27689,0.282104,False,2,06111,"Ventura County, CA",0.00247991,-0.0111404,0.272986,0.278238,False,False
+re_weights_all_six,pcp_per_100k,915,0.0024838,"St. Louis County, MO",0.00625678,0.604394,0.606679,False,2,06111,"Ventura County, CA",0.00247991,0.00625551,0.604748,0.607031,False,False
+re_weights_all_six,pct_pop_65plus,915,0.0024838,"St. Louis County, MO",0.0233273,0.0170014,0.0208262,False,2,06111,"Ventura County, CA",0.00247991,0.0233555,0.0172827,0.0211344,False,False
+re_weights_all_six,poverty_pct,915,0.0024838,"St. Louis County, MO",0.00364899,0.778833,0.779992,False,2,06111,"Ventura County, CA",0.00247991,0.00365075,0.779095,0.780252,False,False
+re_weights_all_six,uninsured_lt65_pct,915,0.0024838,"St. Louis County, MO",-0.0243898,0.209416,0.215251,False,2,06111,"Ventura County, CA",0.00247991,-0.0244015,0.209707,0.21554,False,False
+re_weights_all_six,pres2020_margin_d,915,0.0024838,"St. Louis County, MO",0.00613967,0.609619,0.611866,False,2,06111,"Ventura County, CA",0.00247991,0.00612036,0.612275,0.614503,False,False
+re_weights_all_six,log10_pop_density,915,0.0024838,"St. Louis County, MO",-0.0110483,0.27689,0.282104,False,3,09009,"New Haven County, CT",0.00247066,-0.0112428,0.270585,0.27586,False,False
+re_weights_all_six,pcp_per_100k,915,0.0024838,"St. Louis County, MO",0.00625678,0.604394,0.606679,False,3,09009,"New Haven County, CT",0.00247066,0.00629109,0.603035,0.60533,False,False
+re_weights_all_six,pct_pop_65plus,915,0.0024838,"St. Louis County, MO",0.0233273,0.0170014,0.0208262,False,3,09009,"New Haven County, CT",0.00247066,0.0232899,0.0174011,0.0212639,False,False
+re_weights_all_six,poverty_pct,915,0.0024838,"St. Louis County, MO",0.00364899,0.778833,0.779992,False,3,09009,"New Haven County, CT",0.00247066,0.0035804,0.783241,0.784374,False,False
+re_weights_all_six,uninsured_lt65_pct,915,0.0024838,"St. Louis County, MO",-0.0243898,0.209416,0.215251,False,3,09009,"New Haven County, CT",0.00247066,-0.0242955,0.211385,0.217204,False,False
+re_weights_all_six,pres2020_margin_d,915,0.0024838,"St. Louis County, MO",0.00613967,0.609619,0.611866,False,3,09009,"New Haven County, CT",0.00247066,0.00610329,0.612404,0.614631,False,False
+re_weights_all_six,log10_pop_density,915,0.0024838,"St. Louis County, MO",-0.0110483,0.27689,0.282104,False,4,44007,"Providence County, RI",0.00246718,-0.0115557,0.257285,0.262688,False,False
+re_weights_all_six,pcp_per_100k,915,0.0024838,"St. Louis County, MO",0.00625678,0.604394,0.606679,False,4,44007,"Providence County, RI",0.00246718,0.00619381,0.608307,0.610563,False,False
+re_weights_all_six,pct_pop_65plus,915,0.0024838,"St. Louis County, MO",0.0233273,0.0170014,0.0208262,False,4,44007,"Providence County, RI",0.00246718,0.0233859,0.0169275,0.0207451,False,False
+re_weights_all_six,poverty_pct,915,0.0024838,"St. Louis County, MO",0.00364899,0.778833,0.779992,False,4,44007,"Providence County, RI",0.00246718,0.00326435,0.801745,0.802774,False,False
+re_weights_all_six,uninsured_lt65_pct,915,0.0024838,"St. Louis County, MO",-0.0243898,0.209416,0.215251,False,4,44007,"Providence County, RI",0.00246718,-0.0240388,0.215954,0.221734,False,False
+re_weights_all_six,pres2020_margin_d,915,0.0024838,"St. Louis County, MO",0.00613967,0.609619,0.611866,False,4,44007,"Providence County, RI",0.00246718,0.0057766,0.631276,0.633369,False,False
+re_weights_all_six,log10_pop_density,915,0.0024838,"St. Louis County, MO",-0.0110483,0.27689,0.282104,False,5,06013,"Contra Costa County, CA",0.00245166,-0.0106203,0.300396,0.305378,False,False
+re_weights_all_six,pcp_per_100k,915,0.0024838,"St. Louis County, MO",0.00625678,0.604394,0.606679,False,5,06013,"Contra Costa County, CA",0.00245166,0.0064931,0.592264,0.594638,False,False
+re_weights_all_six,pct_pop_65plus,915,0.0024838,"St. Louis County, MO",0.0233273,0.0170014,0.0208262,False,5,06013,"Contra Costa County, CA",0.00245166,0.0232005,0.017297,0.02115,False,False
+re_weights_all_six,poverty_pct,915,0.0024838,"St. Louis County, MO",0.00364899,0.778833,0.779992,False,5,06013,"Contra Costa County, CA",0.00245166,0.00337928,0.795266,0.796332,False,False
+re_weights_all_six,uninsured_lt65_pct,915,0.0024838,"St. Louis County, MO",-0.0243898,0.209416,0.215251,False,5,06013,"Contra Costa County, CA",0.00245166,-0.024346,0.210625,0.21645,False,False
+re_weights_all_six,pres2020_margin_d,915,0.0024838,"St. Louis County, MO",0.00613967,0.609619,0.611866,False,5,06013,"Contra Costa County, CA",0.00245166,0.0065056,0.587142,0.589554,False,False
+unweighted,log10_pop_density,915,0.0010929,"Autauga County, AL",-0.0312189,0.0350427,0.0400775,False,1,01001,"Autauga County, AL",0.0010929,-0.0311428,0.0356544,0.0407175,False,False
+unweighted,log10_pop_density,915,0.0010929,"Autauga County, AL",-0.0312189,0.0350427,0.0400775,False,2,39081,"Jefferson County, OH",0.0010929,-0.0309342,0.037072,0.0421983,False,False
+unweighted,log10_pop_density,915,0.0010929,"Autauga County, AL",-0.0312189,0.0350427,0.0400775,False,3,39085,"Lake County, OH",0.0010929,-0.0319806,0.0303582,0.0351551,False,False
+unweighted,log10_pop_density,915,0.0010929,"Autauga County, AL",-0.0312189,0.0350427,0.0400775,False,4,39089,"Licking County, OH",0.0010929,-0.0312327,0.035092,0.0401292,False,False
+unweighted,log10_pop_density,915,0.0010929,"Autauga County, AL",-0.0312189,0.0350427,0.0400775,False,5,39093,"Lorain County, OH",0.0010929,-0.0315297,0.0330392,0.0379771,False,False
+unweighted,pcp_per_100k,915,0.0010929,"Autauga County, AL",-0.00682294,0.704214,0.705822,False,1,01001,"Autauga County, AL",0.0010929,-0.00672976,0.7082,0.709782,False,False
+unweighted,pcp_per_100k,915,0.0010929,"Autauga County, AL",-0.00682294,0.704214,0.705822,False,2,39081,"Jefferson County, OH",0.0010929,-0.00609751,0.73404,0.735463,False,False
+unweighted,pcp_per_100k,915,0.0010929,"Autauga County, AL",-0.00682294,0.704214,0.705822,False,3,39085,"Lake County, OH",0.0010929,-0.00631088,0.725251,0.726728,False,False
+unweighted,pcp_per_100k,915,0.0010929,"Autauga County, AL",-0.00682294,0.704214,0.705822,False,4,39089,"Licking County, OH",0.0010929,-0.00695109,0.699484,0.701121,False,False
+unweighted,pcp_per_100k,915,0.0010929,"Autauga County, AL",-0.00682294,0.704214,0.705822,False,5,39093,"Lorain County, OH",0.0010929,-0.00664467,0.711626,0.713188,False,False
+unweighted,pct_pop_65plus,915,0.0010929,"Autauga County, AL",0.0333722,0.0464455,0.051923,False,1,01001,"Autauga County, AL",0.0010929,0.033443,0.0461911,0.0516605,False,False
+unweighted,pct_pop_65plus,915,0.0010929,"Autauga County, AL",0.0333722,0.0464455,0.051923,False,2,39081,"Jefferson County, OH",0.0010929,0.0326364,0.0493632,0.05493,False,False
+unweighted,pct_pop_65plus,915,0.0010929,"Autauga County, AL",0.0333722,0.0464455,0.051923,False,3,39085,"Lake County, OH",0.0010929,0.032943,0.048114,0.0536436,False,False
+unweighted,pct_pop_65plus,915,0.0010929,"Autauga County, AL",0.0333722,0.0464455,0.051923,False,4,39089,"Licking County, OH",0.0010929,0.033377,0.0464775,0.0519561,False,False
+unweighted,pct_pop_65plus,915,0.0010929,"Autauga County, AL",0.0333722,0.0464455,0.051923,False,5,39093,"Lorain County, OH",0.0010929,0.0332568,0.0469359,0.052429,False,False
+unweighted,poverty_pct,915,0.0010929,"Autauga County, AL",-0.00019789,0.990858,0.990904,False,1,01001,"Autauga County, AL",0.0010929,-0.000189752,0.991236,0.99128,False,False
+unweighted,poverty_pct,915,0.0010929,"Autauga County, AL",-0.00019789,0.990858,0.990904,False,2,39081,"Jefferson County, OH",0.0010929,-0.000922343,0.957567,0.957779,False,False
+unweighted,poverty_pct,915,0.0010929,"Autauga County, AL",-0.00019789,0.990858,0.990904,False,3,39085,"Lake County, OH",0.0010929,0.000329295,0.98475,0.984826,False,False
+unweighted,poverty_pct,915,0.0010929,"Autauga County, AL",-0.00019789,0.990858,0.990904,False,4,39089,"Licking County, OH",0.0010929,-0.000248275,0.988543,0.9886,False,False
+unweighted,poverty_pct,915,0.0010929,"Autauga County, AL",-0.00019789,0.990858,0.990904,False,5,39093,"Lorain County, OH",0.0010929,-0.000236576,0.989071,0.989125,False,False
+unweighted,uninsured_lt65_pct,915,0.0010929,"Autauga County, AL",-0.0145793,0.417533,0.421375,False,1,01001,"Autauga County, AL",0.0010929,-0.0146189,0.417106,0.420953,False,False
+unweighted,uninsured_lt65_pct,915,0.0010929,"Autauga County, AL",-0.0145793,0.417533,0.421375,False,2,39081,"Jefferson County, OH",0.0010929,-0.0140955,0.431765,0.435476,False,False
+unweighted,uninsured_lt65_pct,915,0.0010929,"Autauga County, AL",-0.0145793,0.417533,0.421375,False,3,39085,"Lake County, OH",0.0010929,-0.0142969,0.426313,0.430074,False,False
+unweighted,uninsured_lt65_pct,915,0.0010929,"Autauga County, AL",-0.0145793,0.417533,0.421375,False,4,39089,"Licking County, OH",0.0010929,-0.0146618,0.41544,0.419301,False,False
+unweighted,uninsured_lt65_pct,915,0.0010929,"Autauga County, AL",-0.0145793,0.417533,0.421375,False,5,39093,"Lorain County, OH",0.0010929,-0.0143786,0.42359,0.427375,False,False
+unweighted,pres2020_margin_d,915,0.0010929,"Autauga County, AL",0.00230058,0.884225,0.884811,False,1,01001,"Autauga County, AL",0.0010929,0.0025059,0.874625,0.87526,False,False
+unweighted,pres2020_margin_d,915,0.0010929,"Autauga County, AL",0.00230058,0.884225,0.884811,False,2,39081,"Jefferson County, OH",0.0010929,0.00265316,0.866325,0.867004,False,False
+unweighted,pres2020_margin_d,915,0.0010929,"Autauga County, AL",0.00230058,0.884225,0.884811,False,3,39085,"Lake County, OH",0.0010929,0.002578,0.870158,0.870817,False,False
+unweighted,pres2020_margin_d,915,0.0010929,"Autauga County, AL",0.00230058,0.884225,0.884811,False,4,39089,"Licking County, OH",0.0010929,0.00224565,0.887117,0.887687,False,False
+unweighted,pres2020_margin_d,915,0.0010929,"Autauga County, AL",0.00230058,0.884225,0.884811,False,5,39093,"Lorain County, OH",0.0010929,0.00246517,0.875915,0.876544,False,False
+no_dow,log10_pop_density,915,0.0128651,"Delaware County, OH",-0.0190606,0.108866,0.115165,False,1,39041,"Delaware County, OH",0.0128651,-0.0196408,0.0980636,0.104329,False,False
+no_dow,log10_pop_density,915,0.0128651,"Delaware County, OH",-0.0190606,0.108866,0.115165,False,2,42003,"Allegheny County, PA",0.0122131,-0.0232543,0.054262,0.0599612,False,False
+no_dow,log10_pop_density,915,0.0128651,"Delaware County, OH",-0.0190606,0.108866,0.115165,False,3,24021,"Frederick County, MD",0.0111373,-0.0190543,0.109067,0.115366,False,False
+no_dow,log10_pop_density,915,0.0128651,"Delaware County, OH",-0.0190606,0.108866,0.115165,False,4,24031,"Montgomery County, MD",0.00933426,-0.0178516,0.134479,0.140765,False,False
+no_dow,log10_pop_density,915,0.0128651,"Delaware County, OH",-0.0190606,0.108866,0.115165,False,5,08031,"Denver County, CO",0.0078888,-0.0171249,0.163169,0.169334,False,False
+no_dow,pcp_per_100k,915,0.0128651,"Delaware County, OH",0.00354015,0.731071,0.732512,False,1,39041,"Delaware County, OH",0.0128651,-0.00372529,0.74292,0.744289,False,False
+no_dow,pcp_per_100k,915,0.0128651,"Delaware County, OH",0.00354015,0.731071,0.732512,False,2,42003,"Allegheny County, PA",0.0122131,0.00053659,0.959795,0.959995,False,False
+no_dow,pcp_per_100k,915,0.0128651,"Delaware County, OH",0.00354015,0.731071,0.732512,False,3,24021,"Frederick County, MD",0.0111373,0.00339511,0.744347,0.745708,False,False
+no_dow,pcp_per_100k,915,0.0128651,"Delaware County, OH",0.00354015,0.731071,0.732512,False,4,24031,"Montgomery County, MD",0.00933426,0.0058223,0.544981,0.547719,False,False
+no_dow,pcp_per_100k,915,0.0128651,"Delaware County, OH",0.00354015,0.731071,0.732512,False,5,08031,"Denver County, CO",0.0078888,0.00543215,0.598528,0.600856,False,False
+no_dow,pct_pop_65plus,915,0.0128651,"Delaware County, OH",0.0325958,0.0632042,0.0690978,False,1,39041,"Delaware County, OH",0.0128651,0.035361,0.0555275,0.0612577,False,False
+no_dow,pct_pop_65plus,915,0.0128651,"Delaware County, OH",0.0325958,0.0632042,0.0690978,False,2,42003,"Allegheny County, PA",0.0122131,0.03169,0.0634697,0.0693682,False,False
+no_dow,pct_pop_65plus,915,0.0128651,"Delaware County, OH",0.0325958,0.0632042,0.0690978,False,3,24021,"Frederick County, MD",0.0111373,0.0325796,0.0648354,0.0707587,False,False
+no_dow,pct_pop_65plus,915,0.0128651,"Delaware County, OH",0.0325958,0.0632042,0.0690978,False,4,24031,"Montgomery County, MD",0.00933426,0.0325584,0.0635147,0.069414,False,False
+no_dow,pct_pop_65plus,915,0.0128651,"Delaware County, OH",0.0325958,0.0632042,0.0690978,False,5,08031,"Denver County, CO",0.0078888,0.0316354,0.0670447,0.0730058,False,False
+no_dow,poverty_pct,915,0.0128651,"Delaware County, OH",0.00413463,0.728345,0.729802,False,1,39041,"Delaware County, OH",0.0128651,0.00930826,0.456389,0.459876,False,False
+no_dow,poverty_pct,915,0.0128651,"Delaware County, OH",0.00413463,0.728345,0.729802,False,2,42003,"Allegheny County, PA",0.0122131,0.00346989,0.77442,0.775604,False,False
+no_dow,poverty_pct,915,0.0128651,"Delaware County, OH",0.00413463,0.728345,0.729802,False,3,24021,"Frederick County, MD",0.0111373,0.00389762,0.748085,0.749423,False,False
+no_dow,poverty_pct,915,0.0128651,"Delaware County, OH",0.00413463,0.728345,0.729802,False,4,24031,"Montgomery County, MD",0.00933426,0.00302573,0.805935,0.806941,False,False
+no_dow,poverty_pct,915,0.0128651,"Delaware County, OH",0.00413463,0.728345,0.729802,False,5,08031,"Denver County, CO",0.0078888,0.00468731,0.699455,0.701093,False,False
+no_dow,uninsured_lt65_pct,915,0.0128651,"Delaware County, OH",-0.0257668,0.0920541,0.0982872,False,1,39041,"Delaware County, OH",0.0128651,-0.022999,0.128072,0.134371,False,False
+no_dow,uninsured_lt65_pct,915,0.0128651,"Delaware County, OH",-0.0257668,0.0920541,0.0982872,False,2,42003,"Allegheny County, PA",0.0122131,-0.0237708,0.107045,0.113341,False,False
+no_dow,uninsured_lt65_pct,915,0.0128651,"Delaware County, OH",-0.0257668,0.0920541,0.0982872,False,3,24021,"Frederick County, MD",0.0111373,-0.0262377,0.0927296,0.0989667,False,False
+no_dow,uninsured_lt65_pct,915,0.0128651,"Delaware County, OH",-0.0257668,0.0920541,0.0982872,False,4,24031,"Montgomery County, MD",0.00933426,-0.0264657,0.0856711,0.0918578,False,False
+no_dow,uninsured_lt65_pct,915,0.0128651,"Delaware County, OH",-0.0257668,0.0920541,0.0982872,False,5,08031,"Denver County, CO",0.0078888,-0.0248541,0.103979,0.110267,False,False
+no_dow,pres2020_margin_d,915,0.0128651,"Delaware County, OH",-0.0083131,0.562672,0.565271,False,1,39041,"Delaware County, OH",0.0128651,-0.00437491,0.738826,0.74022,False,False
+no_dow,pres2020_margin_d,915,0.0128651,"Delaware County, OH",-0.0083131,0.562672,0.565271,False,2,42003,"Allegheny County, PA",0.0122131,-0.00598203,0.675379,0.677172,False,False
+no_dow,pres2020_margin_d,915,0.0128651,"Delaware County, OH",-0.0083131,0.562672,0.565271,False,3,24021,"Frederick County, MD",0.0111373,-0.00808628,0.577439,0.579924,False,False
+no_dow,pres2020_margin_d,915,0.0128651,"Delaware County, OH",-0.0083131,0.562672,0.565271,False,4,24031,"Montgomery County, MD",0.00933426,-0.00712994,0.625262,0.627397,False,False
+no_dow,pres2020_margin_d,915,0.0128651,"Delaware County, OH",-0.0083131,0.562672,0.565271,False,5,08031,"Denver County, CO",0.0078888,-0.00705693,0.623664,0.62581,False,False
+window_10,log10_pop_density,906,0.0129409,"Allegheny County, PA",-0.0386525,0.00125219,0.00221123,True,1,42003,"Allegheny County, PA",0.0129409,-0.0440656,0.000443396,0.000950716,True,False
+window_10,log10_pop_density,906,0.0129409,"Allegheny County, PA",-0.0386525,0.00125219,0.00221123,True,2,24033,"Prince George's County, MD",0.0123916,-0.0382681,0.00127596,0.00224584,True,False
+window_10,log10_pop_density,906,0.0129409,"Allegheny County, PA",-0.0386525,0.00125219,0.00221123,True,3,24021,"Frederick County, MD",0.00961265,-0.0384958,0.00129227,0.00226953,True,False
+window_10,log10_pop_density,906,0.0129409,"Allegheny County, PA",-0.0386525,0.00125219,0.00221123,True,4,12105,"Polk County, FL",0.0085686,-0.038813,0.00115466,0.00206817,True,False
+window_10,log10_pop_density,906,0.0129409,"Allegheny County, PA",-0.0386525,0.00125219,0.00221123,True,5,36027,"Dutchess County, NY",0.00847037,-0.0386527,0.0012614,0.00222464,True,False
+window_10,pcp_per_100k,906,0.0129409,"Allegheny County, PA",-0.00764363,0.483972,0.487216,False,1,42003,"Allegheny County, PA",0.0129409,-0.0115437,0.317234,0.32205,False,False
+window_10,pcp_per_100k,906,0.0129409,"Allegheny County, PA",-0.00764363,0.483972,0.487216,False,2,24033,"Prince George's County, MD",0.0123916,-0.010193,0.362377,0.366748,False,False
+window_10,pcp_per_100k,906,0.0129409,"Allegheny County, PA",-0.00764363,0.483972,0.487216,False,3,24021,"Frederick County, MD",0.00961265,-0.00884589,0.42285,0.426643,False,False
+window_10,pcp_per_100k,906,0.0129409,"Allegheny County, PA",-0.00764363,0.483972,0.487216,False,4,12105,"Polk County, FL",0.0085686,-0.00904408,0.416928,0.420776,False,False
+window_10,pcp_per_100k,906,0.0129409,"Allegheny County, PA",-0.00764363,0.483972,0.487216,False,5,36027,"Dutchess County, NY",0.00847037,-0.00747308,0.494173,0.49733,False,False
+window_10,pct_pop_65plus,906,0.0129409,"Allegheny County, PA",0.0258283,0.162961,0.169128,False,1,42003,"Allegheny County, PA",0.0129409,0.0247234,0.167778,0.173916,False,False
+window_10,pct_pop_65plus,906,0.0129409,"Allegheny County, PA",0.0258283,0.162961,0.169128,False,2,24033,"Prince George's County, MD",0.0123916,0.0241565,0.181242,0.187294,False,False
+window_10,pct_pop_65plus,906,0.0129409,"Allegheny County, PA",0.0258283,0.162961,0.169128,False,3,24021,"Frederick County, MD",0.00961265,0.0242758,0.183511,0.189547,False,False
+window_10,pct_pop_65plus,906,0.0129409,"Allegheny County, PA",0.0258283,0.162961,0.169128,False,4,12105,"Polk County, FL",0.0085686,0.0270998,0.131178,0.137472,False,False
+window_10,pct_pop_65plus,906,0.0129409,"Allegheny County, PA",0.0258283,0.162961,0.169128,False,5,36027,"Dutchess County, NY",0.00847037,0.0256636,0.162297,0.168468,False,False
+window_10,poverty_pct,906,0.0129409,"Allegheny County, PA",0.013145,0.350936,0.355419,False,1,42003,"Allegheny County, PA",0.0129409,0.0126089,0.375114,0.379361,False,False
+window_10,poverty_pct,906,0.0129409,"Allegheny County, PA",0.013145,0.350936,0.355419,False,2,24033,"Prince George's County, MD",0.0123916,0.011533,0.404826,0.408788,False,False
+window_10,poverty_pct,906,0.0129409,"Allegheny County, PA",0.013145,0.350936,0.355419,False,3,24021,"Frederick County, MD",0.00961265,0.0109335,0.427523,0.431272,False,False
+window_10,poverty_pct,906,0.0129409,"Allegheny County, PA",0.013145,0.350936,0.355419,False,4,12105,"Polk County, FL",0.0085686,0.0135508,0.331352,0.336028,False,False
+window_10,poverty_pct,906,0.0129409,"Allegheny County, PA",0.013145,0.350936,0.355419,False,5,36027,"Dutchess County, NY",0.00847037,0.0140607,0.323584,0.328337,False,False
+window_10,uninsured_lt65_pct,906,0.0129409,"Allegheny County, PA",0.00567081,0.766996,0.768223,False,1,42003,"Allegheny County, PA",0.0129409,0.00787713,0.67921,0.680978,False,False
+window_10,uninsured_lt65_pct,906,0.0129409,"Allegheny County, PA",0.00567081,0.766996,0.768223,False,2,24033,"Prince George's County, MD",0.0123916,0.00855739,0.648632,0.650605,False,False
+window_10,uninsured_lt65_pct,906,0.0129409,"Allegheny County, PA",0.00567081,0.766996,0.768223,False,3,24021,"Frederick County, MD",0.00961265,0.00346506,0.860976,0.861683,False,False
+window_10,uninsured_lt65_pct,906,0.0129409,"Allegheny County, PA",0.00567081,0.766996,0.768223,False,4,12105,"Polk County, FL",0.0085686,0.00638805,0.731628,0.733065,False,False
+window_10,uninsured_lt65_pct,906,0.0129409,"Allegheny County, PA",0.00567081,0.766996,0.768223,False,5,36027,"Dutchess County, NY",0.00847037,0.0078531,0.672944,0.674753,False,False
+window_10,pres2020_margin_d,906,0.0129409,"Allegheny County, PA",-0.0200325,0.0940021,0.100247,False,1,42003,"Allegheny County, PA",0.0129409,-0.0173187,0.123263,0.129568,False,False
+window_10,pres2020_margin_d,906,0.0129409,"Allegheny County, PA",-0.0200325,0.0940021,0.100247,False,2,24033,"Prince George's County, MD",0.0123916,-0.0166077,0.170455,0.176577,False,False
+window_10,pres2020_margin_d,906,0.0129409,"Allegheny County, PA",-0.0200325,0.0940021,0.100247,False,3,24021,"Frederick County, MD",0.00961265,-0.0176454,0.152337,0.158559,False,False
+window_10,pres2020_margin_d,906,0.0129409,"Allegheny County, PA",-0.0200325,0.0940021,0.100247,False,4,12105,"Polk County, FL",0.0085686,-0.0196064,0.103277,0.109562,False,False
+window_10,pres2020_margin_d,906,0.0129409,"Allegheny County, PA",-0.0200325,0.0940021,0.100247,False,5,36027,"Dutchess County, NY",0.00847037,-0.0211007,0.065544,0.0714798,False,False
+window_21,log10_pop_density,915,0.0250303,"Los Angeles County, CA",-0.00326095,0.712599,0.714154,False,1,06037,"Los Angeles County, CA",0.0250303,-0.00635467,0.456424,0.459911,False,False
+window_21,log10_pop_density,915,0.0250303,"Los Angeles County, CA",-0.00326095,0.712599,0.714154,False,2,06013,"Contra Costa County, CA",0.0219019,-0.00263539,0.779321,0.780477,False,False
+window_21,log10_pop_density,915,0.0250303,"Los Angeles County, CA",-0.00326095,0.712599,0.714154,False,3,18089,"Lake County, IN",0.0195366,-0.00241373,0.784896,0.78602,False,False
+window_21,log10_pop_density,915,0.0250303,"Los Angeles County, CA",-0.00326095,0.712599,0.714154,False,4,06081,"San Mateo County, CA",0.0135121,-0.00293912,0.748543,0.749879,False,False
+window_21,log10_pop_density,915,0.0250303,"Los Angeles County, CA",-0.00326095,0.712599,0.714154,False,5,06073,"San Diego County, CA",0.0121736,-0.00342465,0.70106,0.702688,False,False
+window_21,pcp_per_100k,915,0.0250303,"Los Angeles County, CA",0.00884716,0.149161,0.155396,False,1,06037,"Los Angeles County, CA",0.0250303,0.008994,0.131152,0.137446,False,False
+window_21,pcp_per_100k,915,0.0250303,"Los Angeles County, CA",0.00884716,0.149161,0.155396,False,2,06013,"Contra Costa County, CA",0.0219019,0.00973854,0.103353,0.109638,False,False
+window_21,pcp_per_100k,915,0.0250303,"Los Angeles County, CA",0.00884716,0.149161,0.155396,False,3,18089,"Lake County, IN",0.0195366,0.00771547,0.205494,0.211361,False,False
+window_21,pcp_per_100k,915,0.0250303,"Los Angeles County, CA",0.00884716,0.149161,0.155396,False,4,06081,"San Mateo County, CA",0.0135121,0.00939936,0.118777,0.125084,False,False
+window_21,pcp_per_100k,915,0.0250303,"Los Angeles County, CA",0.00884716,0.149161,0.155396,False,5,06073,"San Diego County, CA",0.0121736,0.00865442,0.157287,0.163484,False,False
+window_21,pct_pop_65plus,915,0.0250303,"Los Angeles County, CA",0.00652113,0.62033,0.6225,False,1,06037,"Los Angeles County, CA",0.0250303,0.00900804,0.498953,0.502069,False,False
+window_21,pct_pop_65plus,915,0.0250303,"Los Angeles County, CA",0.00652113,0.62033,0.6225,False,2,06013,"Contra Costa County, CA",0.0219019,0.00632315,0.633146,0.635226,False,False
+window_21,pct_pop_65plus,915,0.0250303,"Los Angeles County, CA",0.00652113,0.62033,0.6225,False,3,18089,"Lake County, IN",0.0195366,0.00654254,0.618558,0.620741,False,False
+window_21,pct_pop_65plus,915,0.0250303,"Los Angeles County, CA",0.00652113,0.62033,0.6225,False,4,06081,"San Mateo County, CA",0.0135121,0.00644971,0.624967,0.627105,False,False
+window_21,pct_pop_65plus,915,0.0250303,"Los Angeles County, CA",0.00652113,0.62033,0.6225,False,5,06073,"San Diego County, CA",0.0121736,0.00711688,0.591661,0.594039,False,False
+window_21,poverty_pct,915,0.0250303,"Los Angeles County, CA",-0.000739401,0.933132,0.933467,False,1,06037,"Los Angeles County, CA",0.0250303,-0.00301368,0.715459,0.716996,False,False
+window_21,poverty_pct,915,0.0250303,"Los Angeles County, CA",-0.000739401,0.933132,0.933467,False,2,06013,"Contra Costa County, CA",0.0219019,-0.00147804,0.862195,0.862896,False,False
+window_21,poverty_pct,915,0.0250303,"Los Angeles County, CA",-0.000739401,0.933132,0.933467,False,3,18089,"Lake County, IN",0.0195366,0.00121635,0.887,0.887571,False,False
+window_21,poverty_pct,915,0.0250303,"Los Angeles County, CA",-0.000739401,0.933132,0.933467,False,4,06081,"San Mateo County, CA",0.0135121,-0.00133346,0.877071,0.877694,False,False
+window_21,poverty_pct,915,0.0250303,"Los Angeles County, CA",-0.000739401,0.933132,0.933467,False,5,06073,"San Diego County, CA",0.0121736,-0.000599626,0.945836,0.946107,False,False
+window_21,uninsured_lt65_pct,915,0.0250303,"Los Angeles County, CA",-0.0296826,0.0129114,0.0162969,False,1,06037,"Los Angeles County, CA",0.0250303,-0.0322654,0.00215686,0.00347755,True,True
+window_21,uninsured_lt65_pct,915,0.0250303,"Los Angeles County, CA",-0.0296826,0.0129114,0.0162969,False,2,06013,"Contra Costa County, CA",0.0219019,-0.0308896,0.00656479,0.00899842,False,False
+window_21,uninsured_lt65_pct,915,0.0250303,"Los Angeles County, CA",-0.0296826,0.0129114,0.0162969,False,3,18089,"Lake County, IN",0.0195366,-0.0297914,0.0134961,0.0169507,False,False
+window_21,uninsured_lt65_pct,915,0.0250303,"Los Angeles County, CA",-0.0296826,0.0129114,0.0162969,False,4,06081,"San Mateo County, CA",0.0135121,-0.0307031,0.00738081,0.00996459,False,False
+window_21,uninsured_lt65_pct,915,0.0250303,"Los Angeles County, CA",-0.0296826,0.0129114,0.0162969,False,5,06073,"San Diego County, CA",0.0121736,-0.0297677,0.0117827,0.015028,False,False
+window_21,pres2020_margin_d,915,0.0250303,"Los Angeles County, CA",0.0162833,0.0203581,0.0244814,False,1,06037,"Los Angeles County, CA",0.0250303,0.0149144,0.0340935,0.0390832,False,False
+window_21,pres2020_margin_d,915,0.0250303,"Los Angeles County, CA",0.0162833,0.0203581,0.0244814,False,2,06013,"Contra Costa County, CA",0.0219019,0.0169059,0.0159439,0.019664,False,False
+window_21,pres2020_margin_d,915,0.0250303,"Los Angeles County, CA",0.0162833,0.0203581,0.0244814,False,3,18089,"Lake County, IN",0.0195366,0.0149904,0.0396961,0.044932,False,False
+window_21,pres2020_margin_d,915,0.0250303,"Los Angeles County, CA",0.0162833,0.0203581,0.0244814,False,4,06081,"San Mateo County, CA",0.0135121,0.0166002,0.0178648,0.0217709,False,False
+window_21,pres2020_margin_d,915,0.0250303,"Los Angeles County, CA",0.0162833,0.0203581,0.0244814,False,5,06073,"San Diego County, CA",0.0121736,0.0159198,0.0232335,0.0275792,False,False
+window_28,log10_pop_density,915,0.0186195,"Santa Clara County, CA",-0.0095702,0.0282885,0.0329668,False,1,06085,"Santa Clara County, CA",0.0186195,-0.010562,0.0129861,0.0163806,False,False
+window_28,log10_pop_density,915,0.0186195,"Santa Clara County, CA",-0.0095702,0.0282885,0.0329668,False,2,44007,"Providence County, RI",0.0181479,-0.00873764,0.045627,0.051078,False,False
+window_28,log10_pop_density,915,0.0186195,"Santa Clara County, CA",-0.0095702,0.0282885,0.0329668,False,3,06095,"Solano County, CA",0.0145868,-0.0094788,0.0313446,0.036195,False,False
+window_28,log10_pop_density,915,0.0186195,"Santa Clara County, CA",-0.0095702,0.0282885,0.0329668,False,4,06075,"San Francisco County, CA",0.0132405,-0.0082809,0.110229,0.116531,False,False
+window_28,log10_pop_density,915,0.0186195,"Santa Clara County, CA",-0.0095702,0.0282885,0.0329668,False,5,41067,"Washington County, OR",0.0130729,-0.00946548,0.0302413,0.0350317,False,False
+window_28,pcp_per_100k,915,0.0186195,"Santa Clara County, CA",-0.00433382,0.451836,0.455363,False,1,06085,"Santa Clara County, CA",0.0186195,-0.00526499,0.39528,0.399333,False,False
+window_28,pcp_per_100k,915,0.0186195,"Santa Clara County, CA",-0.00433382,0.451836,0.455363,False,2,44007,"Providence County, RI",0.0181479,-0.00371803,0.521842,0.524766,False,False
+window_28,pcp_per_100k,915,0.0186195,"Santa Clara County, CA",-0.00433382,0.451836,0.455363,False,3,06095,"Solano County, CA",0.0145868,-0.00414522,0.466842,0.470236,False,False
+window_28,pcp_per_100k,915,0.0186195,"Santa Clara County, CA",-0.00433382,0.451836,0.455363,False,4,06075,"San Francisco County, CA",0.0132405,-0.00258491,0.64055,0.642579,False,False
+window_28,pcp_per_100k,915,0.0186195,"Santa Clara County, CA",-0.00433382,0.451836,0.455363,False,5,41067,"Washington County, OR",0.0130729,-0.00419859,0.464774,0.468186,False,False
+window_28,pct_pop_65plus,915,0.0186195,"Santa Clara County, CA",0.00333317,0.699136,0.700775,False,1,06085,"Santa Clara County, CA",0.0186195,0.00419518,0.620387,0.622557,False,False
+window_28,pct_pop_65plus,915,0.0186195,"Santa Clara County, CA",0.00333317,0.699136,0.700775,False,2,44007,"Providence County, RI",0.0181479,0.0030109,0.723027,0.724517,False,False
+window_28,pct_pop_65plus,915,0.0186195,"Santa Clara County, CA",0.00333317,0.699136,0.700775,False,3,06095,"Solano County, CA",0.0145868,0.00327757,0.702758,0.704375,False,False
+window_28,pct_pop_65plus,915,0.0186195,"Santa Clara County, CA",0.00333317,0.699136,0.700775,False,4,06075,"San Francisco County, CA",0.0132405,0.00318925,0.712254,0.713811,False,False
+window_28,pct_pop_65plus,915,0.0186195,"Santa Clara County, CA",0.00333317,0.699136,0.700775,False,5,41067,"Washington County, OR",0.0130729,0.00311032,0.718304,0.719823,False,False
+window_28,poverty_pct,915,0.0186195,"Santa Clara County, CA",-0.00717207,0.290626,0.295706,False,1,06085,"Santa Clara County, CA",0.0186195,-0.00604086,0.403823,0.407794,False,False
+window_28,poverty_pct,915,0.0186195,"Santa Clara County, CA",-0.00717207,0.290626,0.295706,False,2,44007,"Providence County, RI",0.0181479,-0.00671255,0.320039,0.324827,False,False
+window_28,poverty_pct,915,0.0186195,"Santa Clara County, CA",-0.00717207,0.290626,0.295706,False,3,06095,"Solano County, CA",0.0145868,-0.00773717,0.249864,0.255337,False,False
+window_28,poverty_pct,915,0.0186195,"Santa Clara County, CA",-0.00717207,0.290626,0.295706,False,4,06075,"San Francisco County, CA",0.0132405,-0.00739096,0.274228,0.279468,False,False
+window_28,poverty_pct,915,0.0186195,"Santa Clara County, CA",-0.00717207,0.290626,0.295706,False,5,41067,"Washington County, OR",0.0130729,-0.00757994,0.267987,0.273287,False,False
+window_28,uninsured_lt65_pct,915,0.0186195,"Santa Clara County, CA",-0.0216889,0.00908755,0.0119536,False,1,06085,"Santa Clara County, CA",0.0186195,-0.0208724,0.0167276,0.0205258,False,False
+window_28,uninsured_lt65_pct,915,0.0186195,"Santa Clara County, CA",-0.0216889,0.00908755,0.0119536,False,2,44007,"Providence County, RI",0.0181479,-0.0229995,0.00680571,0.00928485,False,False
+window_28,uninsured_lt65_pct,915,0.0186195,"Santa Clara County, CA",-0.0216889,0.00908755,0.0119536,False,3,06095,"Solano County, CA",0.0145868,-0.0225662,0.00531924,0.00749948,True,True
+window_28,uninsured_lt65_pct,915,0.0186195,"Santa Clara County, CA",-0.0216889,0.00908755,0.0119536,False,4,06075,"San Francisco County, CA",0.0132405,-0.0228564,0.0045524,0.00655853,True,True
+window_28,uninsured_lt65_pct,915,0.0186195,"Santa Clara County, CA",-0.0216889,0.00908755,0.0119536,False,5,41067,"Washington County, OR",0.0130729,-0.0219172,0.00860009,0.0113894,False,False
+window_28,pres2020_margin_d,915,0.0186195,"Santa Clara County, CA",0.0178651,0.000682221,0.00134528,True,1,06085,"Santa Clara County, CA",0.0186195,0.0171529,0.00153611,0.00261911,True,False
+window_28,pres2020_margin_d,915,0.0186195,"Santa Clara County, CA",0.0178651,0.000682221,0.00134528,True,2,44007,"Providence County, RI",0.0181479,0.0188591,0.000364313,0.000812749,True,False
+window_28,pres2020_margin_d,915,0.0186195,"Santa Clara County, CA",0.0178651,0.000682221,0.00134528,True,3,06095,"Solano County, CA",0.0145868,0.0196713,0.000216893,0.000539613,True,False
+window_28,pres2020_margin_d,915,0.0186195,"Santa Clara County, CA",0.0178651,0.000682221,0.00134528,True,4,06075,"San Francisco County, CA",0.0132405,0.0191935,0.000283337,0.000665885,True,False
+window_28,pres2020_margin_d,915,0.0186195,"Santa Clara County, CA",0.0178651,0.000682221,0.00134528,True,5,41067,"Washington County, OR",0.0130729,0.0180763,0.000543542,0.00111959,True,False
+ols_smoothed,log10_pop_density,850,0.0232116,"Jefferson County, MO",-0.00606629,0.283255,0.288511,False,1,29099,"Jefferson County, MO",0.0232116,-0.00634731,0.252666,0.258224,False,False
+ols_smoothed,log10_pop_density,850,0.0232116,"Jefferson County, MO",-0.00606629,0.283255,0.288511,False,2,37065,"Edgecombe County, NC",0.015578,-0.00625315,0.274547,0.27989,False,False
+ols_smoothed,log10_pop_density,850,0.0232116,"Jefferson County, MO",-0.00606629,0.283255,0.288511,False,3,51680,"Lynchburg city, VA",0.0145059,-0.00485491,0.37932,0.383611,False,False
+ols_smoothed,log10_pop_density,850,0.0232116,"Jefferson County, MO",-0.00606629,0.283255,0.288511,False,4,37127,"Nash County, NC",0.0114323,-0.00676813,0.219367,0.225234,False,False
+ols_smoothed,log10_pop_density,850,0.0232116,"Jefferson County, MO",-0.00606629,0.283255,0.288511,False,5,45045,"Greenville County, SC",0.00979585,-0.00576833,0.303988,0.309036,False,False
+ols_smoothed,pcp_per_100k,850,0.0232116,"Jefferson County, MO",-0.00190211,0.695185,0.696884,False,1,29099,"Jefferson County, MO",0.0232116,-0.000777723,0.870279,0.870951,False,False
+ols_smoothed,pcp_per_100k,850,0.0232116,"Jefferson County, MO",-0.00190211,0.695185,0.696884,False,2,37065,"Edgecombe County, NC",0.015578,-0.00199143,0.682327,0.684111,False,False
+ols_smoothed,pcp_per_100k,850,0.0232116,"Jefferson County, MO",-0.00190211,0.695185,0.696884,False,3,51680,"Lynchburg city, VA",0.0145059,-0.000127999,0.979192,0.979298,False,False
+ols_smoothed,pcp_per_100k,850,0.0232116,"Jefferson County, MO",-0.00190211,0.695185,0.696884,False,4,37127,"Nash County, NC",0.0114323,-0.00214374,0.653285,0.655266,False,False
+ols_smoothed,pcp_per_100k,850,0.0232116,"Jefferson County, MO",-0.00190211,0.695185,0.696884,False,5,45045,"Greenville County, SC",0.00979585,-0.00141851,0.775547,0.776749,False,False
+ols_smoothed,pct_pop_65plus,850,0.0232116,"Jefferson County, MO",-0.00138453,0.876763,0.8774,False,1,29099,"Jefferson County, MO",0.0232116,-0.00123954,0.88976,0.890328,False,False
+ols_smoothed,pct_pop_65plus,850,0.0232116,"Jefferson County, MO",-0.00138453,0.876763,0.8774,False,2,37065,"Edgecombe County, NC",0.015578,-0.00129241,0.887236,0.887817,False,False
+ols_smoothed,pct_pop_65plus,850,0.0232116,"Jefferson County, MO",-0.00138453,0.876763,0.8774,False,3,51680,"Lynchburg city, VA",0.0145059,-0.00194041,0.825095,0.826014,False,False
+ols_smoothed,pct_pop_65plus,850,0.0232116,"Jefferson County, MO",-0.00138453,0.876763,0.8774,False,4,37127,"Nash County, NC",0.0114323,-0.00101934,0.910342,0.910802,False,False
+ols_smoothed,pct_pop_65plus,850,0.0232116,"Jefferson County, MO",-0.00138453,0.876763,0.8774,False,5,45045,"Greenville County, SC",0.00979585,-0.00137275,0.877924,0.878554,False,False
+ols_smoothed,poverty_pct,850,0.0232116,"Jefferson County, MO",-0.00620956,0.364061,0.368503,False,1,29099,"Jefferson County, MO",0.0232116,-0.0051301,0.48072,0.484058,False,False
+ols_smoothed,poverty_pct,850,0.0232116,"Jefferson County, MO",-0.00620956,0.364061,0.368503,False,2,37065,"Edgecombe County, NC",0.015578,-0.00668344,0.386567,0.390787,False,False
+ols_smoothed,poverty_pct,850,0.0232116,"Jefferson County, MO",-0.00620956,0.364061,0.368503,False,3,51680,"Lynchburg city, VA",0.0145059,-0.00584729,0.40988,0.413874,False,False
+ols_smoothed,poverty_pct,850,0.0232116,"Jefferson County, MO",-0.00620956,0.364061,0.368503,False,4,37127,"Nash County, NC",0.0114323,-0.00596319,0.38646,0.390681,False,False
+ols_smoothed,poverty_pct,850,0.0232116,"Jefferson County, MO",-0.00620956,0.364061,0.368503,False,5,45045,"Greenville County, SC",0.00979585,-0.00612686,0.369373,0.373762,False,False
+ols_smoothed,uninsured_lt65_pct,850,0.0232116,"Jefferson County, MO",-0.0207652,0.0149565,0.0186503,False,1,29099,"Jefferson County, MO",0.0232116,-0.0216502,0.011155,0.0143858,False,False
+ols_smoothed,uninsured_lt65_pct,850,0.0232116,"Jefferson County, MO",-0.0207652,0.0149565,0.0186503,False,2,37065,"Edgecombe County, NC",0.015578,-0.0208039,0.0155166,0.0192705,False,False
+ols_smoothed,uninsured_lt65_pct,850,0.0232116,"Jefferson County, MO",-0.0207652,0.0149565,0.0186503,False,3,51680,"Lynchburg city, VA",0.0145059,-0.0213131,0.0121332,0.0154933,False,False
+ols_smoothed,uninsured_lt65_pct,850,0.0232116,"Jefferson County, MO",-0.0207652,0.0149565,0.0186503,False,4,37127,"Nash County, NC",0.0114323,-0.0211479,0.0130511,0.0165257,False,False
+ols_smoothed,uninsured_lt65_pct,850,0.0232116,"Jefferson County, MO",-0.0207652,0.0149565,0.0186503,False,5,45045,"Greenville County, SC",0.00979585,-0.0205069,0.0162218,0.0200491,False,False
+ols_smoothed,pres2020_margin_d,850,0.0232116,"Jefferson County, MO",0.0209233,0.0245791,0.0291126,False,1,29099,"Jefferson County, MO",0.0232116,0.0214988,0.0197015,0.0238554,False,False
+ols_smoothed,pres2020_margin_d,850,0.0232116,"Jefferson County, MO",0.0209233,0.0245791,0.0291126,False,2,37065,"Edgecombe County, NC",0.015578,0.0210632,0.0240467,0.0285424,False,False
+ols_smoothed,pres2020_margin_d,850,0.0232116,"Jefferson County, MO",0.0209233,0.0245791,0.0291126,False,3,51680,"Lynchburg city, VA",0.0145059,0.0224302,0.0139467,0.0175272,False,False
+ols_smoothed,pres2020_margin_d,850,0.0232116,"Jefferson County, MO",0.0209233,0.0245791,0.0291126,False,4,37127,"Nash County, NC",0.0114323,0.0212608,0.0225675,0.0269539,False,False
+ols_smoothed,pres2020_margin_d,850,0.0232116,"Jefferson County, MO",0.0209233,0.0245791,0.0291126,False,5,45045,"Greenville County, SC",0.00979585,0.0208218,0.0256461,0.0302529,False,False
+first_wave,log10_pop_density,900,0.0211893,"Los Angeles County, CA",-0.00505387,0.658716,0.660621,False,1,06037,"Los Angeles County, CA",0.0211893,-0.00164259,0.8909,0.891451,False,False
+first_wave,log10_pop_density,900,0.0211893,"Los Angeles County, CA",-0.00505387,0.658716,0.660621,False,2,20173,"Sedgwick County, KS",0.0169441,-0.00455713,0.693393,0.69507,False,False
+first_wave,log10_pop_density,900,0.0211893,"Los Angeles County, CA",-0.00505387,0.658716,0.660621,False,3,08031,"Denver County, CO",0.0158876,-0.00294191,0.810236,0.811218,False,False
+first_wave,log10_pop_density,900,0.0211893,"Los Angeles County, CA",-0.00505387,0.658716,0.660621,False,4,39041,"Delaware County, OH",0.0117788,-0.00539308,0.638498,0.64054,False,False
+first_wave,log10_pop_density,900,0.0211893,"Los Angeles County, CA",-0.00505387,0.658716,0.660621,False,5,06075,"San Francisco County, CA",0.0116794,-0.0106379,0.439614,0.443252,False,False
+first_wave,pcp_per_100k,900,0.0211893,"Los Angeles County, CA",0.00674795,0.541351,0.544117,False,1,06037,"Los Angeles County, CA",0.0211893,0.00670255,0.549768,0.552467,False,False
+first_wave,pcp_per_100k,900,0.0211893,"Los Angeles County, CA",0.00674795,0.541351,0.544117,False,2,20173,"Sedgwick County, KS",0.0169441,0.00749293,0.496902,0.500035,False,False
+first_wave,pcp_per_100k,900,0.0211893,"Los Angeles County, CA",0.00674795,0.541351,0.544117,False,3,08031,"Denver County, CO",0.0158876,0.00881472,0.441355,0.444978,False,False
+first_wave,pcp_per_100k,900,0.0211893,"Los Angeles County, CA",0.00674795,0.541351,0.544117,False,4,39041,"Delaware County, OH",0.0117788,0.00229025,0.867766,0.868437,False,False
+first_wave,pcp_per_100k,900,0.0211893,"Los Angeles County, CA",0.00674795,0.541351,0.544117,False,5,06075,"San Francisco County, CA",0.0116794,0.00307543,0.780771,0.781919,False,False
+first_wave,pct_pop_65plus,900,0.0211893,"Los Angeles County, CA",0.0471226,1.29784e-05,6.47606e-05,True,1,06037,"Los Angeles County, CA",0.0211893,0.0457444,8.79618e-06,4.89501e-05,True,False
+first_wave,pct_pop_65plus,900,0.0211893,"Los Angeles County, CA",0.0471226,1.29784e-05,6.47606e-05,True,2,20173,"Sedgwick County, KS",0.0169441,0.0463657,2.0545e-05,9.04782e-05,True,False
+first_wave,pct_pop_65plus,900,0.0211893,"Los Angeles County, CA",0.0471226,1.29784e-05,6.47606e-05,True,3,08031,"Denver County, CO",0.0158876,0.0466054,1.47173e-05,7.09388e-05,True,False
+first_wave,pct_pop_65plus,900,0.0211893,"Los Angeles County, CA",0.0471226,1.29784e-05,6.47606e-05,True,4,39041,"Delaware County, OH",0.0117788,0.0484001,5.70703e-06,3.59801e-05,True,False
+first_wave,pct_pop_65plus,900,0.0211893,"Los Angeles County, CA",0.0471226,1.29784e-05,6.47606e-05,True,5,06075,"San Francisco County, CA",0.0116794,0.0478433,1.57408e-05,7.44901e-05,True,False
+first_wave,poverty_pct,900,0.0211893,"Los Angeles County, CA",0.00659276,0.68736,0.689075,False,1,06037,"Los Angeles County, CA",0.0211893,0.0087991,0.594754,0.597109,False,False
+first_wave,poverty_pct,900,0.0211893,"Los Angeles County, CA",0.00659276,0.68736,0.689075,False,2,20173,"Sedgwick County, KS",0.0169441,0.00722717,0.660141,0.662036,False,False
+first_wave,poverty_pct,900,0.0211893,"Los Angeles County, CA",0.00659276,0.68736,0.689075,False,3,08031,"Denver County, CO",0.0158876,0.00715169,0.665376,0.667236,False,False
+first_wave,poverty_pct,900,0.0211893,"Los Angeles County, CA",0.00659276,0.68736,0.689075,False,4,39041,"Delaware County, OH",0.0117788,0.0101734,0.531776,0.534619,False,False
+first_wave,poverty_pct,900,0.0211893,"Los Angeles County, CA",0.00659276,0.68736,0.689075,False,5,06075,"San Francisco County, CA",0.0116794,0.0074794,0.648111,0.650088,False,False
+first_wave,uninsured_lt65_pct,900,0.0211893,"Los Angeles County, CA",-0.0203119,0.216887,0.222658,False,1,06037,"Los Angeles County, CA",0.0211893,-0.0189543,0.250452,0.25592,False,False
+first_wave,uninsured_lt65_pct,900,0.0211893,"Los Angeles County, CA",-0.0203119,0.216887,0.222658,False,2,20173,"Sedgwick County, KS",0.0169441,-0.0186229,0.255899,0.261315,False,False
+first_wave,uninsured_lt65_pct,900,0.0211893,"Los Angeles County, CA",-0.0203119,0.216887,0.222658,False,3,08031,"Denver County, CO",0.0158876,-0.0193874,0.240585,0.246145,False,False
+first_wave,uninsured_lt65_pct,900,0.0211893,"Los Angeles County, CA",-0.0203119,0.216887,0.222658,False,4,39041,"Delaware County, OH",0.0117788,-0.0184063,0.2514,0.256858,False,False
+first_wave,uninsured_lt65_pct,900,0.0211893,"Los Angeles County, CA",-0.0203119,0.216887,0.222658,False,5,06075,"San Francisco County, CA",0.0116794,-0.0187325,0.253834,0.25927,False,False
+first_wave,pres2020_margin_d,900,0.0211893,"Los Angeles County, CA",-0.00319897,0.805976,0.806981,False,1,06037,"Los Angeles County, CA",0.0211893,-0.000923076,0.944715,0.944991,False,False
+first_wave,pres2020_margin_d,900,0.0211893,"Los Angeles County, CA",-0.00319897,0.805976,0.806981,False,2,20173,"Sedgwick County, KS",0.0169441,-0.00525678,0.689004,0.690709,False,False
+first_wave,pres2020_margin_d,900,0.0211893,"Los Angeles County, CA",-0.00319897,0.805976,0.806981,False,3,08031,"Denver County, CO",0.0158876,-0.00213477,0.869653,0.870315,False,False
+first_wave,pres2020_margin_d,900,0.0211893,"Los Angeles County, CA",-0.00319897,0.805976,0.806981,False,4,39041,"Delaware County, OH",0.0117788,-0.000713424,0.955853,0.956073,False,False
+first_wave,pres2020_margin_d,900,0.0211893,"Los Angeles County, CA",-0.00319897,0.805976,0.806981,False,5,06075,"San Francisco County, CA",0.0116794,-0.00567612,0.661883,0.663766,False,False
+largest_wave,log10_pop_density,906,0.0201649,"St. Louis County, MO",-0.0110204,0.400316,0.40432,False,1,29189,"St. Louis County, MO",0.0201649,-0.00481562,0.648627,0.650599,False,False
+largest_wave,log10_pop_density,906,0.0201649,"St. Louis County, MO",-0.0110204,0.400316,0.40432,False,2,06111,"Ventura County, CA",0.0192591,-0.0110329,0.400231,0.404237,False,False
+largest_wave,log10_pop_density,906,0.0201649,"St. Louis County, MO",-0.0110204,0.400316,0.40432,False,3,09009,"New Haven County, CT",0.0173907,-0.0117899,0.377454,0.381678,False,False
+largest_wave,log10_pop_density,906,0.0201649,"St. Louis County, MO",-0.0110204,0.400316,0.40432,False,4,44007,"Providence County, RI",0.0167772,-0.0139947,0.292097,0.297162,False,False
+largest_wave,log10_pop_density,906,0.0201649,"St. Louis County, MO",-0.0110204,0.400316,0.40432,False,5,06029,"Kern County, CA",0.0157363,-0.00995976,0.475476,0.478794,False,False
+largest_wave,pcp_per_100k,906,0.0201649,"St. Louis County, MO",0.00321194,0.825637,0.826534,False,1,29189,"St. Louis County, MO",0.0201649,0.012045,0.324519,0.329262,False,False
+largest_wave,pcp_per_100k,906,0.0201649,"St. Louis County, MO",0.00321194,0.825637,0.826534,False,2,06111,"Ventura County, CA",0.0192591,0.00306897,0.833111,0.833967,False,False
+largest_wave,pcp_per_100k,906,0.0201649,"St. Louis County, MO",0.00321194,0.825637,0.826534,False,3,09009,"New Haven County, CT",0.0173907,0.0030327,0.835438,0.836282,False,False
+largest_wave,pcp_per_100k,906,0.0201649,"St. Louis County, MO",0.00321194,0.825637,0.826534,False,4,44007,"Providence County, RI",0.0167772,0.00138146,0.924421,0.9248,False,False
+largest_wave,pcp_per_100k,906,0.0201649,"St. Louis County, MO",0.00321194,0.825637,0.826534,False,5,06029,"Kern County, CA",0.0157363,0.00424625,0.778182,0.779345,False,False
+largest_wave,pct_pop_65plus,906,0.0201649,"St. Louis County, MO",0.0252111,0.00611785,0.00846423,False,1,29189,"St. Louis County, MO",0.0201649,0.0277599,0.00410379,0.00600013,True,True
+largest_wave,pct_pop_65plus,906,0.0201649,"St. Louis County, MO",0.0252111,0.00611785,0.00846423,False,2,06111,"Ventura County, CA",0.0192591,0.0253039,0.00617483,0.00853255,False,False
+largest_wave,pct_pop_65plus,906,0.0201649,"St. Louis County, MO",0.0252111,0.00611785,0.00846423,False,3,09009,"New Haven County, CT",0.0173907,0.0250655,0.00635097,0.00874334,False,False
+largest_wave,pct_pop_65plus,906,0.0201649,"St. Louis County, MO",0.0252111,0.00611785,0.00846423,False,4,44007,"Providence County, RI",0.0167772,0.0265856,0.00461039,0.00663026,True,True
+largest_wave,pct_pop_65plus,906,0.0201649,"St. Louis County, MO",0.0252111,0.00611785,0.00846423,False,5,06029,"Kern County, CA",0.0157363,0.0280864,0.00253516,0.00398424,True,True
+largest_wave,poverty_pct,906,0.0201649,"St. Louis County, MO",-0.00281539,0.804115,0.805131,False,1,29189,"St. Louis County, MO",0.0201649,-0.00679914,0.51549,0.518467,False,False
+largest_wave,poverty_pct,906,0.0201649,"St. Louis County, MO",-0.00281539,0.804115,0.805131,False,2,06111,"Ventura County, CA",0.0192591,-0.00256588,0.823186,0.824096,False,False
+largest_wave,poverty_pct,906,0.0201649,"St. Louis County, MO",-0.00281539,0.804115,0.805131,False,3,09009,"New Haven County, CT",0.0173907,-0.00275934,0.807936,0.80893,False,False
+largest_wave,poverty_pct,906,0.0201649,"St. Louis County, MO",-0.00281539,0.804115,0.805131,False,4,44007,"Providence County, RI",0.0167772,-0.00363306,0.747275,0.748619,False,False
+largest_wave,poverty_pct,906,0.0201649,"St. Louis County, MO",-0.00281539,0.804115,0.805131,False,5,06029,"Kern County, CA",0.0157363,-0.00568567,0.637543,0.639592,False,False
+largest_wave,uninsured_lt65_pct,906,0.0201649,"St. Louis County, MO",-0.0302026,0.00297655,0.00456362,True,1,29189,"St. Louis County, MO",0.0201649,-0.0300694,0.00251418,0.00395642,True,False
+largest_wave,uninsured_lt65_pct,906,0.0201649,"St. Louis County, MO",-0.0302026,0.00297655,0.00456362,True,2,06111,"Ventura County, CA",0.0192591,-0.0302751,0.00284478,0.00439185,True,False
+largest_wave,uninsured_lt65_pct,906,0.0201649,"St. Louis County, MO",-0.0302026,0.00297655,0.00456362,True,3,09009,"New Haven County, CT",0.0173907,-0.0297658,0.00419262,0.00611122,True,False
+largest_wave,uninsured_lt65_pct,906,0.0201649,"St. Louis County, MO",-0.0302026,0.00297655,0.00456362,True,4,44007,"Providence County, RI",0.0167772,-0.027252,0.0062799,0.00865836,False,True
+largest_wave,uninsured_lt65_pct,906,0.0201649,"St. Louis County, MO",-0.0302026,0.00297655,0.00456362,True,5,06029,"Kern County, CA",0.0157363,-0.0309929,0.00198402,0.00324231,True,False
+largest_wave,pres2020_margin_d,906,0.0201649,"St. Louis County, MO",0.00898745,0.438132,0.441784,False,1,29189,"St. Louis County, MO",0.0201649,0.00222959,0.799136,0.800179,False,False
+largest_wave,pres2020_margin_d,906,0.0201649,"St. Louis County, MO",0.00898745,0.438132,0.441784,False,2,06111,"Ventura County, CA",0.0192591,0.00862659,0.461714,0.465153,False,False
+largest_wave,pres2020_margin_d,906,0.0201649,"St. Louis County, MO",0.00898745,0.438132,0.441784,False,3,09009,"New Haven County, CT",0.0173907,0.00838414,0.466906,0.470299,False,False
+largest_wave,pres2020_margin_d,906,0.0201649,"St. Louis County, MO",0.00898745,0.438132,0.441784,False,4,44007,"Providence County, RI",0.0167772,0.00606479,0.579585,0.582054,False,False
+largest_wave,pres2020_margin_d,906,0.0201649,"St. Louis County, MO",0.00898745,0.438132,0.441784,False,5,06029,"Kern County, CA",0.0157363,0.0082972,0.480041,0.483319,False,False
+winsorized_se_le1,log10_pop_density,894,0.0214388,"St. Louis County, MO",-0.00460131,0.733017,0.734446,False,1,29189,"St. Louis County, MO",0.0214388,0.00258914,0.811655,0.812629,False,False
+winsorized_se_le1,log10_pop_density,894,0.0214388,"St. Louis County, MO",-0.00460131,0.733017,0.734446,False,2,06111,"Ventura County, CA",0.0204758,-0.00458682,0.734766,0.736184,False,False
+winsorized_se_le1,log10_pop_density,894,0.0214388,"St. Louis County, MO",-0.00460131,0.733017,0.734446,False,3,09009,"New Haven County, CT",0.0184894,-0.00534767,0.699105,0.700745,False,False
+winsorized_se_le1,log10_pop_density,894,0.0214388,"St. Louis County, MO",-0.00460131,0.733017,0.734446,False,4,44007,"Providence County, RI",0.017837,-0.00779797,0.568858,0.571409,False,False
+winsorized_se_le1,log10_pop_density,894,0.0214388,"St. Louis County, MO",-0.00460131,0.733017,0.734446,False,5,06013,"Contra Costa County, CA",0.0153897,-0.00190066,0.894871,0.895401,False,False
+winsorized_se_le1,pcp_per_100k,894,0.0214388,"St. Louis County, MO",0.00269137,0.840336,0.841154,False,1,29189,"St. Louis County, MO",0.0214388,0.011799,0.330418,0.335103,False,False
+winsorized_se_le1,pcp_per_100k,894,0.0214388,"St. Louis County, MO",0.00269137,0.840336,0.841154,False,2,06111,"Ventura County, CA",0.0204758,0.00260822,0.845046,0.845838,False,False
+winsorized_se_le1,pcp_per_100k,894,0.0214388,"St. Louis County, MO",0.00269137,0.840336,0.841154,False,3,09009,"New Haven County, CT",0.0184894,0.00253919,0.84949,0.850258,False,False
+winsorized_se_le1,pcp_per_100k,894,0.0214388,"St. Louis County, MO",0.00269137,0.840336,0.841154,False,4,44007,"Providence County, RI",0.017837,0.00089909,0.946365,0.946634,False,False
+winsorized_se_le1,pcp_per_100k,894,0.0214388,"St. Louis County, MO",0.00269137,0.840336,0.841154,False,5,06013,"Contra Costa County, CA",0.0153897,0.00487868,0.72362,0.725107,False,False
+winsorized_se_le1,pct_pop_65plus,894,0.0214388,"St. Louis County, MO",0.0247111,0.0120475,0.0153267,False,1,29189,"St. Louis County, MO",0.0214388,0.0275066,0.00871023,0.0115171,False,False
+winsorized_se_le1,pct_pop_65plus,894,0.0214388,"St. Louis County, MO",0.0247111,0.0120475,0.0153267,False,2,06111,"Ventura County, CA",0.0204758,0.0249311,0.0117646,0.0150076,False,False
+winsorized_se_le1,pct_pop_65plus,894,0.0214388,"St. Louis County, MO",0.0247111,0.0120475,0.0153267,False,3,09009,"New Haven County, CT",0.0184894,0.0245605,0.0122717,0.015579,False,False
+winsorized_se_le1,pct_pop_65plus,894,0.0214388,"St. Louis County, MO",0.0247111,0.0120475,0.0153267,False,4,44007,"Providence County, RI",0.017837,0.0262337,0.00728834,0.00985565,False,False
+winsorized_se_le1,pct_pop_65plus,894,0.0214388,"St. Louis County, MO",0.0247111,0.0120475,0.0153267,False,5,06013,"Contra Costa County, CA",0.0153897,0.0239723,0.0134843,0.0169375,False,False
+winsorized_se_le1,poverty_pct,894,0.0214388,"St. Louis County, MO",-0.00538498,0.676649,0.678434,False,1,29189,"St. Louis County, MO",0.0214388,-0.00964819,0.416579,0.42043,False,False
+winsorized_se_le1,poverty_pct,894,0.0214388,"St. Louis County, MO",-0.00538498,0.676649,0.678434,False,2,06111,"Ventura County, CA",0.0204758,-0.00526256,0.68389,0.685628,False,False
+winsorized_se_le1,poverty_pct,894,0.0214388,"St. Louis County, MO",-0.00538498,0.676649,0.678434,False,3,09009,"New Haven County, CT",0.0184894,-0.00538212,0.676223,0.678011,False,False
+winsorized_se_le1,poverty_pct,894,0.0214388,"St. Louis County, MO",-0.00538498,0.676649,0.678434,False,4,44007,"Providence County, RI",0.017837,-0.00658587,0.601784,0.604088,False,False
+winsorized_se_le1,poverty_pct,894,0.0214388,"St. Louis County, MO",-0.00538498,0.676649,0.678434,False,5,06013,"Contra Costa County, CA",0.0153897,-0.00759119,0.572936,0.575456,False,False
+winsorized_se_le1,uninsured_lt65_pct,894,0.0214388,"St. Louis County, MO",-0.0370935,0.0230932,0.0274287,False,1,29189,"St. Louis County, MO",0.0214388,-0.0358224,0.0247375,0.0291892,False,False
+winsorized_se_le1,uninsured_lt65_pct,894,0.0214388,"St. Louis County, MO",-0.0370935,0.0230932,0.0274287,False,2,06111,"Ventura County, CA",0.0204758,-0.0372726,0.0221842,0.0264519,False,False
+winsorized_se_le1,uninsured_lt65_pct,894,0.0214388,"St. Louis County, MO",-0.0370935,0.0230932,0.0274287,False,3,09009,"New Haven County, CT",0.0184894,-0.0366769,0.0266277,0.031204,False,False
+winsorized_se_le1,uninsured_lt65_pct,894,0.0214388,"St. Louis County, MO",-0.0370935,0.0230932,0.0274287,False,4,44007,"Providence County, RI",0.017837,-0.0339331,0.0366042,0.0417101,False,False
+winsorized_se_le1,uninsured_lt65_pct,894,0.0214388,"St. Louis County, MO",-0.0370935,0.0230932,0.0274287,False,5,06013,"Contra Costa County, CA",0.0153897,-0.0398588,0.0153204,0.0189762,False,False
+winsorized_se_le1,pres2020_margin_d,894,0.0214388,"St. Louis County, MO",0.0106362,0.412827,0.416714,False,1,29189,"St. Louis County, MO",0.0214388,0.00340729,0.747354,0.748697,False,False
+winsorized_se_le1,pres2020_margin_d,894,0.0214388,"St. Louis County, MO",0.0106362,0.412827,0.416714,False,2,06111,"Ventura County, CA",0.0204758,0.0103576,0.435021,0.438701,False,False
+winsorized_se_le1,pres2020_margin_d,894,0.0214388,"St. Louis County, MO",0.0106362,0.412827,0.416714,False,3,09009,"New Haven County, CT",0.0184894,0.0100567,0.436264,0.439933,False,False
+winsorized_se_le1,pres2020_margin_d,894,0.0214388,"St. Louis County, MO",0.0106362,0.412827,0.416714,False,4,44007,"Providence County, RI",0.017837,0.00759009,0.53633,0.539137,False,False
+winsorized_se_le1,pres2020_margin_d,894,0.0214388,"St. Louis County, MO",0.0106362,0.412827,0.416714,False,5,06013,"Contra Costa County, CA",0.0153897,0.0124395,0.330515,0.335199,False,False
+onset_from_may,log10_pop_density,838,0.02238,"St. Louis County, MO",-0.00315177,0.812678,0.813646,False,1,29189,"St. Louis County, MO",0.02238,0.00397194,0.706928,0.708518,False,False
+onset_from_may,log10_pop_density,838,0.02238,"St. Louis County, MO",-0.00315177,0.812678,0.813646,False,2,06111,"Ventura County, CA",0.0213747,-0.003137,0.814211,0.81517,False,False
+onset_from_may,log10_pop_density,838,0.02238,"St. Louis County, MO",-0.00315177,0.812678,0.813646,False,3,09009,"New Haven County, CT",0.0193011,-0.00387031,0.776935,0.778105,False,False
+onset_from_may,log10_pop_density,838,0.02238,"St. Louis County, MO",-0.00315177,0.812678,0.813646,False,4,44007,"Providence County, RI",0.0186201,-0.00628161,0.643279,0.645288,False,False
+onset_from_may,log10_pop_density,838,0.02238,"St. Louis County, MO",-0.00315177,0.812678,0.813646,False,5,06013,"Contra Costa County, CA",0.0160654,-0.000463423,0.974041,0.974171,False,False
+onset_from_may,pcp_per_100k,838,0.02238,"St. Louis County, MO",0.00586506,0.661439,0.663325,False,1,29189,"St. Louis County, MO",0.02238,0.0155429,0.190595,0.196579,False,False
+onset_from_may,pcp_per_100k,838,0.02238,"St. Louis County, MO",0.00586506,0.661439,0.663325,False,2,06111,"Ventura County, CA",0.0213747,0.00578242,0.665687,0.667545,False,False
+onset_from_may,pcp_per_100k,838,0.02238,"St. Louis County, MO",0.00586506,0.661439,0.663325,False,3,09009,"New Haven County, CT",0.0193011,0.00570958,0.67045,0.672276,False,False
+onset_from_may,pcp_per_100k,838,0.02238,"St. Louis County, MO",0.00586506,0.661439,0.663325,False,4,44007,"Providence County, RI",0.0186201,0.00400931,0.764708,0.765949,False,False
+onset_from_may,pcp_per_100k,838,0.02238,"St. Louis County, MO",0.00586506,0.661439,0.663325,False,5,06013,"Contra Costa County, CA",0.0160654,0.00819376,0.553676,0.556345,False,False
+onset_from_may,pct_pop_65plus,838,0.02238,"St. Louis County, MO",0.0238526,0.0157976,0.0195029,False,1,29189,"St. Louis County, MO",0.02238,0.0267435,0.0112577,0.0144345,False,False
+onset_from_may,pct_pop_65plus,838,0.02238,"St. Louis County, MO",0.0238526,0.0157976,0.0195029,False,2,06111,"Ventura County, CA",0.0213747,0.0240765,0.0151778,0.0188186,False,False
+onset_from_may,pct_pop_65plus,838,0.02238,"St. Louis County, MO",0.0238526,0.0157976,0.0195029,False,3,09009,"New Haven County, CT",0.0193011,0.0236959,0.0161768,0.0199205,False,False
+onset_from_may,pct_pop_65plus,838,0.02238,"St. Louis County, MO",0.0238526,0.0157976,0.0195029,False,4,44007,"Providence County, RI",0.0186201,0.0254257,0.0100748,0.0130881,False,False
+onset_from_may,pct_pop_65plus,838,0.02238,"St. Louis County, MO",0.0238526,0.0157976,0.0195029,False,5,06013,"Contra Costa County, CA",0.0160654,0.0230848,0.0178138,0.0217152,False,False
+onset_from_may,poverty_pct,838,0.02238,"St. Louis County, MO",-0.00728547,0.586186,0.588606,False,1,29189,"St. Louis County, MO",0.02238,-0.0118753,0.326747,0.331469,False,False
+onset_from_may,poverty_pct,838,0.02238,"St. Louis County, MO",-0.00728547,0.586186,0.588606,False,2,06111,"Ventura County, CA",0.0213747,-0.00715832,0.592839,0.595209,False,False
+onset_from_may,poverty_pct,838,0.02238,"St. Louis County, MO",-0.00728547,0.586186,0.588606,False,3,09009,"New Haven County, CT",0.0193011,-0.00728345,0.585542,0.587966,False,False
+onset_from_may,poverty_pct,838,0.02238,"St. Louis County, MO",-0.00728547,0.586186,0.588606,False,4,44007,"Providence County, RI",0.0186201,-0.00857804,0.510447,0.513466,False,False
+onset_from_may,poverty_pct,838,0.02238,"St. Louis County, MO",-0.00728547,0.586186,0.588606,False,5,06013,"Contra Costa County, CA",0.0160654,-0.00967441,0.491791,0.494968,False,False
+onset_from_may,uninsured_lt65_pct,838,0.02238,"St. Louis County, MO",-0.0440352,0.00691436,0.00941368,False,1,29189,"St. Louis County, MO",0.02238,-0.0426854,0.00732967,0.00990436,False,False
+onset_from_may,uninsured_lt65_pct,838,0.02238,"St. Louis County, MO",-0.0440352,0.00691436,0.00941368,False,2,06111,"Ventura County, CA",0.0213747,-0.0442321,0.00652625,0.00895251,False,False
+onset_from_may,uninsured_lt65_pct,838,0.02238,"St. Louis County, MO",-0.0440352,0.00691436,0.00941368,False,3,09009,"New Haven County, CT",0.0193011,-0.0436638,0.00832881,0.0110741,False,False
+onset_from_may,uninsured_lt65_pct,838,0.02238,"St. Louis County, MO",-0.0440352,0.00691436,0.00941368,False,4,44007,"Providence County, RI",0.0186201,-0.04074,0.0121991,0.0154973,False,False
+onset_from_may,uninsured_lt65_pct,838,0.02238,"St. Louis County, MO",-0.0440352,0.00691436,0.00941368,False,5,06013,"Contra Costa County, CA",0.0160654,-0.0470478,0.00398725,0.00585397,True,True
+onset_from_may,pres2020_margin_d,838,0.02238,"St. Louis County, MO",0.011213,0.398181,0.402206,False,1,29189,"St. Louis County, MO",0.02238,0.00377135,0.726213,0.727684,False,False
+onset_from_may,pres2020_margin_d,838,0.02238,"St. Louis County, MO",0.011213,0.398181,0.402206,False,2,06111,"Ventura County, CA",0.0213747,0.0109346,0.419526,0.42335,False,False
+onset_from_may,pres2020_margin_d,838,0.02238,"St. Louis County, MO",0.011213,0.398181,0.402206,False,3,09009,"New Haven County, CT",0.0193011,0.0106256,0.421251,0.425058,False,False
+onset_from_may,pres2020_margin_d,838,0.02238,"St. Louis County, MO",0.011213,0.398181,0.402206,False,4,44007,"Providence County, RI",0.0186201,0.0080811,0.519677,0.52262,False,False
+onset_from_may,pres2020_margin_d,838,0.02238,"St. Louis County, MO",0.011213,0.398181,0.402206,False,5,06013,"Contra Costa County, CA",0.0160654,0.0130789,0.316774,0.321594,False,False
+s3_conservative_also_found,log10_pop_density,536,0.0339907,"St. Louis County, MO",0.00306052,0.874465,0.875127,False,1,29189,"St. Louis County, MO",0.0339907,0.0160674,0.302533,0.3077,False,False
+s3_conservative_also_found,log10_pop_density,536,0.0339907,"St. Louis County, MO",0.00306052,0.874465,0.875127,False,2,06111,"Ventura County, CA",0.0324638,0.00307517,0.874262,0.874926,False,False
+s3_conservative_also_found,log10_pop_density,536,0.0339907,"St. Louis County, MO",0.00306052,0.874465,0.875127,False,3,09009,"New Haven County, CT",0.0293144,0.0023737,0.905826,0.906319,False,False
+s3_conservative_also_found,log10_pop_density,536,0.0339907,"St. Louis County, MO",0.00306052,0.874465,0.875127,False,4,44007,"Providence County, RI",0.0282801,-0.00158672,0.935428,0.935765,False,False
+s3_conservative_also_found,log10_pop_density,536,0.0339907,"St. Louis County, MO",0.00306052,0.874465,0.875127,False,5,18089,"Lake County, IN",0.0217701,0.0031685,0.871733,0.87241,False,False
+s3_conservative_also_found,pcp_per_100k,536,0.0339907,"St. Louis County, MO",-0.00840873,0.675795,0.67766,False,1,29189,"St. Louis County, MO",0.0339907,0.008666,0.625255,0.627479,False,False
+s3_conservative_also_found,pcp_per_100k,536,0.0339907,"St. Louis County, MO",-0.00840873,0.675795,0.67766,False,2,06111,"Ventura County, CA",0.0324638,-0.0085113,0.672241,0.67413,False,False
+s3_conservative_also_found,pcp_per_100k,536,0.0339907,"St. Louis County, MO",-0.00840873,0.675795,0.67766,False,3,09009,"New Haven County, CT",0.0293144,-0.00857969,0.67058,0.672481,False,False
+s3_conservative_also_found,pcp_per_100k,536,0.0339907,"St. Louis County, MO",-0.00840873,0.675795,0.67766,False,4,44007,"Providence County, RI",0.0282801,-0.011396,0.569774,0.572424,False,False
+s3_conservative_also_found,pcp_per_100k,536,0.0339907,"St. Louis County, MO",-0.00840873,0.675795,0.67766,False,5,18089,"Lake County, IN",0.0217701,-0.00883766,0.661168,0.663134,False,False
+s3_conservative_also_found,pct_pop_65plus,536,0.0339907,"St. Louis County, MO",0.0152102,0.256097,0.261736,False,1,29189,"St. Louis County, MO",0.0339907,0.0192014,0.173286,0.179643,False,False
+s3_conservative_also_found,pct_pop_65plus,536,0.0339907,"St. Louis County, MO",0.0152102,0.256097,0.261736,False,2,06111,"Ventura County, CA",0.0324638,0.015502,0.248753,0.254464,False,False
+s3_conservative_also_found,pct_pop_65plus,536,0.0339907,"St. Louis County, MO",0.0152102,0.256097,0.261736,False,3,09009,"New Haven County, CT",0.0293144,0.0150977,0.260154,0.265753,False,False
+s3_conservative_also_found,pct_pop_65plus,536,0.0339907,"St. Louis County, MO",0.0152102,0.256097,0.261736,False,4,44007,"Providence County, RI",0.0282801,0.0179582,0.174488,0.180838,False,False
+s3_conservative_also_found,pct_pop_65plus,536,0.0339907,"St. Louis County, MO",0.0152102,0.256097,0.261736,False,5,18089,"Lake County, IN",0.0217701,0.0152079,0.256103,0.261742,False,False
+s3_conservative_also_found,poverty_pct,536,0.0339907,"St. Louis County, MO",-0.00367823,0.839901,0.840755,False,1,29189,"St. Louis County, MO",0.0339907,-0.00937294,0.574183,0.576798,False,False
+s3_conservative_also_found,poverty_pct,536,0.0339907,"St. Louis County, MO",-0.00367823,0.839901,0.840755,False,2,06111,"Ventura County, CA",0.0324638,-0.00357411,0.845273,0.846097,False,False
+s3_conservative_also_found,poverty_pct,536,0.0339907,"St. Louis County, MO",-0.00367823,0.839901,0.840755,False,3,09009,"New Haven County, CT",0.0293144,-0.00385266,0.832097,0.832994,False,False
+s3_conservative_also_found,poverty_pct,536,0.0339907,"St. Louis County, MO",-0.00367823,0.839901,0.840755,False,4,44007,"Providence County, RI",0.0282801,-0.00664067,0.707007,0.708663,False,False
+s3_conservative_also_found,poverty_pct,536,0.0339907,"St. Louis County, MO",-0.00367823,0.839901,0.840755,False,5,18089,"Lake County, IN",0.0217701,-0.00352092,0.85178,0.852567,False,False
+s3_conservative_also_found,uninsured_lt65_pct,536,0.0339907,"St. Louis County, MO",-0.046095,0.0523201,0.058206,False,1,29189,"St. Louis County, MO",0.0339907,-0.0422997,0.0680384,0.0742652,False,False
+s3_conservative_also_found,uninsured_lt65_pct,536,0.0339907,"St. Louis County, MO",-0.046095,0.0523201,0.058206,False,2,06111,"Ventura County, CA",0.0324638,-0.0463209,0.050897,0.0567428,False,False
+s3_conservative_also_found,uninsured_lt65_pct,536,0.0339907,"St. Louis County, MO",-0.046095,0.0523201,0.058206,False,3,09009,"New Haven County, CT",0.0293144,-0.0458715,0.0577189,0.0637418,False,False
+s3_conservative_also_found,uninsured_lt65_pct,536,0.0339907,"St. Louis County, MO",-0.046095,0.0523201,0.058206,False,4,44007,"Providence County, RI",0.0282801,-0.0414053,0.0800841,0.0864742,False,False
+s3_conservative_also_found,uninsured_lt65_pct,536,0.0339907,"St. Louis County, MO",-0.046095,0.0523201,0.058206,False,5,18089,"Lake County, IN",0.0217701,-0.046112,0.0523573,0.0582443,False,False
+s3_conservative_also_found,pres2020_margin_d,536,0.0339907,"St. Louis County, MO",0.0205039,0.264231,0.269789,False,1,29189,"St. Louis County, MO",0.0339907,0.00773933,0.629033,0.631229,False,False
+s3_conservative_also_found,pres2020_margin_d,536,0.0339907,"St. Louis County, MO",0.0205039,0.264231,0.269789,False,2,06111,"Ventura County, CA",0.0324638,0.0204829,0.273834,0.279295,False,False
+s3_conservative_also_found,pres2020_margin_d,536,0.0339907,"St. Louis County, MO",0.0205039,0.264231,0.269789,False,3,09009,"New Haven County, CT",0.0293144,0.0202649,0.273873,0.279334,False,False
+s3_conservative_also_found,pres2020_margin_d,536,0.0339907,"St. Louis County, MO",0.0205039,0.264231,0.269789,False,4,44007,"Providence County, RI",0.0282801,0.0154564,0.378596,0.382983,False,False
+s3_conservative_also_found,pres2020_margin_d,536,0.0339907,"St. Louis County, MO",0.0205039,0.264231,0.269789,False,5,18089,"Lake County, IN",0.0217701,0.0209835,0.281093,0.28648,False,False
+s3_excl_smallest_pop_tercile,log10_pop_density,617,0.0251754,"St. Louis County, MO",0.00468902,0.762076,0.763332,False,1,29189,"St. Louis County, MO",0.0251754,0.0132768,0.275446,0.280674,False,False
+s3_excl_smallest_pop_tercile,log10_pop_density,617,0.0251754,"St. Louis County, MO",0.00468902,0.762076,0.763332,False,2,06111,"Ventura County, CA",0.0240445,0.00498385,0.753405,0.754713,False,False
+s3_excl_smallest_pop_tercile,log10_pop_density,617,0.0251754,"St. Louis County, MO",0.00468902,0.762076,0.763332,False,3,09009,"New Haven County, CT",0.0217119,0.00394978,0.803988,0.805004,False,False
+s3_excl_smallest_pop_tercile,log10_pop_density,617,0.0251754,"St. Louis County, MO",0.00468902,0.762076,0.763332,False,4,44007,"Providence County, RI",0.0209459,0.00120509,0.939673,0.939975,False,False
+s3_excl_smallest_pop_tercile,log10_pop_density,617,0.0251754,"St. Louis County, MO",0.00468902,0.762076,0.763332,False,5,06013,"Contra Costa County, CA",0.018072,0.00765861,0.645263,0.647259,False,False
+s3_excl_smallest_pop_tercile,pcp_per_100k,617,0.0251754,"St. Louis County, MO",0.00578708,0.695134,0.6968,False,1,29189,"St. Louis County, MO",0.0251754,0.0167013,0.200582,0.206489,False,False
+s3_excl_smallest_pop_tercile,pcp_per_100k,617,0.0251754,"St. Louis County, MO",0.00578708,0.695134,0.6968,False,2,06111,"Ventura County, CA",0.0240445,0.00578876,0.696361,0.698019,False,False
+s3_excl_smallest_pop_tercile,pcp_per_100k,617,0.0251754,"St. Louis County, MO",0.00578708,0.695134,0.6968,False,3,09009,"New Haven County, CT",0.0217119,0.00567829,0.700816,0.702445,False,False
+s3_excl_smallest_pop_tercile,pcp_per_100k,617,0.0251754,"St. Louis County, MO",0.00578708,0.695134,0.6968,False,4,44007,"Providence County, RI",0.0209459,0.00386,0.794493,0.795563,False,False
+s3_excl_smallest_pop_tercile,pcp_per_100k,617,0.0251754,"St. Louis County, MO",0.00578708,0.695134,0.6968,False,5,06013,"Contra Costa County, CA",0.018072,0.00794859,0.603712,0.606002,False,False
+s3_excl_smallest_pop_tercile,pct_pop_65plus,617,0.0251754,"St. Louis County, MO",0.0234821,0.0378192,0.0429777,False,1,29189,"St. Louis County, MO",0.0251754,0.0273767,0.0238191,0.0282069,False,False
+s3_excl_smallest_pop_tercile,pct_pop_65plus,617,0.0251754,"St. Louis County, MO",0.0234821,0.0378192,0.0429777,False,2,06111,"Ventura County, CA",0.0240445,0.0236852,0.0368817,0.0419998,False,False
+s3_excl_smallest_pop_tercile,pct_pop_65plus,617,0.0251754,"St. Louis County, MO",0.0234821,0.0378192,0.0429777,False,3,09009,"New Haven County, CT",0.0217119,0.0232344,0.0389805,0.0441874,False,False
+s3_excl_smallest_pop_tercile,pct_pop_65plus,617,0.0251754,"St. Louis County, MO",0.0234821,0.0378192,0.0429777,False,4,44007,"Providence County, RI",0.0209459,0.025203,0.0283175,0.0329976,False,False
+s3_excl_smallest_pop_tercile,pct_pop_65plus,617,0.0251754,"St. Louis County, MO",0.0234821,0.0378192,0.0429777,False,5,06013,"Contra Costa County, CA",0.018072,0.0229916,0.039271,0.0444898,False,False
+s3_excl_smallest_pop_tercile,poverty_pct,617,0.0251754,"St. Louis County, MO",-0.00230275,0.867539,0.868212,False,1,29189,"St. Louis County, MO",0.0251754,-0.00697572,0.592245,0.59462,False,False
+s3_excl_smallest_pop_tercile,poverty_pct,617,0.0251754,"St. Louis County, MO",-0.00230275,0.867539,0.868212,False,2,06111,"Ventura County, CA",0.0240445,-0.00217896,0.874408,0.875044,False,False
+s3_excl_smallest_pop_tercile,poverty_pct,617,0.0251754,"St. Louis County, MO",-0.00230275,0.867539,0.868212,False,3,09009,"New Haven County, CT",0.0217119,-0.00235202,0.864263,0.864953,False,False
+s3_excl_smallest_pop_tercile,poverty_pct,617,0.0251754,"St. Louis County, MO",-0.00230275,0.867539,0.868212,False,4,44007,"Providence County, RI",0.0209459,-0.00398388,0.765343,0.76658,False,False
+s3_excl_smallest_pop_tercile,poverty_pct,617,0.0251754,"St. Louis County, MO",-0.00230275,0.867539,0.868212,False,5,06013,"Contra Costa County, CA",0.018072,-0.00449271,0.759461,0.760733,False,False
+s3_excl_smallest_pop_tercile,uninsured_lt65_pct,617,0.0251754,"St. Louis County, MO",-0.0467045,0.0229518,0.0272769,False,1,29189,"St. Louis County, MO",0.0251754,-0.0441474,0.0240435,0.0284471,False,False
+s3_excl_smallest_pop_tercile,uninsured_lt65_pct,617,0.0251754,"St. Louis County, MO",-0.0467045,0.0229518,0.0272769,False,2,06111,"Ventura County, CA",0.0240445,-0.0472143,0.0213529,0.0255563,False,False
+s3_excl_smallest_pop_tercile,uninsured_lt65_pct,617,0.0251754,"St. Louis County, MO",-0.0467045,0.0229518,0.0272769,False,3,09009,"New Haven County, CT",0.0217119,-0.0462266,0.0258361,0.0303613,False,False
+s3_excl_smallest_pop_tercile,uninsured_lt65_pct,617,0.0251754,"St. Louis County, MO",-0.0467045,0.0229518,0.0272769,False,4,44007,"Providence County, RI",0.0209459,-0.0430512,0.0341747,0.0391684,False,False
+s3_excl_smallest_pop_tercile,uninsured_lt65_pct,617,0.0251754,"St. Louis County, MO",-0.0467045,0.0229518,0.0272769,False,5,06013,"Contra Costa County, CA",0.018072,-0.0497087,0.0163264,0.020085,False,False
+s3_excl_smallest_pop_tercile,pres2020_margin_d,617,0.0251754,"St. Louis County, MO",0.0221162,0.19475,0.200703,False,1,29189,"St. Louis County, MO",0.0251754,0.0125913,0.359895,0.364289,False,False
+s3_excl_smallest_pop_tercile,pres2020_margin_d,617,0.0251754,"St. Louis County, MO",0.0221162,0.19475,0.200703,False,2,06111,"Ventura County, CA",0.0240445,0.0217407,0.210272,0.2161,False,False
+s3_excl_smallest_pop_tercile,pres2020_margin_d,617,0.0251754,"St. Louis County, MO",0.0221162,0.19475,0.200703,False,3,09009,"New Haven County, CT",0.0217119,0.0215703,0.205411,0.211279,False,False
+s3_excl_smallest_pop_tercile,pres2020_margin_d,617,0.0251754,"St. Louis County, MO",0.0221162,0.19475,0.200703,False,4,44007,"Providence County, RI",0.0209459,0.0186723,0.252731,0.258178,False,False
+s3_excl_smallest_pop_tercile,pres2020_margin_d,617,0.0251754,"St. Louis County, MO",0.0221162,0.19475,0.200703,False,5,06013,"Contra Costa County, CA",0.018072,0.0238329,0.157605,0.163801,False,False
+s3_excl_r_nonpositive,log10_pop_density,803,0.0230723,"St. Louis County, MO",-0.0177486,0.169486,0.175739,False,1,29189,"St. Louis County, MO",0.0230723,-0.00983538,0.309638,0.314629,False,False
+s3_excl_r_nonpositive,log10_pop_density,803,0.0230723,"St. Louis County, MO",-0.0177486,0.169486,0.175739,False,2,06111,"Ventura County, CA",0.0220358,-0.017768,0.169529,0.175782,False,False
+s3_excl_r_nonpositive,log10_pop_density,803,0.0230723,"St. Louis County, MO",-0.0177486,0.169486,0.175739,False,3,09009,"New Haven County, CT",0.0198981,-0.0183698,0.16619,0.172463,False,False
+s3_excl_r_nonpositive,log10_pop_density,803,0.0230723,"St. Louis County, MO",-0.0177486,0.169486,0.175739,False,4,44007,"Providence County, RI",0.019196,-0.0210054,0.106537,0.11296,False,False
+s3_excl_r_nonpositive,log10_pop_density,803,0.0230723,"St. Louis County, MO",-0.0177486,0.169486,0.175739,False,5,06013,"Contra Costa County, CA",0.0165623,-0.0146985,0.282932,0.288192,False,False
+s3_excl_r_nonpositive,pcp_per_100k,803,0.0230723,"St. Louis County, MO",-0.00615502,0.696027,0.69772,False,1,29189,"St. Louis County, MO",0.0230723,0.00408294,0.744559,0.745946,False,False
+s3_excl_r_nonpositive,pcp_per_100k,803,0.0230723,"St. Louis County, MO",-0.00615502,0.696027,0.69772,False,2,06111,"Ventura County, CA",0.0220358,-0.00614983,0.69596,0.697654,False,False
+s3_excl_r_nonpositive,pcp_per_100k,803,0.0230723,"St. Louis County, MO",-0.00615502,0.696027,0.69772,False,3,09009,"New Haven County, CT",0.0198981,-0.00625196,0.692431,0.694148,False,False
+s3_excl_r_nonpositive,pcp_per_100k,803,0.0230723,"St. Louis County, MO",-0.00615502,0.696027,0.69772,False,4,44007,"Providence County, RI",0.019196,-0.00794607,0.615164,0.617416,False,False
+s3_excl_r_nonpositive,pcp_per_100k,803,0.0230723,"St. Louis County, MO",-0.00615502,0.696027,0.69772,False,5,06013,"Contra Costa County, CA",0.0165623,-0.00350992,0.830509,0.831397,False,False
+s3_excl_r_nonpositive,pct_pop_65plus,803,0.0230723,"St. Louis County, MO",0.0269452,0.046197,0.051779,False,1,29189,"St. Louis County, MO",0.0230723,0.0301029,0.0386913,0.0439936,False,False
+s3_excl_r_nonpositive,pct_pop_65plus,803,0.0230723,"St. Louis County, MO",0.0269452,0.046197,0.051779,False,2,06111,"Ventura County, CA",0.0220358,0.026971,0.0471919,0.0528062,False,False
+s3_excl_r_nonpositive,pct_pop_65plus,803,0.0230723,"St. Louis County, MO",0.0269452,0.046197,0.051779,False,3,09009,"New Haven County, CT",0.0198981,0.0268848,0.0465804,0.052175,False,False
+s3_excl_r_nonpositive,pct_pop_65plus,803,0.0230723,"St. Louis County, MO",0.0269452,0.046197,0.051779,False,4,44007,"Providence County, RI",0.019196,0.0284327,0.0327953,0.037823,False,False
+s3_excl_r_nonpositive,pct_pop_65plus,803,0.0230723,"St. Louis County, MO",0.0269452,0.046197,0.051779,False,5,06013,"Contra Costa County, CA",0.0165623,0.0261614,0.0516238,0.0573699,False,False
+s3_excl_r_nonpositive,poverty_pct,803,0.0230723,"St. Louis County, MO",-0.000930658,0.92952,0.929881,False,1,29189,"St. Louis County, MO",0.0230723,-0.00578887,0.572696,0.575269,False,False
+s3_excl_r_nonpositive,poverty_pct,803,0.0230723,"St. Louis County, MO",-0.000930658,0.92952,0.929881,False,2,06111,"Ventura County, CA",0.0220358,-0.000947372,0.928283,0.92865,False,False
+s3_excl_r_nonpositive,poverty_pct,803,0.0230723,"St. Louis County, MO",-0.000930658,0.92952,0.929881,False,3,09009,"New Haven County, CT",0.0198981,-0.000929406,0.929509,0.92987,False,False
+s3_excl_r_nonpositive,poverty_pct,803,0.0230723,"St. Louis County, MO",-0.000930658,0.92952,0.929881,False,4,44007,"Providence County, RI",0.019196,-0.00207352,0.838028,0.838875,False,False
+s3_excl_r_nonpositive,poverty_pct,803,0.0230723,"St. Louis County, MO",-0.000930658,0.92952,0.929881,False,5,06013,"Contra Costa County, CA",0.0165623,-0.0035661,0.755758,0.757078,False,False
+s3_excl_r_nonpositive,uninsured_lt65_pct,803,0.0230723,"St. Louis County, MO",-0.0323022,0.0436447,0.0491392,False,1,29189,"St. Louis County, MO",0.0230723,-0.0305474,0.0507427,0.056464,False,False
+s3_excl_r_nonpositive,uninsured_lt65_pct,803,0.0230723,"St. Louis County, MO",-0.0323022,0.0436447,0.0491392,False,2,06111,"Ventura County, CA",0.0220358,-0.0323269,0.0435026,0.048992,False,False
+s3_excl_r_nonpositive,uninsured_lt65_pct,803,0.0230723,"St. Louis County, MO",-0.0323022,0.0436447,0.0491392,False,3,09009,"New Haven County, CT",0.0198981,-0.0322104,0.0473713,0.0529913,False,False
+s3_excl_r_nonpositive,uninsured_lt65_pct,803,0.0230723,"St. Louis County, MO",-0.0323022,0.0436447,0.0491392,False,4,44007,"Providence County, RI",0.019196,-0.0292853,0.0678112,0.0739071,False,False
+s3_excl_r_nonpositive,uninsured_lt65_pct,803,0.0230723,"St. Louis County, MO",-0.0323022,0.0436447,0.0491392,False,5,06013,"Contra Costa County, CA",0.0165623,-0.0356995,0.0302615,0.0351526,False,False
+s3_excl_r_nonpositive,pres2020_margin_d,803,0.0230723,"St. Louis County, MO",0.00601043,0.636051,0.638152,False,1,29189,"St. Louis County, MO",0.0230723,-0.00265696,0.786854,0.787989,False,False
+s3_excl_r_nonpositive,pres2020_margin_d,803,0.0230723,"St. Louis County, MO",0.00601043,0.636051,0.638152,False,2,06111,"Ventura County, CA",0.0220358,0.00611865,0.635518,0.637623,False,False
+s3_excl_r_nonpositive,pres2020_margin_d,803,0.0230723,"St. Louis County, MO",0.00601043,0.636051,0.638152,False,3,09009,"New Haven County, CT",0.0198981,0.00570566,0.652,0.65399,False,False
+s3_excl_r_nonpositive,pres2020_margin_d,803,0.0230723,"St. Louis County, MO",0.00601043,0.636051,0.638152,False,4,44007,"Providence County, RI",0.019196,0.00310891,0.795244,0.796331,False,False
+s3_excl_r_nonpositive,pres2020_margin_d,803,0.0230723,"St. Louis County, MO",0.00601043,0.636051,0.638152,False,5,06013,"Contra Costa County, CA",0.0165623,0.00821503,0.508257,0.511356,False,False
+s3_weights_capped95,log10_pop_density,915,0.00467567,"Santa Barbara County, CA",-0.00179331,0.879675,0.880284,False,1,06083,"Santa Barbara County, CA",0.00467567,-0.00226287,0.848079,0.848854,False,False
+s3_weights_capped95,log10_pop_density,915,0.00467567,"Santa Barbara County, CA",-0.00179331,0.879675,0.880284,False,2,42129,"Westmoreland County, PA",0.00467567,-0.00184247,0.876523,0.877149,False,False
+s3_weights_capped95,log10_pop_density,915,0.00467567,"Santa Barbara County, CA",-0.00179331,0.879675,0.880284,False,3,42003,"Allegheny County, PA",0.00467567,-0.003428,0.782698,0.783835,False,False
+s3_weights_capped95,log10_pop_density,915,0.00467567,"Santa Barbara County, CA",-0.00179331,0.879675,0.880284,False,4,18141,"St. Joseph County, IN",0.00467567,-0.00156615,0.895171,0.8957,False,False
+s3_weights_capped95,log10_pop_density,915,0.00467567,"Santa Barbara County, CA",-0.00179331,0.879675,0.880284,False,5,26161,"Washtenaw County, MI",0.00467567,-0.00320405,0.782447,0.783585,False,False
+s3_weights_capped95,pcp_per_100k,915,0.00467567,"Santa Barbara County, CA",0.00849331,0.470957,0.474314,False,1,06083,"Santa Barbara County, CA",0.00467567,0.00852596,0.468743,0.472119,False,False
+s3_weights_capped95,pcp_per_100k,915,0.00467567,"Santa Barbara County, CA",0.00849331,0.470957,0.474314,False,2,42129,"Westmoreland County, PA",0.00467567,0.00844387,0.472936,0.476276,False,False
+s3_weights_capped95,pcp_per_100k,915,0.00467567,"Santa Barbara County, CA",0.00849331,0.470957,0.474314,False,3,42003,"Allegheny County, PA",0.00467567,0.00714919,0.559141,0.561767,False,False
+s3_weights_capped95,pcp_per_100k,915,0.00467567,"Santa Barbara County, CA",0.00849331,0.470957,0.474314,False,4,18141,"St. Joseph County, IN",0.00467567,0.0085747,0.465979,0.469381,False,False
+s3_weights_capped95,pcp_per_100k,915,0.00467567,"Santa Barbara County, CA",0.00849331,0.470957,0.474314,False,5,26161,"Washtenaw County, MI",0.00467567,0.000853474,0.927349,0.927713,False,False
+s3_weights_capped95,pct_pop_65plus,915,0.00467567,"Santa Barbara County, CA",0.0260249,0.0175846,0.0214647,False,1,06083,"Santa Barbara County, CA",0.00467567,0.0256622,0.0184574,0.0224175,False,False
+s3_weights_capped95,pct_pop_65plus,915,0.00467567,"Santa Barbara County, CA",0.0260249,0.0175846,0.0214647,False,2,42129,"Westmoreland County, PA",0.00467567,0.0264836,0.0196251,0.0236872,False,False
+s3_weights_capped95,pct_pop_65plus,915,0.00467567,"Santa Barbara County, CA",0.0260249,0.0175846,0.0214647,False,3,42003,"Allegheny County, PA",0.00467567,0.0257077,0.0172303,0.0210769,False,False
+s3_weights_capped95,pct_pop_65plus,915,0.00467567,"Santa Barbara County, CA",0.0260249,0.0175846,0.0214647,False,4,18141,"St. Joseph County, IN",0.00467567,0.0260268,0.0178273,0.02173,False,False
+s3_weights_capped95,pct_pop_65plus,915,0.00467567,"Santa Barbara County, CA",0.0260249,0.0175846,0.0214647,False,5,26161,"Washtenaw County, MI",0.00467567,0.027186,0.016153,0.0198943,False,False
+s3_weights_capped95,poverty_pct,915,0.00467567,"Santa Barbara County, CA",-0.00559024,0.6458,0.647792,False,1,06083,"Santa Barbara County, CA",0.00467567,-0.00549675,0.651355,0.653309,False,False
+s3_weights_capped95,poverty_pct,915,0.00467567,"Santa Barbara County, CA",-0.00559024,0.6458,0.647792,False,2,42129,"Westmoreland County, PA",0.00467567,-0.00560512,0.645473,0.647468,False,False
+s3_weights_capped95,poverty_pct,915,0.00467567,"Santa Barbara County, CA",-0.00559024,0.6458,0.647792,False,3,42003,"Allegheny County, PA",0.00467567,-0.00569776,0.640713,0.64274,False,False
+s3_weights_capped95,poverty_pct,915,0.00467567,"Santa Barbara County, CA",-0.00559024,0.6458,0.647792,False,4,18141,"St. Joseph County, IN",0.00467567,-0.00533153,0.661938,0.663821,False,False
+s3_weights_capped95,poverty_pct,915,0.00467567,"Santa Barbara County, CA",-0.00559024,0.6458,0.647792,False,5,26161,"Washtenaw County, MI",0.00467567,-0.00652042,0.585683,0.588106,False,False
+s3_weights_capped95,uninsured_lt65_pct,915,0.00467567,"Santa Barbara County, CA",-0.0320693,0.0484388,0.0539782,False,1,06083,"Santa Barbara County, CA",0.00467567,-0.0313067,0.0552686,0.0609925,False,False
+s3_weights_capped95,uninsured_lt65_pct,915,0.00467567,"Santa Barbara County, CA",-0.0320693,0.0484388,0.0539782,False,2,42129,"Westmoreland County, PA",0.00467567,-0.0322542,0.0484273,0.0539663,False,False
+s3_weights_capped95,uninsured_lt65_pct,915,0.00467567,"Santa Barbara County, CA",-0.0320693,0.0484388,0.0539782,False,3,42003,"Allegheny County, PA",0.00467567,-0.0311919,0.0533589,0.0590352,False,False
+s3_weights_capped95,uninsured_lt65_pct,915,0.00467567,"Santa Barbara County, CA",-0.0320693,0.0484388,0.0539782,False,4,18141,"St. Joseph County, IN",0.00467567,-0.0321259,0.0480687,0.0535969,False,False
+s3_weights_capped95,uninsured_lt65_pct,915,0.00467567,"Santa Barbara County, CA",-0.0320693,0.0484388,0.0539782,False,5,26161,"Washtenaw County, MI",0.00467567,-0.028579,0.0591332,0.0649451,False,False
+s3_weights_capped95,pres2020_margin_d,915,0.00467567,"Santa Barbara County, CA",0.00791002,0.432737,0.436438,False,1,06083,"Santa Barbara County, CA",0.00467567,0.00854224,0.392255,0.396336,False,False
+s3_weights_capped95,pres2020_margin_d,915,0.00467567,"Santa Barbara County, CA",0.00791002,0.432737,0.436438,False,2,42129,"Westmoreland County, PA",0.00467567,0.00785029,0.438181,0.441833,False,False
+s3_weights_capped95,pres2020_margin_d,915,0.00467567,"Santa Barbara County, CA",0.00791002,0.432737,0.436438,False,3,42003,"Allegheny County, PA",0.00467567,0.00880909,0.377152,0.381379,False,False
+s3_weights_capped95,pres2020_margin_d,915,0.00467567,"Santa Barbara County, CA",0.00791002,0.432737,0.436438,False,4,18141,"St. Joseph County, IN",0.00467567,0.00768862,0.445111,0.448699,False,False
+s3_weights_capped95,pres2020_margin_d,915,0.00467567,"Santa Barbara County, CA",0.00791002,0.432737,0.436438,False,5,26161,"Washtenaw County, MI",0.00467567,0.00685933,0.49487,0.49802,False,False

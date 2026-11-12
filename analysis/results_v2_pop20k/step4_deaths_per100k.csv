@@ -1,7 +1,7 @@
 variant,factor,column,pct_change_per_sd,ci95_lo,ci95_hi,p,log_coef,log_se,n,dispersion,p_t,ci95_t_lo,ci95_t_hi,t_df,n_states,sig_bonf,sig_bonf_t
-deaths per 100k,log10 population density (per sq mi),log10_pop_density,3.49017,-7.96944,16.3767,0.566677,0.0343064,0.0598766,1635,57.1186,0.569245,-8.23683,16.7158,50,51,False,False
-deaths per 100k,Primary care physicians per 100k,pcp_per_100k,-15.3277,-19.8397,-10.5617,2.59885e-09,-0.166382,0.0279393,1635,52.3028,2.57e-07,-19.9484,-10.4402,50,51,True,True
-deaths per 100k,% aged 65+,pct_pop_65plus,5.66317,-2.36992,14.3572,0.172112,0.0550862,0.040343,1635,55.9129,0.178224,-2.56113,14.5816,50,51,False,False
-deaths per 100k,Poverty rate (%),poverty_pct,25.5979,17.5843,34.1577,1.2406e-11,0.227916,0.0336387,1635,49.4784,1.34799e-08,17.3922,34.3772,50,51,True,True
-deaths per 100k,% uninsured (under 65),uninsured_lt65_pct,12.356,5.15915,20.0454,0.000561893,0.116502,0.033775,1635,55.3537,0.00114995,4.98669,20.2426,50,51,True,True
-deaths per 100k,"2020 presidential margin, D-R (state)",pres2020_margin_d,-2.13816,-9.53683,5.86564,0.589987,-0.0216134,0.0401099,1635,56.4469,0.592378,-9.71299,6.07219,50,51,False,False
+deaths per 100k,log10 population density (per sq mi),log10_pop_density,3.51233,-7.93817,16.387,0.563841,0.0345206,0.0598125,1636,57.1143,0.56643,-8.20537,16.7258,50,51,False,False
+deaths per 100k,Primary care physicians per 100k,pcp_per_100k,-15.2999,-19.7926,-10.5555,2.3498e-09,-0.166054,0.0278073,1636,52.3051,2.4232e-07,-19.901,-10.4346,50,51,True,True
+deaths per 100k,% aged 65+,pct_pop_65plus,5.64825,-2.38851,14.3467,0.173482,0.054945,0.0403681,1636,55.908,0.179585,-2.57981,14.5712,50,51,False,False
+deaths per 100k,Poverty rate (%),poverty_pct,25.6142,17.5931,34.1824,1.25569e-11,0.228045,0.0336665,1636,49.4648,1.35651e-08,17.4008,34.4021,50,51,True,True
+deaths per 100k,% uninsured (under 65),uninsured_lt65_pct,12.2771,5.08837,19.9576,0.000603386,0.1158,0.03376,1636,55.3593,0.001218,4.91611,20.1546,50,51,True,True
+deaths per 100k,"2020 presidential margin, D-R (state)",pres2020_margin_d,-2.11835,-9.51716,5.88547,0.593402,-0.0214111,0.0401022,1636,56.4419,0.595768,-9.69332,6.09202,50,51,False,False

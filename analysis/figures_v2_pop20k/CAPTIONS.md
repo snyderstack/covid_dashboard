@@ -4,23 +4,23 @@ Written by the analysis scripts; numbers are regenerated with each run.
 
 ## step2_reff_histogram
 
-Distribution of growth-rate R_eff (1 + r/gamma, 1/gamma = 7 days, r from a Poisson GLM on daily counts with day-of-week effects over a 14-day window) at the onset of the first major pre-2021 wave, 1635 counties with population ≥ 20,000. Dashed line: median (1.36). Dotted line: R_eff = 1, the growth threshold. The x-axis is cut at 0 and 4; 16 counties fall outside (6 below 0, 10 above 4). Values below 0 are noisy estimates of near-zero growth: when r is close to zero its sampling error can push 1 + r/gamma below 0, which has no physical meaning.
+Distribution of growth-rate R_eff (1 + r/gamma, 1/gamma = 7 days, r from a Poisson GLM on daily counts with day-of-week effects over a 14-day window) at the onset of the first major pre-2021 wave, 1636 counties with population ≥ 20,000. Dashed line: median (1.35). Dotted line: R_eff = 1, the growth threshold. The x-axis is cut at 0 and 4; 15 counties fall outside (5 below 0, 10 above 4). Values below 0 are noisy estimates of near-zero growth: when r is close to zero its sampling error can push 1 + r/gamma below 0, which has no physical meaning.
 
 ## step2_reff_vs_onset
 
-Growth-rate R_eff (1 + r/gamma, 1/gamma = 7 days) at wave onset against onset date, for every standard-preset wave with onset in 2020 (2795 waves: 1582 first major waves in blue, 1213 other waves in gray). Fits with SE(R_eff) > 1 are treated as failed and excluded (123 waves). Orange line: monthly median of all waves, plotted at mid-month; shaded band: monthly interquartile range. Dotted line: R_eff = 1. The y-axis is cut at 0 and 4; 11 waves fall outside (7 below 0, 4 above 4).
+Growth-rate R_eff (1 + r/gamma, 1/gamma = 7 days) at wave onset against onset date, for every standard-preset wave with onset in 2020 (2796 waves: 1581 first major waves in blue, 1215 other waves in gray). Fits with SE(R_eff) > 1 are treated as failed and excluded (127 waves). Orange line: monthly median of all waves, plotted at mid-month; shaded band: monthly interquartile range. Dotted line: R_eff = 1. The y-axis is cut at 0 and 4; 10 waves fall outside (6 below 0, 4 above 4).
 
 ## step3_factor_scatter_month_adjusted
 
-Month-adjusted R_eff (residual from a WLS model of R_eff on onset-month fixed effects, weights 1/SE²) against each of the six county factors, 1635 counties. Point area is proportional to the weight; line: WLS fit of the residual on the raw factor. Panel titles give the month-adjusted WLS result for that factor from the Step 3 main table: change in R_eff per 1 SD of the factor (R_eff ~ z(factor) + onset-month fixed effects, weights 1/SE²) and its p-value with SEs clustered by state. Bonferroni threshold for six tests: p < 0.0083. y-axis: central 99% of values.
+Month-adjusted R_eff (residual from a WLS model of R_eff on onset-month fixed effects, weights 1/SE²) against each of the six county factors, 1636 counties. Point area is proportional to the weight; line: WLS fit of the residual on the raw factor. Panel titles give the month-adjusted WLS result for that factor from the Step 3 main table: change in R_eff per 1 SD of the factor (R_eff ~ z(factor) + onset-month fixed effects, weights 1/SE²) and its p-value with SEs clustered by state. Bonferroni threshold for six tests: p < 0.0083. y-axis: central 99% of values.
 
 ## step3_uninsured_added_variable
 
-Why compare within onset months: R_eff against % uninsured (under 65), 1635 counties. Left: raw values, WLS line without month effects. Right: added-variable plot; R_eff and % uninsured are each residualized on onset-month fixed effects (WLS, weights 1/SE²) and the residuals plotted against each other. The right-hand slope (-0.0045 R_eff per percentage point) equals the month-adjusted WLS coefficient (Frisch-Waugh-Lovell); state-clustered p = 0.098 (normal), 0.1 (t, 50 df). Point area is proportional to the weight; axes show the central 99% of values.
+Why compare within onset months: R_eff against % uninsured (under 65), 1636 counties. Left: raw values, WLS line without month effects. Right: added-variable plot; R_eff and % uninsured are each residualized on onset-month fixed effects (WLS, weights 1/SE²) and the residuals plotted against each other. The right-hand slope (-0.0030 R_eff per percentage point) equals the month-adjusted WLS coefficient (Frisch-Waugh-Lovell); state-clustered p = 0.23 (normal), 0.24 (t, 50 df). Point area is proportional to the weight; axes show the central 99% of values.
 
 ## step4_dpc_vs_age65_month_adjusted
 
-Deaths per case against % of residents aged 65+, adjusted for wave onset month: each county's observed deaths divided by the deaths expected from a Poisson model with onset-month effects and a log(cases) offset (1635 counties). Point area is proportional to cases in the wave. Orange line: Poisson fit of observed deaths on % aged 65+ with log(expected) as offset, drawn only from the 1st to the 99th percentile of % aged 65+ (10.3% to 32.3%). Diamonds: pooled observed / expected (sum of deaths / sum of expected) in 10 equal-count bins of % aged 65+, plotted at each bin's mean, with 95% percentile CIs from 1,000 bootstrap resamples of counties within the bin. Dotted line: observed = expected. The y-axis stops at the 99th percentile; 14 counties lie above it.
+Deaths per case against % of residents aged 65+, adjusted for wave onset month: each county's observed deaths divided by the deaths expected from a Poisson model with onset-month effects and a log(cases) offset (1636 counties). Point area is proportional to cases in the wave. Orange line: Poisson fit of observed deaths on % aged 65+ with log(expected) as offset, drawn only from the 1st to the 99th percentile of % aged 65+ (10.4% to 32.3%). Diamonds: pooled observed / expected (sum of deaths / sum of expected) in 10 equal-count bins of % aged 65+, plotted at each bin's mean, with 95% percentile CIs from 1,000 bootstrap resamples of counties within the bin. Dotted line: observed = expected. The y-axis stops at the 99th percentile; 14 counties lie above it.
 
 ## step4_forest_reff_vs_dpc
 
@@ -28,4 +28,8 @@ Association of each county factor with growth-rate R_eff (left; change in R_eff 
 
 ## step4_pooled_dpc_by_month
 
-Pooled deaths per case (sum of deaths over [onset + 14, end + 14] days / sum of cases over [onset, end]) for counties' first major pre-2021 wave, by wave onset month; n = counties per month. Error bars: 95% percentile CIs from 1,000 bootstrap resamples of counties within each month. Dashed line: pooled value over all 1635 counties (1.77%).
+Pooled deaths per case (sum of deaths over [onset + 14, end + 14] days / sum of cases over [onset, end]) for counties' first major pre-2021 wave, by wave onset month; n = counties per month. Error bars: 95% percentile CIs from 1,000 bootstrap resamples of counties within each month. Dashed line: pooled value over all 1636 counties (1.77%).
+
+## step5_stress_tests
+
+Stress tests of the trait associations. One row per trait; each dot is one model version (18 for R_eff, left; 11 for deaths per case, right), placed at its estimate per 1 SD of the trait (dots are spread vertically within a row only so they do not overlap). Filled: p < 0.05/6 with a t distribution with (clusters - 1) df and state-clustered SEs; hollow: not significant. Diamond: main model. The state-level presidential margin cannot be estimated with state fixed effects. Versions are listed in step5_stress_tests.py and step5_stress_tests.csv.

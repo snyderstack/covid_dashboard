@@ -28,6 +28,12 @@ columns *_p_t, *_ci95_t_lo/hi, sig_bonf_t. The main table also has a
 state-level block bootstrap (reff_core.state_block_bootstrap, 2,000 resamples
 of states, percentile 95% CI; the factor is re-standardized in each resample).
 
+Weighting comparison (step3_weighting_comparison.csv): the six single-factor
+models and the all-six model, each with weights 1/SE^2 and with random-effects
+weights 1/(SE^2 + tau^2), tau^2 by method of moments (reff_core.tau2_mm, from
+the 1/SE^2 fit of the same design, re-estimated in every bootstrap resample);
+normal, t and bootstrap CIs for each.
+
 Robustness (WLS only): conservative_also_found subset; smallest population
 tercile removed; r_nonpositive waves removed. Weight robustness: unweighted,
 and weights capped at their 95th percentile. (gamma is not varied: R_eff - 1
@@ -48,6 +54,7 @@ Outputs
     analysis/results_v2/step3_robustness.csv
     analysis/results_v2/step3_weight_robustness.csv
     analysis/results_v2/step3_variance_decomposition.csv
+    analysis/results_v2/step3_weighting_comparison.csv
     analysis/results_v2/step3_notes.txt
     analysis/figures_v2/step3_uninsured_added_variable.png / .pdf
     analysis/figures_v2/step3_factor_scatter.png / .pdf
@@ -162,10 +169,19 @@ def _design(sub, x, month_fe=True, standardize=True):
     return sm.add_constant(X, has_constant="add")
 
 
-def weights_for(sub, scheme="inverse_variance"):
+WEIGHT_SCHEMES = {"inverse_variance": "1/SE^2",
+                  "random_effects": "1/(SE^2 + tau^2), tau^2 by method of moments"}
+
+
+def weights_for(sub, scheme="inverse_variance", X=None):
     """1/SE^2 ("inverse_variance"), the same capped at its 95th percentile
-    ("capped95"), or all ones ("unweighted")."""
+    ("capped95"), all ones ("unweighted"), or random-effects weights
+    1/(SE^2 + tau^2) ("random_effects"; tau^2 from design X by method of
+    moments)."""
     w = 1 / sub.Reff_se ** 2
+    if scheme == "random_effects":
+        v = sub.Reff_se ** 2
+        return 1 / (v + R.tau2_mm(sub[Y], X, v))
     if scheme == "capped95":
         return w.clip(upper=w.quantile(0.95))
     if scheme == "unweighted":
@@ -180,7 +196,7 @@ def wls(d, x, month_fe=True, standardize=True, weights="inverse_variance"):
     X = _design(sub, x, month_fe, standardize)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        res = sm.WLS(sub[Y], X, weights=weights_for(sub, weights)).fit(
+        res = sm.WLS(sub[Y], X, weights=weights_for(sub, weights, X)).fit(
             cov_type="cluster", cov_kwds={"groups": pd.factorize(sub.state)[0]})
     lo, hi = res.conf_int().loc["z"]
     p_t, lo_t, hi_t, df_t = R.t_inference(res.params["z"], res.bse["z"], sub.state.nunique())
@@ -195,8 +211,72 @@ def wls_bootstrap(w, x):
     """State block-bootstrap percentile CI for the coefficient of a wls() fit."""
     def stat(bs):
         X = _design(bs, x, w["month_fe"], w["standardize"])
-        return sm.WLS(bs[Y], X, weights=weights_for(bs, w["weights"])).fit().params["z"]
+        return sm.WLS(bs[Y], X, weights=weights_for(bs, w["weights"], X)).fit().params["z"]
     return R.state_block_bootstrap(w["sub"], stat)
+
+
+def all_six(d, weights="inverse_variance", bootstrap=True):
+    """All six factors (z-scored) + onset-month FE in one WLS model, state-
+    clustered SEs; one row per factor."""
+    cols = [x for x, _, _ in FACTORS]
+    sub = d.dropna(subset=[Y, "Reff_se"] + cols).copy()
+    sub = sub[sub.Reff_se > 0]
+
+    def design(t):
+        z = (t[cols] - t[cols].mean()) / t[cols].std(ddof=1)
+        return sm.add_constant(pd.concat(
+            [z, pd.get_dummies(t.onset_month, prefix="m", drop_first=True, dtype=float)],
+            axis=1), has_constant="add")
+    X = design(sub)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        res = sm.WLS(sub[Y], X, weights=weights_for(sub, weights, X)).fit(
+            cov_type="cluster", cov_kwds={"groups": pd.factorize(sub.state)[0]})
+    if bootstrap:
+        def stat(bs):
+            Xb = design(bs)
+            return sm.WLS(bs[Y], Xb, weights=weights_for(bs, weights, Xb)).fit().params[cols].values
+        b_lo, b_hi, b_se, b_n = R.state_block_bootstrap(sub, stat)
+    else:
+        b_lo = b_hi = b_se = np.full(len(cols), np.nan)
+        b_n = 0
+    ci = res.conf_int()
+    G = sub.state.nunique()
+    out = []
+    for i, c in enumerate(cols):
+        p_t, lo_t, hi_t, df_t = R.t_inference(res.params[c], res.bse[c], G)
+        out.append({"coef": res.params[c], "se": res.bse[c], "p": res.pvalues[c],
+                    "ci_lo": ci.loc[c, 0], "ci_hi": ci.loc[c, 1], "p_t": p_t,
+                    "ci_t_lo": lo_t, "ci_t_hi": hi_t, "df_t": df_t, "n": len(sub),
+                    "boot": (b_lo[i], b_hi[i], b_se[i], b_n)})
+    tau2 = (R.tau2_mm(sub[Y], X, sub.Reff_se ** 2) if weights == "random_effects" else 0.0)
+    return out, tau2
+
+
+def weighting_comparison(d):
+    """Single-factor and all-six models under 1/SE^2 and random-effects
+    weights, with normal, t(clusters - 1) and state-bootstrap CIs."""
+    rows = []
+    for scheme, desc in WEIGHT_SCHEMES.items():
+        fits = []
+        for x, label, _ in FACTORS:
+            w = wls(d, x, weights=scheme)
+            tau2 = (R.tau2_mm(w["sub"][Y], _design(w["sub"], x), w["sub"].Reff_se ** 2)
+                    if scheme == "random_effects" else 0.0)
+            fits.append(("single factor", label, x, w, wls_bootstrap(w, x), tau2))
+        six, tau2 = all_six(d, scheme)
+        for (x, label, _), w in zip(FACTORS, six):
+            fits.append(("all six", label, x, w, w["boot"], tau2))
+        for model, label, x, w, (b_lo, b_hi, b_se, b_n), tau2 in fits:
+            rows.append({"model": model, "weights": scheme, "weights_formula": desc,
+                         "tau2": tau2, "factor": label, "column": x,
+                         "coef_per_sd": w["coef"], "se": w["se"],
+                         "p": w["p"], "ci95_lo": w["ci_lo"], "ci95_hi": w["ci_hi"],
+                         "p_t": w["p_t"], "ci95_t_lo": w["ci_t_lo"], "ci95_t_hi": w["ci_t_hi"],
+                         "t_df": w["df_t"], "boot_ci95_lo": b_lo, "boot_ci95_hi": b_hi,
+                         "boot_se": b_se, "boot_n": b_n, "n": w["n"],
+                         "sig_bonf": w["p"] < BONF, "sig_bonf_t": w["p_t"] < BONF})
+    return pd.DataFrame(rows)
 
 
 def month_adjusted(d):
@@ -477,6 +557,9 @@ def main():
     wrob = weight_robustness(d)
     wrob.to_csv(os.path.join(R.RES_DIR, "step3_weight_robustness.csv"), index=False,
                 float_format="%.6g")
+    wc = weighting_comparison(d)
+    wc.to_csv(os.path.join(R.RES_DIR, "step3_weighting_comparison.csv"), index=False,
+              float_format="%.6g")
     vd, joint = variance_decomposition(d)
     vd.to_csv(os.path.join(R.RES_DIR, "step3_variance_decomposition.csv"), index=False,
               float_format="%.6g")
@@ -516,6 +599,10 @@ def main():
         print(wrob.to_string(index=False, float_format=lambda v: f"{v:.4g}"))
         print()
         print(vd.to_string(index=False, float_format=lambda v: f"{v:.4g}"))
+        print()
+        print(wc[["model", "weights", "tau2", "column", "coef_per_sd", "p", "p_t",
+                  "ci95_lo", "ci95_hi", "boot_ci95_lo", "boot_ci95_hi", "sig_bonf_t"]]
+              .to_string(index=False, float_format=lambda v: f"{v:.4g}"))
     print("joint test (model b):", joint)
     print()
     print("robustness consistency:")

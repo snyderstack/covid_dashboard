@@ -12,7 +12,7 @@ Step 3 notes
 - Presidential margin is state-level (tools.load_state_political), shared by all
   counties in a state; SEs are clustered by state (51 clusters incl. DC).
 - Weighted R^2 = 1 - sum w e^2 / sum w (y - weighted mean)^2.
-- Joint test (model b, state-clustered): F(6, 50) = 7.509, p = 9.098e-06. The denominator df is already
+- Joint test (model b, state-clustered): F(6, 50) = 4.858, p = 0.0005599. The denominator df is already
   clusters - 1, so this test needs no separate t/F version.
 - *_p_t / *_ci95_t_*: t distribution with (clusters - 1) df for the clustered
   estimates; wls_boot_*: state block bootstrap, 2,000 resamples, percentile CI.

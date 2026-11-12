@@ -11,6 +11,6 @@ Secondary factors (Bonferroni 0.05/2):
 Deaths per 100k: same model with deaths as outcome and log(population) offset (USAFacts population).
 death_window_overlap: end + LAG >= next standard-wave onset + LAG (i.e. end >= next onset).
 death_window_overlap_strict_lagL: end + L >= next standard-wave onset.
-Joint test, model (b): F(6, 50) = 31.322, p = 2.584e-15 (denominator df = clusters - 1 already).
+Joint test, model (b): F(6, 50) = 31.332, p = 2.568e-15 (denominator df = clusters - 1 already).
 p_t / ci95_t_*: t distribution with (clusters - 1) df for the state-clustered estimates; boot_*: state block bootstrap (main table), 2,000 resamples, percentile CI.
 Associations are county-level (ecological).

@@ -1,4 +1,4 @@
 model,deviance_explained,n_params,n
-(a) onset-month FE only,0.699987,10,913
-(b) month FE + six factors,0.801462,16,913
-(c) month FE + state FE,0.776355,60,913
+(a) onset-month FE only,0.699688,10,915
+(b) month FE + six factors,0.801095,16,915
+(c) month FE + state FE,0.776068,60,915

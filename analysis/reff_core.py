@@ -39,8 +39,9 @@ Growth start
     The day of minimum smoothed value within [onset, onset + floor((peak -
     onset) / 2)] (the first half of the rise), so a flat stretch after the
     detected onset is skipped. Smoothed values are rounded to
-    SMOOTH_ROUND_DECIMALS (6) decimals first and the LAST day at the minimum
-    is taken, so floating-point near-ties do not depend on library versions.
+    SMOOTH_ROUND_DECIMALS (6) decimals first, so floating-point near-ties do
+    not depend on library versions; exact ties go to the FIRST day at the
+    minimum (np.nanargmin), as in the original code.
 Growth rate r - primary estimator (fit_growth_poisson)
     Poisson GLM, log link, on RAW daily new case counts (the "Daily Cases"
     column of prepare_daily_per_capita: cumulative-count differences with
@@ -164,13 +165,30 @@ def t_inference(coef, se, n_clusters, level=0.95):
     return p, coef - q * se, coef + q * se, df
 
 
+def tau2_mm(y, X, v):
+    """
+    Method-of-moments (DerSimonian-Laird) residual heterogeneity tau^2 for a
+    meta-regression of y on design X with sampling variances v:
+        tau^2 = max(0, (Q - (k - p)) / (sum w - tr[(X'WX)^-1 X'W^2 X])),
+    w = 1/v, Q = weighted residual sum of squares of the 1/v-weighted fit.
+    """
+    Xa = np.asarray(X, float)
+    y, W = np.asarray(y, float), 1 / np.asarray(v, float)
+    XtWX_inv = np.linalg.pinv(Xa.T @ (Xa * W[:, None]))
+    beta = XtWX_inv @ (Xa.T @ (W * y))
+    Q = float(np.sum(W * (y - Xa @ beta) ** 2))
+    denom = W.sum() - np.trace(XtWX_inv @ (Xa.T @ (Xa * (W ** 2)[:, None])))
+    return max(0.0, (Q - (len(y) - np.linalg.matrix_rank(Xa))) / denom)
+
+
 def state_block_bootstrap(sub, statistic, n_boot=N_BOOT_STATE, seed=BOOT_STATE_SEED,
                           level=0.95):
     """
     State-level block bootstrap: draw len(states) states with replacement,
     stack all their counties (a state drawn twice appears twice) and evaluate
-    statistic(resampled_df) -> float. Returns (ci_lo, ci_hi, se, n_ok):
-    percentile CI, SD of the draws and the number of resamples that fitted.
+    statistic(resampled_df) -> float or 1-d array. Returns (ci_lo, ci_hi, se,
+    n_ok): percentile CI, SD of the draws (scalars or arrays matching the
+    statistic) and the number of resamples that fitted.
     """
     sub = sub.reset_index(drop=True)
     blocks = [np.asarray(ix) for ix in sub.groupby("state").indices.values()]
@@ -182,15 +200,19 @@ def state_block_bootstrap(sub, statistic, n_boot=N_BOOT_STATE, seed=BOOT_STATE_S
         try:
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
-                v = float(statistic(sub.iloc[rows].reset_index(drop=True)))
+                v = np.atleast_1d(np.asarray(
+                    statistic(sub.iloc[rows].reset_index(drop=True)), float))
         except Exception:                          # noqa: BLE001
             continue
-        if np.isfinite(v):
+        if np.all(np.isfinite(v)):
             draws.append(v)
     draws = np.asarray(draws)
     a = (1 - level) / 2
-    lo, hi = np.percentile(draws, [100 * a, 100 * (1 - a)])
-    return lo, hi, float(draws.std(ddof=1)), len(draws)
+    lo, hi = np.percentile(draws, [100 * a, 100 * (1 - a)], axis=0)
+    se = draws.std(ddof=1, axis=0)
+    if draws.shape[1] == 1:
+        return float(lo[0]), float(hi[0]), float(se[0]), len(draws)
+    return lo, hi, se, len(draws)
 
 
 # ---- data ------------------------------------------------------------------
@@ -308,15 +330,15 @@ def first_major_wave(ts, ma_window, population, sensitivity=WAVE_SENSITIVITY,
 def growth_window(ts, wave):
     """
     (start_idx, end_idx) inclusive. End = time midpoint of the rise; start =
-    the last day at the minimum of the smoothed series over [onset, end],
-    after rounding it to SMOOTH_ROUND_DECIMALS decimals (ties -> latest day).
+    argmin of the smoothed series over [onset, end], after rounding it to
+    SMOOTH_ROUND_DECIMALS decimals (ties -> first day).
     """
     s, p = wave["start_idx"], wave["peak_idx"]
     e = s + (p - s) // 2
     y = np.round(ts["Per100k MA"].values[s:e + 1].astype(float), SMOOTH_ROUND_DECIMALS)
     if np.all(~np.isfinite(y)):
         return s, e
-    return s + int(np.flatnonzero(y == np.nanmin(y))[-1]), e
+    return s + int(np.nanargmin(y)), e
 
 
 def reff_seir(r, gamma=GAMMA, sigma=SIGMA):
