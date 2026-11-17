@@ -40,6 +40,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from tools import RETIRED_FIPS
+
 VAX_FILE = "COVID-19_Vaccinations_in_the_United_States,County_20260623.csv"
 
 # CDC column → internal name
@@ -101,6 +103,9 @@ def _load_raw(data_dir: str) -> pd.DataFrame:
     # Exclude state-unallocated rows (FIPS = "UNK" or wrong length)
     df = df[df["FIPS"].str.len() == 5].copy()
     df["FIPS"] = df["FIPS"].str.zfill(5)
+    # Retired codes (e.g. Wade Hampton 02270, now Kusilvak 02158) have no
+    # USAFacts case/death rows; keep them out of the vaccination tables.
+    df = df[~df["FIPS"].isin(list(RETIRED_FIPS))]
 
     # Rename columns
     df = df.rename(columns=_CDC_TO_INTERNAL)

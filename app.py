@@ -13,10 +13,9 @@ import plotly.graph_objects as go
 from scipy import stats as _scipy_stats
 from tools import (
     load_data,
-    apply_canonical_county_names,
     build_county_index,
+    prepare_dashboard_data,
     county_mask,
-    NON_COUNTY_FIPS,
     extract_county_state,
     get_population_column,
     prepare_county_timeseries,
@@ -929,29 +928,13 @@ def render_footer() -> None:
 @st.cache_data
 def get_data():
     """
-    Load raw USAFacts CSVs, normalize metadata, and give every county one
-    display name.
+    Load raw USAFacts CSVs and apply the dashboard cleanup: retired FIPS
+    dropped, one canonical display name per county (cases and population
+    files name 57 counties differently). See tools.prepare_dashboard_data.
 
-    The cases/deaths files and the population file name 57 counties
-    differently ("City and County of Honolulu" vs "Honolulu County", "City of
-    Norfolk" vs "Norfolk City", ...). Cases and deaths are relabelled with the
-    population file's name per FIPS so pickers, maps, and profiles agree.
-    All lookups still key on countyFIPS; the names are for display only.
-
-    Returns (cases_df, deaths_df, population_df, location_aliases), where
-    location_aliases maps each original cases-file "Name, ST" label that was
-    renamed to its canonical label (keeps old ?county= links working).
+    Returns (cases_df, deaths_df, population_df, location_aliases).
     """
-    cases, deaths, population = load_data()
-    original = cases.set_index("countyFIPS")["Location"]
-    cases  = apply_canonical_county_names(cases, population)
-    deaths = apply_canonical_county_names(deaths, population)
-    renamed = cases.set_index("countyFIPS")["Location"]
-    location_aliases = {
-        old: renamed[f] for f, old in original.items()
-        if f not in NON_COUNTY_FIPS and old != renamed[f]
-    }
-    return cases, deaths, population, location_aliases
+    return prepare_dashboard_data(*load_data())
 
 @st.cache_data
 def precompute_all_transforms(cases, deaths, population):

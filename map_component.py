@@ -14,6 +14,7 @@ static serving, enabled in .streamlit/config.toml) rather than being resent
 with every update; the plotly.js CDN is the fallback when static serving is off.
 """
 
+import hashlib
 import json
 import os
 import shutil
@@ -197,13 +198,18 @@ def _publish_static_assets(_geojson, geojson_available: bool) -> dict:
         assets["plotly_src"] = [_STATIC_URL + _PLOTLY_JS_NAME, _PLOTLY_CDN_URL]
 
         if geojson_available:
-            geo_path = STATIC_DIR / _GEOJSON_NAME
+            # Content-hashed name: a changed GeoJSON (e.g. re-keyed FIPS) gets
+            # a new file and URL instead of a stale copy or browser cache hit.
+            geo_text = json.dumps(_geojson)
+            digest = hashlib.sha1(geo_text.encode("utf-8")).hexdigest()[:10]
+            geo_name = _GEOJSON_NAME.replace(".json", f"-{digest}.json")
+            geo_path = STATIC_DIR / geo_name
             if not geo_path.exists():
                 _write_atomic(
                     geo_path,
-                    lambda p: p.write_text(json.dumps(_geojson), encoding="utf-8"),
+                    lambda p: p.write_text(geo_text, encoding="utf-8"),
                 )
-            assets["geojson_url"] = _STATIC_URL + _GEOJSON_NAME
+            assets["geojson_url"] = _STATIC_URL + geo_name
     except OSError:
         pass  # read-only checkout: fall back to the CDN / inline GeoJSON
     return assets

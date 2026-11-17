@@ -24,10 +24,45 @@ METADATA_COLUMNS = ["countyFIPS", "County Name", "State", "StateFIPS", "Location
 #   02270  Wade Hampton Census Area, AK — retired code, now 02158 Kusilvak
 NON_COUNTY_FIPS = frozenset({"00000", "06000", "02270"})
 
+# Retired county FIPS -> current code. The county GeoJSON predates both
+# changes, so its polygons are re-keyed on load (see load_county_geojson).
+RETIRED_FIPS = {
+    "02270": "02158",  # Wade Hampton Census Area -> Kusilvak Census Area, AK (2015)
+    "46113": "46102",  # Shannon County -> Oglala Lakota County, SD (2015)
+}
+
+# Display-name fixes for the USAFacts population file (raw data is not edited).
+# Official Census names; the cases file already spells most of these correctly.
+COUNTY_NAME_CORRECTIONS = {
+    "51115": "Mathews County",    # population file: "Matthews County"
+    "21123": "LaRue County",      # "Larue County"
+    "22059": "LaSalle Parish",    # "La Salle Parish"
+    "27073": "Lac qui Parle County",  # "Lac Qui Parle County"
+    "02195": "Petersburg Borough",    # "Petersburg Census Area" (borough since 2013)
+    "08014": "Broomfield County",     # "Broomfield County and City"
+    "29095": "Jackson County",        # "Jackson County (including other portions of Kansas City)"
+}
+
 GEOJSON_FILENAME = "geojson-counties-fips.json"
 GEOJSON_CDN_URL = (
     "https://raw.githubusercontent.com/plotly/datasets/master/geojson-counties-fips.json"
 )
+
+
+def remap_retired_geojson_fips(geo):
+    """
+    Re-key polygons that still use a retired FIPS (RETIRED_FIPS) to the
+    current code, so they join to the USAFacts data. A polygon is only
+    re-keyed when no polygon already uses the current code. Modifies and
+    returns ``geo``.
+    """
+    ids = {str(feat.get("id")) for feat in geo.get("features", [])}
+    for feat in geo.get("features", []):
+        new = RETIRED_FIPS.get(str(feat.get("id")))
+        if new and new not in ids:
+            feat["id"] = new
+            ids.add(new)
+    return geo
 
 
 def load_county_geojson(data_dir=None):
@@ -38,6 +73,9 @@ def load_county_geojson(data_dir=None):
     once from the Plotly datasets CDN and saves it locally so subsequent runs
     (and the spatial-analysis features that need geometry) work offline.
 
+    Polygons keyed by a retired FIPS are re-keyed to the current code (see
+    remap_retired_geojson_fips).
+
     Callers should fall back to passing GEOJSON_CDN_URL directly to Plotly
     when this returns None.
     """
@@ -45,7 +83,7 @@ def load_county_geojson(data_dir=None):
     if path.exists():
         try:
             with open(path, "r", encoding="utf-8") as f:
-                return json.load(f)
+                return remap_retired_geojson_fips(json.load(f))
         except (OSError, json.JSONDecodeError) as exc:
             warnings.warn(f"Could not read bundled county GeoJSON: {exc}")
             return None
@@ -70,7 +108,7 @@ def load_county_geojson(data_dir=None):
                 f.write(raw)
         except OSError:
             pass  # read-only data dir — still return the in-memory copy
-        return geo
+        return remap_retired_geojson_fips(geo)
     except Exception as exc:
         warnings.warn(f"County GeoJSON unavailable ({exc}); falling back to CDN URL")
         return None
@@ -162,10 +200,28 @@ def county_mask(df, county_name=None, state=None, fips=None):
     return (df["County Name"] == county_name) & (df["State"] == state)
 
 
+def _is_virginia_independent_city(fips):
+    """Virginia independent cities are county-equivalents with FIPS 51510-51899."""
+    return fips.startswith("51") and int(fips[2:]) >= 510
+
+
 def canonical_county_names(population_df):
-    """Map FIPS -> display name, taken from the USAFacts population file."""
+    """
+    Map FIPS -> display name.
+
+    Starts from the USAFacts population file's name, then applies
+    COUNTY_NAME_CORRECTIONS and gives Virginia independent cities the Census
+    style lowercase suffix ("Norfolk city", not "Norfolk City").
+    """
     pop = population_df[~population_df["countyFIPS"].isin(NON_COUNTY_FIPS)]
-    return dict(zip(pop["countyFIPS"], pop["County Name"].astype(str).str.strip()))
+    names = dict(zip(pop["countyFIPS"], pop["County Name"].astype(str).str.strip()))
+    for fips, name in names.items():
+        if fips in COUNTY_NAME_CORRECTIONS:
+            names[fips] = COUNTY_NAME_CORRECTIONS[fips]
+        elif _is_virginia_independent_city(fips):
+            base = name[:-len(" city")] if name.lower().endswith(" city") else name
+            names[fips] = f"{base} city"
+    return names
 
 
 def apply_canonical_county_names(df, population_df):
@@ -198,6 +254,39 @@ def build_county_index(cases_df, population_df=None):
         dupes = idx.loc[idx["Location"].duplicated(keep=False), "Location"].tolist()
         raise ValueError(f"County display names are not unique: {dupes}")
     return idx.sort_values("Location").reset_index(drop=True)
+
+
+def prepare_dashboard_data(cases_df, deaths_df, population_df):
+    """
+    Dashboard-side cleanup of the USAFacts tables returned by load_data().
+
+    - Drops population rows for retired FIPS codes (RETIRED_FIPS, e.g. Wade
+      Hampton 02270, now Kusilvak 02158): they have no case/death rows.
+    - Relabels cases, deaths, and population with canonical_county_names so
+      every view names a county the same way. Lookups still key on FIPS.
+
+    load_data() itself is left unchanged (the analysis/ pipeline uses it).
+
+    Returns (cases_df, deaths_df, population_df, location_aliases), where
+    location_aliases maps each raw cases- or population-file "Name, ST" label
+    that differs from the canonical label to the canonical label (keeps old
+    ?county= links working).
+    """
+    population_df = population_df[
+        ~population_df["countyFIPS"].isin(list(RETIRED_FIPS))
+    ].reset_index(drop=True)
+    raw_labels = [cases_df.set_index("countyFIPS")["Location"],
+                  population_df.set_index("countyFIPS")["Location"]]
+    cases_df      = apply_canonical_county_names(cases_df, population_df)
+    deaths_df     = apply_canonical_county_names(deaths_df, population_df)
+    population_df = apply_canonical_county_names(population_df, population_df)
+    canonical = cases_df.set_index("countyFIPS")["Location"]
+    location_aliases = {
+        old: canonical[f]
+        for labels in raw_labels for f, old in labels.items()
+        if f in canonical.index and f not in NON_COUNTY_FIPS and old != canonical[f]
+    }
+    return cases_df, deaths_df, population_df, location_aliases
 
 
 def normalize_dataset_metadata(df):

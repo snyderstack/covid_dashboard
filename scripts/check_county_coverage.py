@@ -3,7 +3,9 @@ County coverage audit: which county FIPS codes does each data source have?
 
 Compares every source the dashboard joins against the USAFacts cases file
 (the dashboard's county list) by 5-digit FIPS code, and lists the FIPS present
-in one source but missing from another.
+in one source but missing from another. Sources are read the way the dashboard
+reads them: retired FIPS dropped (tools.prepare_dashboard_data) and GeoJSON
+polygons re-keyed to current codes (tools.load_county_geojson).
 
     python scripts/check_county_coverage.py
 
@@ -22,7 +24,6 @@ population file (the joins every dashboard metric depends on), else 0.
 Lives in scripts/ rather than tools/ so it doesn't collide with tools.py.
 """
 
-import json
 import sys
 import warnings
 from pathlib import Path
@@ -30,7 +31,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from tools import DATA_DIR, GEOJSON_FILENAME, NON_COUNTY_FIPS, load_data  # noqa: E402
+from tools import (  # noqa: E402
+    DATA_DIR, NON_COUNTY_FIPS, load_county_geojson, load_data, prepare_dashboard_data,
+)
 
 
 def _is_territory(fips):
@@ -44,7 +47,7 @@ def _counties(fips_iterable):
 
 def load_sources():
     """Return ({source: set of FIPS or None if unavailable}, {fips: label})."""
-    cases, deaths, population = load_data()
+    cases, deaths, population, _ = prepare_dashboard_data(*load_data())
     labels = {}
     for df in (cases, population):  # population names win (canonical)
         labels.update(zip(df["countyFIPS"], df["Location"]))
@@ -69,10 +72,8 @@ def load_sources():
         print(f"[ahrf] unavailable: {exc}")
         sources["ahrf"] = None
 
-    geo_path = DATA_DIR / GEOJSON_FILENAME
-    if geo_path.exists():
-        with open(geo_path, encoding="utf-8") as f:
-            geo = json.load(f)
+    geo = load_county_geojson()
+    if geo is not None:
         sources["map_geojson"] = _counties(feat["id"] for feat in geo["features"])
         for feat in geo["features"]:
             props = feat.get("properties", {})
