@@ -13,6 +13,10 @@ import plotly.graph_objects as go
 from scipy import stats as _scipy_stats
 from tools import (
     load_data,
+    apply_canonical_county_names,
+    build_county_index,
+    county_mask,
+    NON_COUNTY_FIPS,
     extract_county_state,
     get_population_column,
     prepare_county_timeseries,
@@ -924,8 +928,30 @@ def render_footer() -> None:
 
 @st.cache_data
 def get_data():
-    """Load raw USAFacts CSVs and normalize metadata."""
-    return load_data()
+    """
+    Load raw USAFacts CSVs, normalize metadata, and give every county one
+    display name.
+
+    The cases/deaths files and the population file name 57 counties
+    differently ("City and County of Honolulu" vs "Honolulu County", "City of
+    Norfolk" vs "Norfolk City", ...). Cases and deaths are relabelled with the
+    population file's name per FIPS so pickers, maps, and profiles agree.
+    All lookups still key on countyFIPS; the names are for display only.
+
+    Returns (cases_df, deaths_df, population_df, location_aliases), where
+    location_aliases maps each original cases-file "Name, ST" label that was
+    renamed to its canonical label (keeps old ?county= links working).
+    """
+    cases, deaths, population = load_data()
+    original = cases.set_index("countyFIPS")["Location"]
+    cases  = apply_canonical_county_names(cases, population)
+    deaths = apply_canonical_county_names(deaths, population)
+    renamed = cases.set_index("countyFIPS")["Location"]
+    location_aliases = {
+        old: renamed[f] for f, old in original.items()
+        if f not in NON_COUNTY_FIPS and old != renamed[f]
+    }
+    return cases, deaths, population, location_aliases
 
 @st.cache_data
 def precompute_all_transforms(cases, deaths, population):
@@ -1207,7 +1233,7 @@ _boot = (
 with _boot:
     if _first_boot:
         st.write("Loading USAFacts case, death, and population data…")
-    cases_df, deaths_df, population_df = get_data()
+    cases_df, deaths_df, population_df, LOCATION_ALIASES = get_data()
 
     # normalize_dataset_metadata adds Location, but guard for edge cases where
     # the column is absent (e.g. a non-standard CSV header).
@@ -1224,16 +1250,16 @@ with _boot:
     transforms = precompute_all_transforms(cases_df, deaths_df, population_df)
     dates = transforms["dates"]
 
-    # "Statewide Unallocated" rows (FIPS 00000) are not counties — keep them
-    # out of every county picker.
-    locations     = sorted(cases_df.loc[cases_df["countyFIPS"] != "00000", "Location"].unique())
+    # The county list: one entry per county FIPS in the cases file, labelled
+    # with the canonical (population-file) name. Non-county FIPS such as
+    # "Statewide Unallocated" (00000) are excluded from every picker.
+    county_index  = build_county_index(cases_df)
+    locations     = county_index["Location"].tolist()
     unique_states = sorted(cases_df["State"].unique())
 
-    # Location -> 5-char FIPS. The cases file names some counties differently
-    # from the population file / master table (e.g. "City and County of San
-    # Francisco" vs "San Francisco County"), so cross-dataset lookups key on
-    # (countyFIPS, State) rather than the county name.
-    LOCATION_FIPS = dict(zip(cases_df["Location"], cases_df["countyFIPS"].astype(str).str.zfill(5)))
+    # Location label -> 5-char FIPS. Every cross-dataset lookup keys on the
+    # FIPS code; the label is only what the pickers display.
+    LOCATION_FIPS = dict(zip(county_index["Location"], county_index["countyFIPS"]))
 
     # County boundaries: bundled GeoJSON dict when available (offline-capable,
     # also powers spatial analysis); CDN URL string as the Plotly fallback.
@@ -1292,6 +1318,7 @@ if _first_boot:
 # Shareable views: ?county=<Location> pre-selects the County Overview county.
 # Only seeds session state once, so it never fights the user's own selection.
 _shared_county = st.query_params.get("county")
+_shared_county = LOCATION_ALIASES.get(_shared_county, _shared_county)
 if _shared_county in set(locations) and "overview_county" not in st.session_state:
     st.session_state["overview_county"] = _shared_county
 
@@ -1333,6 +1360,7 @@ def _cached_overview_waves(county_name, state):
         cases_df, deaths_df,
         transforms["daily_cases"], transforms["daily_deaths"],
         county_name, state, ma_window=7, sensitivity="standard",
+        fips=LOCATION_FIPS[f"{county_name}, {state}"],
     )
 
 @st.cache_data
@@ -1340,14 +1368,16 @@ def _cached_overview_lag(county_name, state):
     return analyze_county_lag(
         cases_df, deaths_df, population_df, county_name, state,
         sensitivity="standard", max_lag_days=90,
-        fips=LOCATION_FIPS.get(f"{county_name}, {state}"),
+        fips=LOCATION_FIPS[f"{county_name}, {state}"],
     )
 
 
 def _location_mask(df, location):
-    """Boolean mask selecting `location`'s row in df by (countyFIPS, State)."""
-    _, _state = extract_county_state(location)
-    return (df["countyFIPS"] == LOCATION_FIPS.get(location)) & (df["State"] == _state)
+    """Boolean mask selecting `location`'s row in df by its 5-digit FIPS."""
+    fips = LOCATION_FIPS.get(location)
+    if fips is None:
+        return pd.Series(False, index=df.index)
+    return county_mask(df, fips=fips)
 
 COUNTY_COLOR      = "#D62728"  # emphasis red — County A / peaks / highlight
 NATIONAL_COLOR    = "#1F77B4"  # series blue — County B / case curves
@@ -2358,7 +2388,8 @@ def render_comparison_tab(cases_df, deaths_df, population_df, locations, nationa
         is_cases  = "cases" in dual_metric.lower()
         source_df = cases_df if is_cases else deaths_df
         base_col  = "Cases" if is_cases else "Deaths"
-        ts = prepare_county_timeseries(source_df, county_name, state_abbr, base_col)
+        _fips = LOCATION_FIPS[f"{county_name}, {state_abbr}"]
+        ts = prepare_county_timeseries(source_df, county_name, state_abbr, base_col, fips=_fips)
         if ts.empty:
             return pd.DataFrame(), base_col
         if dual_view == "Daily":
@@ -2369,7 +2400,7 @@ def render_comparison_tab(cases_df, deaths_df, population_df, locations, nationa
         if "per 100k" in dual_metric.lower():
             ts_pc = calculate_per_capita(
                 ts[["Date", plot_col]], population_df, county_name, state_abbr,
-                fips=LOCATION_FIPS.get(f"{county_name}, {state_abbr}"),
+                fips=_fips,
             )
             if "Per Capita" in ts_pc.columns:
                 ts, plot_col = ts_pc, "Per Capita"
@@ -2774,7 +2805,7 @@ def render_comparison_tab(cases_df, deaths_df, population_df, locations, nationa
             _corr_specs.append((county_b_name, county_b_state, county_b))
         _corr_src = cases_df if "cases" in dual_metric.lower() else deaths_df
         for _cn, _cs, _clabel in _corr_specs:
-            _corr = find_data_corrections(_corr_src, _cn, _cs)
+            _corr = find_data_corrections(_corr_src, _cn, _cs, fips=LOCATION_FIPS[_clabel])
             if not _corr.empty:
                 fig.add_trace(go.Scatter(
                     x=_corr["Date"], y=np.zeros(len(_corr)),
@@ -3145,8 +3176,8 @@ def render_county_overview_tab(
     # Fallback: compute directly from raw data if master row is missing
     if pd.isna(total_cases) and dates:
         latest = dates[-1]
-        _cr = cases_df[(cases_df["County Name"] == county_name) & (cases_df["State"] == state)]
-        _dr = deaths_df[(deaths_df["County Name"] == county_name) & (deaths_df["State"] == state)]
+        _cr = cases_df[_location_mask(cases_df, location)]
+        _dr = deaths_df[_location_mask(deaths_df, location)]
         if not _cr.empty:
             total_cases = pd.to_numeric(_cr.iloc[0].get(latest, np.nan), errors="coerce")
         if not _dr.empty:
@@ -3185,7 +3216,8 @@ def render_county_overview_tab(
     # Rolling CFR: the case-fatality story over time (testing eras, variants,
     # vaccination) that the single cumulative CFR number hides
     with st.expander("Case fatality rate & deaths per capita over time", expanded=False):
-        _cfr_df = rolling_cfr(cases_df, deaths_df, county_name, state)
+        _cfr_df = rolling_cfr(cases_df, deaths_df, county_name, state,
+                              fips=LOCATION_FIPS[location])
         _nat_cfr = rolling_cfr_from_daily(
             national["daily_cases"]["Value"].values,
             national["daily_deaths"]["Value"].values,
@@ -4767,10 +4799,7 @@ def render_wave_tab(cases_df, deaths_df, transforms, locations, population_df, v
     date_cols        = [c for c in source_daily_df.columns if c not in identifier_cols]
     plot_dates       = pd.to_datetime(date_cols)
 
-    county_row = source_daily_df[
-        (source_daily_df["County Name"] == wave_county_name) &
-        (source_daily_df["State"] == wave_state)
-    ]
+    county_row = source_daily_df[_location_mask(source_daily_df, wave_location)]
 
     if county_row.empty:
         st.warning(f"No data found for {wave_location}. Try selecting a different county.")
@@ -4920,6 +4949,7 @@ def render_wave_tab(cases_df, deaths_df, transforms, locations, population_df, v
         raw_county_results = calculate_waves_for_county(
             cases_df, deaths_df, daily_cases_df, daily_deaths_df,
             wave_county_name, wave_state,
+            fips=LOCATION_FIPS[wave_location],
             ma_window=wave_ma_window if is_cases_metric else 7,
             prominence=_eff_prominence,
             min_merge_days=_eff_merge,
@@ -5029,7 +5059,8 @@ def render_wave_tab(cases_df, deaths_df, transforms, locations, population_df, v
     # (state revisions/backfills). The daily pipeline clips these to zero; the
     # markers keep them visible instead of silently hidden.
     _corrections = find_data_corrections(
-        cases_df if is_cases_metric else deaths_df, wave_county_name, wave_state
+        cases_df if is_cases_metric else deaths_df, wave_county_name, wave_state,
+        fips=LOCATION_FIPS[wave_location],
     )
     if not _corrections.empty:
         fig_waves.add_trace(go.Scatter(

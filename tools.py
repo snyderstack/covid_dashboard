@@ -18,6 +18,12 @@ import numpy as np
 DATA_DIR = Path(__file__).parent / "data"
 METADATA_COLUMNS = ["countyFIPS", "County Name", "State", "StateFIPS", "Location"]
 
+# FIPS codes that appear in a USAFacts file but are not counties:
+#   00000  "Statewide Unallocated" (one row per state)
+#   06000  Grand Princess Cruise Ship (population file only)
+#   02270  Wade Hampton Census Area, AK — retired code, now 02158 Kusilvak
+NON_COUNTY_FIPS = frozenset({"00000", "06000", "02270"})
+
 GEOJSON_FILENAME = "geojson-counties-fips.json"
 GEOJSON_CDN_URL = (
     "https://raw.githubusercontent.com/plotly/datasets/master/geojson-counties-fips.json"
@@ -136,6 +142,64 @@ def extract_county_state(location: str) -> tuple:
     return location, None
 
 
+def normalize_fips(value):
+    """Return a FIPS code as a 5-character zero-padded string."""
+    return str(int(float(value))).zfill(5)
+
+
+def county_mask(df, county_name=None, state=None, fips=None):
+    """
+    Boolean mask selecting one county's row(s) in ``df``.
+
+    Matches on the 5-digit ``countyFIPS`` when ``fips`` is given. County names
+    are NOT consistent across the USAFacts files (e.g. "City and County of
+    Honolulu" in cases/deaths vs "Honolulu County" in population), so the
+    name/state fallback is only safe within a single file. Dashboard code
+    always passes ``fips``.
+    """
+    if fips is not None:
+        return df["countyFIPS"] == normalize_fips(fips)
+    return (df["County Name"] == county_name) & (df["State"] == state)
+
+
+def canonical_county_names(population_df):
+    """Map FIPS -> display name, taken from the USAFacts population file."""
+    pop = population_df[~population_df["countyFIPS"].isin(NON_COUNTY_FIPS)]
+    return dict(zip(pop["countyFIPS"], pop["County Name"].astype(str).str.strip()))
+
+
+def apply_canonical_county_names(df, population_df):
+    """
+    Return a copy of ``df`` whose ``County Name`` and ``Location`` use the
+    population file's name for each FIPS, so every dataset labels a county the
+    same way. Rows whose FIPS is not in the population file keep their name.
+    """
+    names = canonical_county_names(population_df)
+    df = df.copy()
+    canonical = df["countyFIPS"].map(names)
+    df["County Name"] = canonical.fillna(df["County Name"])
+    df["Location"] = df["County Name"].astype(str) + ", " + df["State"].astype(str).str.strip()
+    return df
+
+
+def build_county_index(cases_df, population_df=None):
+    """
+    The dashboard's county list: one row per county FIPS in the cases file.
+
+    Columns: countyFIPS, County Name, State, Location. Names come from the
+    population file when given (canonical display names), otherwise from
+    ``cases_df``. Non-county FIPS (NON_COUNTY_FIPS) are excluded. Sorted by
+    Location, which is unique and is what the county pickers display.
+    """
+    src = cases_df if population_df is None else apply_canonical_county_names(cases_df, population_df)
+    idx = src.loc[~src["countyFIPS"].isin(NON_COUNTY_FIPS),
+                  ["countyFIPS", "County Name", "State", "Location"]]
+    if idx["Location"].duplicated().any():
+        dupes = idx.loc[idx["Location"].duplicated(keep=False), "Location"].tolist()
+        raise ValueError(f"County display names are not unique: {dupes}")
+    return idx.sort_values("Location").reset_index(drop=True)
+
+
 def normalize_dataset_metadata(df):
     """Normalize county metadata while preserving the dataframe's wide date columns."""
     df = df.copy()
@@ -218,7 +282,7 @@ def _wide_to_long(df_wide, county_row):
     return result.sort_values("Date").reset_index(drop=True)
 
 
-def prepare_county_timeseries(df_wide, county_name, state, metric_name="Cases"):
+def prepare_county_timeseries(df_wide, county_name, state, metric_name="Cases", fips=None):
     """
     Extract and convert a single county from wide format to timeseries.
 
@@ -227,13 +291,13 @@ def prepare_county_timeseries(df_wide, county_name, state, metric_name="Cases"):
         county_name: County name (string)
         state: State abbreviation (string)
         metric_name: Label for the metric column
+        fips: Optional 5-char FIPS; when given the row is matched on FIPS
+            (see county_mask)
 
     Returns:
         DataFrame with columns: Date, {metric_name}
     """
-    county_row = df_wide[
-        (df_wide["County Name"] == county_name) & (df_wide["State"] == state)
-    ]
+    county_row = df_wide[county_mask(df_wide, county_name, state, fips)]
 
     if county_row.empty:
         return pd.DataFrame()
@@ -298,22 +362,13 @@ def calculate_per_capita(timeseries, population_df, county_name, state, fips=Non
         county_name: County name
         state: State abbreviation
         fips: Optional 5-char FIPS. When given, the population row is matched
-            on (countyFIPS, State) — county names differ between the USAFacts
-            cases and population files for some counties.
+            on countyFIPS — county names differ between the USAFacts cases and
+            population files for some counties (see county_mask).
 
     Returns:
         DataFrame with additional 'Per Capita' column
     """
-    if fips is not None:
-        pop_row = population_df[
-            (population_df["countyFIPS"] == fips) &
-            (population_df["State"] == state)
-        ]
-    else:
-        pop_row = population_df[
-            (population_df["County Name"] == county_name) &
-            (population_df["State"] == state)
-        ]
+    pop_row = population_df[county_mask(population_df, county_name, state, fips)]
 
     if pop_row.empty:
         return timeseries.copy()
@@ -918,16 +973,17 @@ def rolling_cfr_from_daily(daily_cases, daily_deaths, dates,
 
 
 def rolling_cfr(cases_df, deaths_df, county_name, state,
-                window_days=56, lag_days=14, min_cases=20):
+                window_days=56, lag_days=14, min_cases=20, fips=None):
     """
     County wrapper for rolling_cfr_from_daily (see there for methodology).
 
     Daily counts are derived from the cumulative wide tables with negative
     revisions clipped, consistent with the rest of the pipeline. Returns an
-    empty DataFrame when the county is not found.
+    empty DataFrame when the county is not found. Pass ``fips`` to match on
+    FIPS instead of name (see county_mask).
     """
-    crow = cases_df[(cases_df["County Name"] == county_name) & (cases_df["State"] == state)]
-    drow = deaths_df[(deaths_df["County Name"] == county_name) & (deaths_df["State"] == state)]
+    crow = cases_df[county_mask(cases_df, county_name, state, fips)]
+    drow = deaths_df[county_mask(deaths_df, county_name, state, fips)]
     if crow.empty or drow.empty:
         return pd.DataFrame(columns=["Date", "cfr", "window_deaths", "window_cases_lagged"])
 
@@ -981,7 +1037,7 @@ def peer_median_series(daily_ma_df, population_df, fips_list):
     })
 
 
-def find_data_corrections(df_wide, county_name, state):
+def find_data_corrections(df_wide, county_name, state, fips=None):
     """
     Find dates where a county's cumulative series decreased.
 
@@ -993,15 +1049,14 @@ def find_data_corrections(df_wide, county_name, state):
     Args:
         df_wide: Wide-format cumulative dataframe (cases or deaths).
         county_name, state: Identify the county.
+        fips: Optional 5-char FIPS; when given the row is matched on FIPS.
 
     Returns:
         DataFrame with columns Date (Timestamp) and correction (the negative
         one-day change). Empty DataFrame if the county is missing or its
         series never decreases.
     """
-    row = df_wide[
-        (df_wide["County Name"] == county_name) & (df_wide["State"] == state)
-    ]
+    row = df_wide[county_mask(df_wide, county_name, state, fips)]
     if row.empty:
         return pd.DataFrame(columns=["Date", "correction"])
 

@@ -16,6 +16,7 @@ import numpy as np
 import pandas as pd
 
 from tools import (
+    county_mask,
     prepare_county_timeseries,
     calculate_daily_changes,
     get_population_column,
@@ -32,19 +33,10 @@ def get_county_population(population_df, county_name, state, fips=None):
     """
     Look up a county's population, returning NaN if not found or invalid.
 
-    When fips is given the row is matched on (countyFIPS, State): county names
-    differ between the USAFacts cases and population files for some counties.
+    When fips is given the row is matched on countyFIPS: county names differ
+    between the USAFacts cases and population files for some counties.
     """
-    if fips is not None:
-        pop_row = population_df[
-            (population_df["countyFIPS"] == fips) &
-            (population_df["State"] == state)
-        ]
-    else:
-        pop_row = population_df[
-            (population_df["County Name"] == county_name) &
-            (population_df["State"] == state)
-        ]
+    pop_row = population_df[county_mask(population_df, county_name, state, fips)]
     if pop_row.empty:
         return np.nan
 
@@ -77,7 +69,7 @@ def prepare_daily_per_capita(df_wide, population_df, county_name, state, metric_
         Date, Daily {metric_name}, Per100k, Per100k MA
     or an empty DataFrame if county data is unavailable.
     """
-    ts = prepare_county_timeseries(df_wide, county_name, state, metric_name)
+    ts = prepare_county_timeseries(df_wide, county_name, state, metric_name, fips=fips)
     if ts.empty:
         return pd.DataFrame()
 
@@ -241,8 +233,8 @@ def analyze_county_lag(
         sensitivity: wave-detection preset ("conservative" | "standard" |
                      "sensitive"), as on the Wave Analysis tab
         max_lag_days: maximum days between a case peak and its matched death peak
-        fips: optional 5-char FIPS for the population lookup (see
-              get_county_population)
+        fips: optional 5-char FIPS; when given every lookup (time series and
+              population) matches on FIPS instead of county name
 
     Case smoothing is chosen by estimate_optimal_smoothing (the Wave Analysis
     tab's auto setting); deaths use DEATH_MA_WINDOW.

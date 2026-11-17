@@ -63,6 +63,8 @@ from scipy.signal import find_peaks as _scipy_find_peaks
 from scipy.stats import poisson as _poisson
 from typing import Dict, List, Optional, Tuple
 
+from tools import county_mask
+
 
 SENSITIVITY_PRESETS: Dict[str, Dict] = {
     "conservative": {
@@ -1192,6 +1194,7 @@ def calculate_waves_for_county(
     min_merge_days: int = 0,
     sensitivity: Optional[str] = None,
     death_ma_window: int = DEATH_MA_WINDOW,
+    fips: Optional[str] = None,
 ) -> Dict:
     """
     Calculate wave metrics for a specific county.
@@ -1199,10 +1202,13 @@ def calculate_waves_for_county(
     Accepts an optional sensitivity preset; when supplied, the preset
     parameters govern the region-based detection. Cases are smoothed with
     ma_window, deaths with death_ma_window (see DEATH_MA_WINDOW).
+
+    Pass ``fips`` to match rows on the 5-digit FIPS code instead of
+    (county_name, state) — see tools.county_mask.
     """
-    cases_row        = cases_df[(cases_df["County Name"] == county_name) & (cases_df["State"] == state)]
-    daily_cases_row  = daily_cases_df[(daily_cases_df["County Name"] == county_name) & (daily_cases_df["State"] == state)]
-    daily_deaths_row = daily_deaths_df[(daily_deaths_df["County Name"] == county_name) & (daily_deaths_df["State"] == state)]
+    cases_row        = cases_df[county_mask(cases_df, county_name, state, fips)]
+    daily_cases_row  = daily_cases_df[county_mask(daily_cases_df, county_name, state, fips)]
+    daily_deaths_row = daily_deaths_df[county_mask(daily_deaths_df, county_name, state, fips)]
 
     if cases_row.empty or daily_cases_row.empty:
         return {"error": "County not found"}
@@ -1257,6 +1263,7 @@ def calculate_waves_for_all_counties(
         metrics = calculate_waves_for_county(
             cases_df, deaths_df, daily_cases_df, daily_deaths_df,
             county_name, state, ma_window, prominence, min_merge_days, sensitivity,
+            fips=row.get("countyFIPS"),
         )
 
         if "error" not in metrics:
